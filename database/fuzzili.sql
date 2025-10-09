@@ -1,32 +1,32 @@
-main=> CREATE TABLE main (
-    fuzzer_id SERIAL PRIMARY KEY,
-    created_at TIMESTAMP DEFAULT NOW()
+CREATE TABLE main (
+ fuzzer_id SERIAL PRIMARY KEY,
+ created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE fuzzer (
-    program_base64 TEXT PRIMARY KEY,
-    fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
-    inserted_at TIMESTAMP DEFAULT NOW()
+ program_base64 TEXT PRIMARY KEY, -- Base64-encoded fuzzer program (unique identifier)
+ fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE, -- Links to parent fuzzer instance
+ inserted_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Program table: Stores generated test programs
 CREATE TABLE program (
-    program_base64 TEXT PRIMARY KEY,
-    fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
-    created_at TIMESTAMP DEFAULT NOW()
+ program_base64 TEXT PRIMARY KEY, -- Base64-encoded test program (unique identifier)
+ fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE, -- Links to parent fuzzer instance
+ created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE execution (
-    execution_id SERIAL PRIMARY KEY,
-    program_base64 TEXT NOT NULL REFERENCES program(fuzzer_id) ON DELETE CASCADE,
-    feedback_vector JSONB,
-    turboshaft_ir TEXT,
-    coverage_total NUMERIC(5,2),
-    created_at TIMESTAMP DEFAULT NOW(),
-    execution_flags TEXT[]
+ execution_id SERIAL PRIMARY KEY, -- Unique identifier for each execution
+ program_base64 TEXT NOT NULL REFERENCES program(program_base64) ON DELETE CASCADE, -- Links to the executed program
+ feedback_vector JSONB, -- JSON structure containing execution feedback data
+ turboshaft_ir TEXT, -- Turboshaft intermediate representation output
+ coverage_total NUMERIC(5,2), -- Total code coverage percentage (0.00 to 999.99)
+ created_at TIMESTAMP DEFAULT NOW(), -- Timestamp when execution occurred
+ execution_flags TEXT[] -- Array of flags/options used during execution
 );
-
 
 ALTER TABLE program
 ADD CONSTRAINT fk_program_fuzzer
 FOREIGN KEY (program_base64)
-REFERENCES fuzzer(program_base64)
+REFERENCES fuzzer(program_base64);

@@ -38,7 +38,7 @@ FOREIGN KEY (program_base64)
 REFERENCES fuzzer(program_base64);
 
 INSERT INTO execution_type (title) VALUES 
- ('ai_mutation'),
+ ('agentic_analysis'),
  ('delta_analysis'),
  ('directed_testcases'),
  ('generalistic_testcases');

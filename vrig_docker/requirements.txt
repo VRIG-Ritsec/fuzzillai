@@ -1,0 +1,4 @@
+asyncpg==0.29.0
+redis[hiredis]==5.0.1
+asyncio-mqtt==0.16.1
+backoff==2.2.1

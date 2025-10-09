@@ -11,7 +11,7 @@ CREATE TABLE fuzzer (
 
 CREATE TABLE execution_type (
     id SERIAL PRIMARY KEY,
-    title VARCHAR(32) NOT NULL
+    title VARCHAR(32) NOT NULL UNIQUE
 );
 
 --preseed with AI Mut, Delta, OG Testcase type
@@ -41,9 +41,10 @@ FOREIGN KEY (program_base64)
 REFERENCES fuzzer(program_base64);
 
 INSERT INTO execution_type (title) VALUES 
- ('AI Mutation'),
- ('Delta Analysis'),
- ('Testcase');
+ ('ai_mutation'),
+ ('delta_analysis'),
+ ('directed_testcases'),
+ ('generalistic_testcases');
 
 CREATE INDEX idx_execution_program ON execution(program_base64);
 CREATE INDEX idx_execution_type ON execution(execution_type_id);

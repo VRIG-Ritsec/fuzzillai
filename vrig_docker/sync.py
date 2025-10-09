@@ -9,8 +9,8 @@ STREAMS = os.getenv("STREAMS", "redis1=redis://redis1:6379,redis2=redis://redis2
 STREAM_NAME = "stream:fuzz:updates"
 PG_DSN = os.getenv("PG_DSN", "postgres://fuzzuser:pass@pg:5432/main")
 DB_WORKER_THREADS = int(os.getenv("DB_WORKER_THREADS", "4"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100"))
-BATCH_TIMEOUT = float(os.getenv("BATCH_TIMEOUT", "1.0"))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "400"))
+BATCH_TIMEOUT = float(os.getenv("BATCH_TIMEOUT", "0.1"))
 
 UPSERT_PROGRAM_SQL = """
 INSERT INTO program (program_base64, fuzzer_id, created_at)

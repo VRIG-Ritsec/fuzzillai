@@ -10,8 +10,8 @@ CREATE TABLE fuzzer (
 );
 
 CREATE TABLE execution_type (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(32) NOT NULL UNIQUE
+ id SERIAL PRIMARY KEY,
+ title VARCHAR(32) NOT NULL UNIQUE
 );
 
 -- Program table: Stores generated test programs

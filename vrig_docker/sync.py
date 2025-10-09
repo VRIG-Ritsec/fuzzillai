@@ -12,6 +12,20 @@ DB_WORKER_THREADS = int(os.getenv("DB_WORKER_THREADS", "4"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "400"))
 BATCH_TIMEOUT = float(os.getenv("BATCH_TIMEOUT", "0.1"))
 
+UPSERT_MAIN_SQL = """
+INSERT INTO main (fuzzer_id, created_at)
+VALUES ($1, NOW())
+ON CONFLICT (fuzzer_id) DO UPDATE SET
+  created_at = NOW();
+"""
+
+UPSERT_FUZZER_SQL = """
+INSERT INTO fuzzer (program_base64, fuzzer_id, inserted_at)
+VALUES ($1, $2, NOW())
+ON CONFLICT (program_base64) DO UPDATE SET
+  inserted_at = NOW();
+"""
+
 UPSERT_PROGRAM_SQL = """
 INSERT INTO program (program_base64, fuzzer_id, created_at)
 VALUES ($1, $2, NOW())
@@ -21,13 +35,7 @@ ON CONFLICT (program_base64) DO UPDATE SET
 
 UPSERT_EXECUTION_SQL = """
 INSERT INTO execution (program_base64, execution_type_id, feedback_vector, turboshaft_ir, coverage_total, execution_flags, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, NOW())
-ON CONFLICT (program_base64, execution_type_id) DO UPDATE SET
-  feedback_vector = EXCLUDED.feedback_vector,
-  turboshaft_ir = EXCLUDED.turboshaft_ir,
-  coverage_total = EXCLUDED.coverage_total,
-  execution_flags = EXCLUDED.execution_flags,
-  created_at = NOW();
+VALUES ($1, $2, $3, $4, $5, $6, NOW());
 """
 
 UPDATE_FEEDBACK_SQL = """
@@ -58,6 +66,8 @@ class DatabaseWorker:
             return
             
         async with self.connection_pool.acquire() as conn:
+            main_upserts = []
+            fuzzer_upserts = []
             program_upserts = []
             execution_upserts = []
             updates = []
@@ -70,11 +80,16 @@ class DatabaseWorker:
                 elif op_type == 'update_feedback':
                     updates.append(operation)
                 else:
+                    main_upserts.append(operation)
+                    fuzzer_upserts.append(operation)
+                    program_upserts.append(operation)
                     if operation.get('execution_type_id'):
                         execution_upserts.append(operation)
-                    else:
-                        program_upserts.append(operation)
             
+            if main_upserts:
+                await self._batch_upsert_main(conn, main_upserts)
+            if fuzzer_upserts:
+                await self._batch_upsert_fuzzer(conn, fuzzer_upserts)
             if program_upserts:
                 await self._batch_upsert_program(conn, program_upserts)
             if execution_upserts:
@@ -83,6 +98,29 @@ class DatabaseWorker:
                 await self._batch_update_feedback(conn, updates)
             if deletes:
                 await self._batch_delete(conn, deletes)
+    
+    async def _batch_upsert_main(self, conn, operations: List[Dict[str, Any]]):
+        if not operations:
+            return
+            
+        values = []
+        for op in operations:
+            fuzzer_id = int(op.get('fuzzer_id', 0) or 0)
+            values.append((fuzzer_id,))
+        
+        await conn.executemany(UPSERT_MAIN_SQL, values)
+    
+    async def _batch_upsert_fuzzer(self, conn, operations: List[Dict[str, Any]]):
+        if not operations:
+            return
+            
+        values = []
+        for op in operations:
+            program_base64 = op.get('program_base64', '')
+            fuzzer_id = int(op.get('fuzzer_id', 0) or 0)
+            values.append((program_base64, fuzzer_id))
+        
+        await conn.executemany(UPSERT_FUZZER_SQL, values)
     
     async def _batch_upsert_program(self, conn, operations: List[Dict[str, Any]]):
         if not operations:

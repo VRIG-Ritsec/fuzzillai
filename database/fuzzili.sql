@@ -43,6 +43,8 @@ INSERT INTO execution_type (title) VALUES
  ('directed_testcases'),
  ('generalistic_testcases');
 
+
+-- Indexes for performance, just query indexes to save on speed
 CREATE INDEX idx_execution_program ON execution(program_base64);
 CREATE INDEX idx_execution_type ON execution(execution_type_id);
 CREATE INDEX idx_execution_created ON execution(created_at);

@@ -14,9 +14,6 @@ CREATE TABLE execution_type (
     title VARCHAR(32) NOT NULL UNIQUE
 );
 
---preseed with AI Mut, Delta, OG Testcase type
--- reference in execution table
-
 -- Program table: Stores generated test programs
 CREATE TABLE program (
  program_base64 TEXT PRIMARY KEY, -- Base64-encoded test program (unique identifier)

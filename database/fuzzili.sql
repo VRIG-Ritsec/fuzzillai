@@ -9,6 +9,14 @@ CREATE TABLE fuzzer (
  inserted_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE execution_type (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(32) NOT NULL
+);
+
+--preseed with AI Mut, Delta, OG Testcase type
+-- reference in execution table
+
 -- Program table: Stores generated test programs
 CREATE TABLE program (
  program_base64 TEXT PRIMARY KEY, -- Base64-encoded test program (unique identifier)
@@ -19,6 +27,7 @@ CREATE TABLE program (
 CREATE TABLE execution (
  execution_id SERIAL PRIMARY KEY, -- Unique identifier for each execution
  program_base64 TEXT NOT NULL REFERENCES program(program_base64) ON DELETE CASCADE, -- Links to the executed program
+ execution_type_id INTEGER NOT NULL REFERENCES execution_type(id), -- Links to execution type
  feedback_vector JSONB, -- JSON structure containing execution feedback data
  turboshaft_ir TEXT, -- Turboshaft intermediate representation output
  coverage_total NUMERIC(5,2), -- Total code coverage percentage (0.00 to 999.99)
@@ -30,3 +39,13 @@ ALTER TABLE program
 ADD CONSTRAINT fk_program_fuzzer
 FOREIGN KEY (program_base64)
 REFERENCES fuzzer(program_base64);
+
+INSERT INTO execution_type (title) VALUES 
+ ('AI Mutation'),
+ ('Delta Analysis'),
+ ('Testcase');
+
+CREATE INDEX idx_execution_program ON execution(program_base64);
+CREATE INDEX idx_execution_type ON execution(execution_type_id);
+CREATE INDEX idx_execution_created ON execution(created_at);
+CREATE INDEX idx_execution_coverage ON execution(coverage_total);

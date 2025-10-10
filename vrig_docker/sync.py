@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 GROUP = os.getenv("GROUP", "g_fuzz")
 CONSUMER = os.getenv("CONSUMER", "c_sync_1")
-STREAMS = os.getenv("STREAMS", "redis1=redis://redis1:6379,redis2=redis://redis2:6379").split(",")
+STREAMS = os.getenv("STREAMS", "redis1=redis://redis:6379,redis2=redis://redis2:6379").split(",")
 STREAM_NAME = "stream:fuzz:updates"
 PG_DSN = os.getenv("PG_DSN", "postgres://fuzzuser:pass@pg:5432/main")
 DB_WORKER_THREADS = int(os.getenv("DB_WORKER_THREADS", "4"))
@@ -314,8 +314,43 @@ async def consume_stream(label: str, redis_url: str, batch_processor: DatabaseBa
             await asyncio.sleep(1)
 
 async def main():
-    batch_processor = DatabaseBatchProcessor(PG_DSN, DB_WORKER_THREADS)
-    await batch_processor.initialize()
+    # Check if we're in a Docker network
+    docker_network = os.getenv("DOCKER_NETWORK", "false").lower() == "true"
+    service_name = os.getenv("SERVICE_NAME", "sync")
+    
+    print(f"Starting {service_name} service...")
+    if docker_network:
+        print("Running in Docker network mode")
+        print(f"PostgreSQL DSN: {PG_DSN}")
+        print(f"Redis Streams: {STREAMS}")
+        print(f"Group: {GROUP}")
+        print(f"Consumer: {CONSUMER}")
+    
+    # Wait for PostgreSQL to be ready with retries
+    print("Waiting for PostgreSQL to be ready...")
+    max_retries = 60  # Increased retries
+    retry_count = 0
+    
+    # Initial delay to let the network settle (longer in Docker)
+    initial_delay = 10 if docker_network else 5
+    print(f"Initial network settle delay: {initial_delay}s")
+    await asyncio.sleep(initial_delay)
+    
+    while retry_count < max_retries:
+        try:
+            batch_processor = DatabaseBatchProcessor(PG_DSN, DB_WORKER_THREADS)
+            await batch_processor.initialize()
+            print("Successfully connected to PostgreSQL")
+            break
+        except Exception as e:
+            retry_count += 1
+            print(f"Failed to connect to PostgreSQL (attempt {retry_count}/{max_retries}): {e}")
+            if retry_count >= max_retries:
+                print("Max retries reached, exiting")
+                return
+            # Progressive backoff: start with 2s, increase to 5s
+            delay = min(2 + (retry_count * 0.1), 5)
+            await asyncio.sleep(delay)
     
     batch_task = asyncio.create_task(batch_processor.process_operations())
     

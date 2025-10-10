@@ -25,7 +25,7 @@ let v8Profile = Profile(
             "--jit-fuzzing",
             "--future",
             "--harmony",
-            //"--experimental-fuzzing",
+            "--experimental-fuzzing",
             "--js-staging",
             "--wasm-staging",
             "--wasm-fast-api",

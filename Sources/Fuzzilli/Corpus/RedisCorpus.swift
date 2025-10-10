@@ -37,7 +37,17 @@ public class RedisCorpus: ComponentBase, Collection, Corpus {
         }
         eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         if let group = eventLoopGroup {
-            let address = try? SocketAddress(ipAddress: "127.0.0.1", port: 6379)
+            // Use Redis container hostname from environment or default to localhost
+            let redisHost = ProcessInfo.processInfo.environment["REDIS_HOST"] ?? "127.0.0.1"
+            let redisPort = Int(ProcessInfo.processInfo.environment["REDIS_PORT"] ?? "6379") ?? 6379
+            let dockerNetwork = ProcessInfo.processInfo.environment["DOCKER_NETWORK"] ?? "false"
+            
+            logger.info("RedisCorpus: Connecting to Redis at \(redisHost):\(redisPort)")
+            if dockerNetwork.lowercased() == "true" {
+                logger.info("RedisCorpus: Running in Docker network mode")
+            }
+            
+            let address = try? SocketAddress(ipAddress: redisHost, port: redisPort)
             let config = RedisConnectionPool.Configuration(
                 initialServerConnectionAddresses: [address!],
                 maximumConnectionCount: .maximumActiveConnections(1),

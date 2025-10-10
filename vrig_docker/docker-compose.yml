@@ -1,0 +1,114 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: main
+      POSTGRES_USER: fuzzuser
+      POSTGRES_PASSWORD: pass
+      DOCKER_NETWORK: "true"
+      SERVICE_NAME: "postgres"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - fuzzillai_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuzzuser -d main"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for FuzzilliAI communication
+  redis:
+    image: redis:7-alpine
+    environment:
+      DOCKER_NETWORK: "true"
+      SERVICE_NAME: "redis"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fuzzillai_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FuzzilliAI Fuzzer Container
+  fuzzillai:
+    build:
+      context: ..
+      dockerfile: vrig_docker/Dockerfile.fuzzillai
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FUZZILLI_PROFILE=v8
+      - FUZZILLI_ENGINE=multi
+      - DOCKER_NETWORK=true
+      - SERVICE_NAME=fuzzillai
+    volumes:
+      - fuzzillai_corpus:/app/Corpus
+      - fuzzillai_logs:/app/logs
+      - /home/tropic/vrig/v8/v8:/v8:ro
+      - fuzzillai_corpus_data:/app/Corpus/corpus
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fuzzillai_network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "FuzzilliCli"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Sync Service - Processes Redis streams and sends to PostgreSQL
+  sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.sync
+    environment:
+      - PG_DSN=postgres://fuzzuser:pass@postgres:5432/main
+      - STREAMS=redis1=redis://redis:6379
+      - GROUP=g_fuzz
+      - CONSUMER=c_sync_1
+      - DB_WORKER_THREADS=4
+      - BATCH_SIZE=400
+      - BATCH_TIMEOUT=0.1
+      - DOCKER_NETWORK=true
+      - SERVICE_NAME=sync
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fuzzillai_network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "sync.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+  redis_data:
+  fuzzillai_corpus:
+  fuzzillai_corpus_data:
+  fuzzillai_logs:
+
+networks:
+  fuzzillai_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

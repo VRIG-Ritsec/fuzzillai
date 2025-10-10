@@ -1,0 +1,112 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SWIFT_VERSION=6.2
+
+# Install system dependencies including V8 build requirements
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    curl \
+    build-essential \
+    cmake \
+    ninja-build \
+    clang \
+    llvm \
+    python3 \
+    python3-pip \
+    python3-venv \
+    pkg-config \
+    unzip \
+    redis-tools \
+    libnss3-dev \
+    libatk-bridge2.0-dev \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Swift 6.2 (using Ubuntu 22.04 package as 24.04 is not available yet)
+RUN wget -q https://download.swift.org/swift-${SWIFT_VERSION}-release/ubuntu2204/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz \
+    && tar xzf swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz \
+    && mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift \
+    && rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
+
+ENV PATH="/opt/swift/usr/bin:${PATH}"
+
+WORKDIR /app
+
+# Clone and setup FuzzilliAI
+RUN git clone https://github.com/VRIG-Ritsec/fuzzillai.git .
+
+# Build FuzzilliAI
+RUN swift build -c release
+
+# Create necessary directories and clean up any old corpus
+RUN mkdir -p ./Corpus ./logs
+RUN rm -rf ./Corpus/old_corpus ./Corpus/corpus
+
+# Create a startup script that runs FuzzilliAI with Redis corpus
+RUN echo '#!/bin/bash\n\
+# Start FuzzilliAI with Redis corpus support\n\
+\n\
+# Check if we are in Docker network\n\
+if [ "${DOCKER_NETWORK}" = "true" ]; then\n\
+  echo "Running in Docker network mode"\n\
+  echo "Service: ${SERVICE_NAME:-fuzzillai}"\n\
+  echo "Redis Host: ${REDIS_HOST:-redis}"\n\
+  echo "Redis Port: ${REDIS_PORT:-6379}"\n\
+  echo "Profile: ${FUZZILLI_PROFILE:-v8}"\n\
+  echo "Engine: ${FUZZILLI_ENGINE:-multi}"\n\
+fi\n\
+\n\
+# Check if V8 d8 binary exists in mounted directory\n\
+if [ -f "/v8/out/fuzzbuild/d8" ]; then\n\
+  echo "Using mounted V8 binary from /v8/out/fuzzbuild/d8"\n\
+  V8_BINARY="/v8/out/fuzzbuild/d8"\n\
+elif [ -f "/v8/out/d8" ]; then\n\
+  echo "Using mounted V8 binary from /v8/out/d8"\n\
+  V8_BINARY="/v8/out/d8"\n\
+else\n\
+  echo "V8 binary not found in mounted directory. Available files:"\n\
+  find /v8 -name "d8" -type f 2>/dev/null || echo "No d8 binary found"\n\
+  exit 1\n\
+fi\n\
+\n\
+# Wait for Redis to be ready\n\
+echo "Waiting for Redis to be ready..."\n\
+REDIS_HOST=${REDIS_HOST:-redis}\n\
+REDIS_PORT=${REDIS_PORT:-6379}\n\
+\n\
+for i in {1..30}; do\n\
+  if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1; then\n\
+    echo "Redis is ready at $REDIS_HOST:$REDIS_PORT!"\n\
+    break\n\
+  fi\n\
+  echo "Redis not ready at $REDIS_HOST:$REDIS_PORT, waiting... (attempt $i/30)"\n\
+  sleep 2\n\
+  if [ $i -eq 30 ]; then\n\
+    echo "Redis connection timeout, proceeding anyway..."\n\
+  fi\n\
+done\n\
+\n\
+# Clean up any problematic corpus directories\n\
+echo "Cleaning up corpus directories..."\n\
+rm -rf ./Corpus/old_corpus\n\
+\n\
+echo "Starting FuzzilliAI..."\n\
+swift run -c release FuzzilliCli \\\n\
+  --profile=${FUZZILLI_PROFILE:-v8} \\\n\
+  --engine=${FUZZILLI_ENGINE:-multi} \\\n\
+  --corpus=redis \\\n\
+  --storagePath=./Corpus \\\n\
+  --resume \\\n\
+  "$V8_BINARY"' > /app/start.sh && chmod +x /app/start.sh
+
+EXPOSE 6379
+
+CMD ["/app/start.sh"]

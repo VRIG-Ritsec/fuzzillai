@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: main
+      POSTGRES_USER: fuzzuser
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuzzuser -d main"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis instance
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis to PostgreSQL sync service
+  sync:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PG_DSN: postgres://fuzzuser:pass@postgres:5432/main
+      STREAMS: redis=redis://redis:6379
+      GROUP: g_fuzz
+      CONSUMER: c_sync_1
+      REDIS_URL: redis://redis:6379
+    restart: unless-stopped
+    command: python3 sync.py
+
+  # Fuzzilli with Redis integration
+  fuzzilli:
+    build: .
+    depends_on:
+      redis:
+        condition: service_healthy
+      sync:
+        condition: service_started
+    environment:
+      REDIS_URL: redis://redis:6379
+      FUZZER_ID: 1
+    volumes:
+      - ./corpus:/app/Corpus
+    restart: unless-stopped
+    command: python3 fuzzilli_redis_integration.py
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,12 @@
+diff a/Sources/FuzzilliCli/Profiles/JerryscriptProfile.swift b/Sources/FuzzilliCli/Profiles/JerryscriptProfile.swift	(rejected hunks)
+@@ -35,6 +38,10 @@ let jerryscriptProfile = Profile(
+ 
+     crashTests: ["fuzzilli('FUZZILLI_CRASH', 0)", "fuzzilli('FUZZILLI_CRASH', 1)"],
+ 
++    differentialTests: [],
++
++    differentialTestsInvariant: [],
++
+     additionalCodeGenerators: [],
+ 
+     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),

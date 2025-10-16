@@ -65,6 +65,9 @@ let package = Package(
                     .copy("Protobuf/ast.proto"),
                     .copy("Compiler/Parser")]),
 
+        .executableTarget(name: "RelateTool",
+            dependencies: ["Fuzzilli"]),
+
         .executableTarget(name: "REPRLRun",
                 dependencies: ["libreprl"]),
 
@@ -76,7 +79,7 @@ let package = Package(
 
         .testTarget(name: "FuzzilliTests",
                     dependencies: ["Fuzzilli"],
-                    resources: [.copy("CompilerTests")]),
+                    resources: [ .copy("CompilerTests"), ])
     ],
     swiftLanguageVersions: [.v5]
 )

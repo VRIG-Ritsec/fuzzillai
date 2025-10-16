@@ -429,6 +429,9 @@ message Directive {
 message Return {
 }
 
+message DifferentialHash {
+}
+
 message Yield {
 }
 

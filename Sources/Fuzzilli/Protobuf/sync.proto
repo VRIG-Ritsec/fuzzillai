@@ -82,4 +82,22 @@ message Statistics {
 
         /// The timeout rate of recently generated programs (number of timeouts divided by number of generated programs).
         double timeoutRate = 17;
+
+        uint64 differentialSamples = 18;
+
+        uint64 turbofanSamples = 19;
+
+        uint64 maglevSamples = 20;
+
+        uint64 relationsPerformed = 21;
+
+        uint64 sparkplugSamples = 22;
+
+        double avgBugOracleTime = 23;
+
+        uint64 jitSamples = 24;
+
+        double avgDumpSizeOpt = 25;
+
+        double avgDumpSizeUnOpt = 26;
 }

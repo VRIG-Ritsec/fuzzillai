@@ -45,8 +45,10 @@ if reprl_initialize_context(ctx, argv, envp, /* capture_stdout: */ 1, /* capture
 func execute(_ script: String) -> (status: Int32, exec_time: UInt64) {
     var exec_time: UInt64 = 0
     var status: Int32 = 0
+    var encodedJitState: UInt8 = 0
     script.withCString { ptr in
-        status = reprl_execute(ctx, ptr, UInt64(script.utf8.count), 1_000_000, &exec_time, 0)
+        // differentialFuzzingPositionDumpSeed == 0 for tests
+        status = reprl_execute(ctx, ptr, UInt64(script.utf8.count), 1_000_000, &exec_time, 0, 0, &encodedJitState)
     }
     return (status, exec_time)
 }

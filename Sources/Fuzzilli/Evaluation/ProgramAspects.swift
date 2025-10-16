@@ -12,16 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+public enum ExecutionType {
+    case unknown
+    case interpreter
+    case maglev
+    case turbofan
+}
+
 /// Aspects of a program that make it special.
 public class ProgramAspects: CustomStringConvertible {
     let outcome: ExecutionOutcome
     let hasFeedbackNexusDelta: Bool
     let hasOptimizationDelta: Bool
+    public var jitExecution: ExecutionType
 
-    public init(outcome: ExecutionOutcome, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false) {
+    public init(outcome: ExecutionOutcome, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false, jitExecution: ExecutionType = .unknown) {
         self.outcome = outcome
         self.hasFeedbackNexusDelta = hasFeedbackNexusDelta
         self.hasOptimizationDelta = hasOptimizationDelta
+        self.jitExecution = jitExecution
     }
 
     public var description: String {

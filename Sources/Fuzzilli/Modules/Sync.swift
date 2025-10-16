@@ -83,6 +83,10 @@ enum MessageType: UInt32 {
 
     // Log messages are forwarded from child to parent nides.
     case log                 = 6
+
+    // A program that caused a differential.
+    // Only sent from a children to their parent.
+    case differentialProgram = 7
 }
 
 /// Distributed fuzzing nodes can be configured to only share their corpus in one direction in the tree.
@@ -252,6 +256,15 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
                 logger.warning("Received malformed program from child node: \(error)")
             }
 
+        case .differentialProgram:
+            do {
+                let proto = try Fuzzilli_Protobuf_Program(serializedData: data)
+                let program = try Program(from: proto)
+                fuzzer.importDifferential(program, origin: .child(id: child))
+            } catch {
+                logger.warning("Received malformed program from child node: \(error)")
+            }
+
         case .interestingProgram:
             guard shouldAcceptCorpusSamplesFromChildren() else {
                 logger.warning("Received corpus sample from child node but not configured to accept them (corpus synchronization mode is \(corpusSynchronizationMode)). Ignoring message.")
@@ -366,6 +379,10 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
             self.sendProgram(ev.program, as: .crashingProgram)
         }
 
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { ev in
+            self.sendProgram(ev.program, as: .differentialProgram)
+        }
+
         fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
             if !self.parentIsShuttingDown {
                 let shutdownGroup = DispatchGroup()
@@ -396,6 +413,26 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
             // Also send statistics directly after synchronization finished.
             fuzzer.registerEventListener(for: fuzzer.events.Synchronized) {
                 self.sendStatistics(stats)
+            }
+        }
+
+        // remove every *_output_dump.txt and *_position_dump.json that are older than 5mins
+        fuzzer.timers.scheduleTask(every: 10 * Minutes) {
+            let dumpFilesRegex = try! Regex("^\\d+_(output|position)_dump\\.(txt|json)$")
+
+            let items = try! FileManager.default.contentsOfDirectory(atPath: "/tmp")
+
+            for item in items {
+                if item.contains(dumpFilesRegex) {
+                    do {
+                        let itemPath = "/tmp/\(item)";
+                        let attr = try FileManager.default.attributesOfItem(atPath: itemPath)
+                        let date = attr[FileAttributeKey.modificationDate] as? Date
+                        if (-(date!.timeIntervalSinceNow) >= 5 * Minutes) {
+                            try? FileManager.default.removeItem(atPath: itemPath)
+                        }
+                    } catch {}
+                }
             }
         }
 
@@ -470,6 +507,7 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
             }
 
         case .crashingProgram,
+             .differentialProgram,
              .statistics,
              .log:
             logger.error("Received unexpected message: \(messageType)")
@@ -477,7 +515,7 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
     }
 
     private func sendProgram(_ program: Program, as type: MessageType) {
-        assert(type == .interestingProgram || type == .crashingProgram)
+        assert(type == .interestingProgram || type == .crashingProgram || type == .differentialProgram)
         let proto = program.asProtobuf()
         guard let payload = try? proto.serializedData() else {
             return logger.error("Failed to serialize program")

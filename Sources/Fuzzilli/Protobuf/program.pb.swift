@@ -38,6 +38,24 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
 }
 
 public struct Fuzzilli_Protobuf_Instruction: Sendable {
+  // Storage-backed fields to enable copy-on-write semantics
+  fileprivate final class _StorageClass {
+    var _inouts: [UInt32] = []
+    var _operation: Fuzzilli_Protobuf_Instruction.OneOf_Operation? = nil
+    init() {}
+    init(copying other: _StorageClass) {
+      self._inouts = other._inouts
+      self._operation = other._operation
+    }
+  }
+
+  fileprivate var _storage = _StorageClass()
+  @inline(__always) fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -45,373 +63,379 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
   /// The operation is either encoded as an index, referring to the nth operation
   /// (so that shared operations are also only present once in the protobuf), or
   /// as one of the many concrete Operation messages.
-  public var inouts: [UInt32] = []
+  public var inouts: [UInt32] {
+    get { return _storage._inouts }
+    set { _uniqueStorage()._inouts = newValue }
+  }
 
-  public var operation: Fuzzilli_Protobuf_Instruction.OneOf_Operation? = nil
+  public var operation: Fuzzilli_Protobuf_Instruction.OneOf_Operation? {
+    get { return _storage._operation }
+    set { _uniqueStorage()._operation = newValue }
+  }
 
   public var opIdx: UInt32 {
     get {
-      if case .opIdx(let v)? = operation {return v}
+      if case .opIdx(let v)? = _storage._operation { return v }
       return 0
     }
-    set {operation = .opIdx(newValue)}
+    set { _uniqueStorage()._operation = .opIdx(newValue) }
   }
 
   public var nop: Fuzzilli_Protobuf_Nop {
     get {
-      if case .nop(let v)? = operation {return v}
+      if case .nop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Nop()
     }
-    set {operation = .nop(newValue)}
+    set { _uniqueStorage()._operation = .nop(newValue) }
   }
 
   public var loadInteger: Fuzzilli_Protobuf_LoadInteger {
     get {
-      if case .loadInteger(let v)? = operation {return v}
+      if case .loadInteger(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadInteger()
     }
-    set {operation = .loadInteger(newValue)}
+    set { _uniqueStorage()._operation = .loadInteger(newValue) }
   }
 
   public var loadBigInt: Fuzzilli_Protobuf_LoadBigInt {
     get {
-      if case .loadBigInt(let v)? = operation {return v}
+      if case .loadBigInt(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadBigInt()
     }
-    set {operation = .loadBigInt(newValue)}
+    set { _uniqueStorage()._operation = .loadBigInt(newValue) }
   }
 
   public var loadFloat: Fuzzilli_Protobuf_LoadFloat {
     get {
-      if case .loadFloat(let v)? = operation {return v}
+      if case .loadFloat(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadFloat()
     }
-    set {operation = .loadFloat(newValue)}
+    set { _uniqueStorage()._operation = .loadFloat(newValue) }
   }
 
   public var loadString: Fuzzilli_Protobuf_LoadString {
     get {
-      if case .loadString(let v)? = operation {return v}
+      if case .loadString(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadString()
     }
-    set {operation = .loadString(newValue)}
+    set { _uniqueStorage()._operation = .loadString(newValue) }
   }
 
   public var loadBoolean: Fuzzilli_Protobuf_LoadBoolean {
     get {
-      if case .loadBoolean(let v)? = operation {return v}
+      if case .loadBoolean(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadBoolean()
     }
-    set {operation = .loadBoolean(newValue)}
+    set { _uniqueStorage()._operation = .loadBoolean(newValue) }
   }
 
   public var loadUndefined: Fuzzilli_Protobuf_LoadUndefined {
     get {
-      if case .loadUndefined(let v)? = operation {return v}
+      if case .loadUndefined(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadUndefined()
     }
-    set {operation = .loadUndefined(newValue)}
+    set { _uniqueStorage()._operation = .loadUndefined(newValue) }
   }
 
   public var loadNull: Fuzzilli_Protobuf_LoadNull {
     get {
-      if case .loadNull(let v)? = operation {return v}
+      if case .loadNull(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadNull()
     }
-    set {operation = .loadNull(newValue)}
+    set { _uniqueStorage()._operation = .loadNull(newValue) }
   }
 
   public var loadThis: Fuzzilli_Protobuf_LoadThis {
     get {
-      if case .loadThis(let v)? = operation {return v}
+      if case .loadThis(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadThis()
     }
-    set {operation = .loadThis(newValue)}
+    set { _uniqueStorage()._operation = .loadThis(newValue) }
   }
 
   public var loadArguments: Fuzzilli_Protobuf_LoadArguments {
     get {
-      if case .loadArguments(let v)? = operation {return v}
+      if case .loadArguments(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadArguments()
     }
-    set {operation = .loadArguments(newValue)}
+    set { _uniqueStorage()._operation = .loadArguments(newValue) }
   }
 
   public var createNamedVariable: Fuzzilli_Protobuf_CreateNamedVariable {
     get {
-      if case .createNamedVariable(let v)? = operation {return v}
+      if case .createNamedVariable(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateNamedVariable()
     }
-    set {operation = .createNamedVariable(newValue)}
+    set { _uniqueStorage()._operation = .createNamedVariable(newValue) }
   }
 
   public var loadDisposableVariable: Fuzzilli_Protobuf_LoadDisposableVariable {
     get {
-      if case .loadDisposableVariable(let v)? = operation {return v}
+      if case .loadDisposableVariable(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadDisposableVariable()
     }
-    set {operation = .loadDisposableVariable(newValue)}
+    set { _uniqueStorage()._operation = .loadDisposableVariable(newValue) }
   }
 
   public var loadAsyncDisposableVariable: Fuzzilli_Protobuf_LoadAsyncDisposableVariable {
     get {
-      if case .loadAsyncDisposableVariable(let v)? = operation {return v}
+      if case .loadAsyncDisposableVariable(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadAsyncDisposableVariable()
     }
-    set {operation = .loadAsyncDisposableVariable(newValue)}
+    set { _uniqueStorage()._operation = .loadAsyncDisposableVariable(newValue) }
   }
 
   public var loadRegExp: Fuzzilli_Protobuf_LoadRegExp {
     get {
-      if case .loadRegExp(let v)? = operation {return v}
+      if case .loadRegExp(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadRegExp()
     }
-    set {operation = .loadRegExp(newValue)}
+    set { _uniqueStorage()._operation = .loadRegExp(newValue) }
   }
 
   public var beginObjectLiteral: Fuzzilli_Protobuf_BeginObjectLiteral {
     get {
-      if case .beginObjectLiteral(let v)? = operation {return v}
+      if case .beginObjectLiteral(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginObjectLiteral()
     }
-    set {operation = .beginObjectLiteral(newValue)}
+    set { _uniqueStorage()._operation = .beginObjectLiteral(newValue) }
   }
 
   public var objectLiteralAddProperty: Fuzzilli_Protobuf_ObjectLiteralAddProperty {
     get {
-      if case .objectLiteralAddProperty(let v)? = operation {return v}
+      if case .objectLiteralAddProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ObjectLiteralAddProperty()
     }
-    set {operation = .objectLiteralAddProperty(newValue)}
+    set { _uniqueStorage()._operation = .objectLiteralAddProperty(newValue) }
   }
 
   public var objectLiteralAddElement: Fuzzilli_Protobuf_ObjectLiteralAddElement {
     get {
-      if case .objectLiteralAddElement(let v)? = operation {return v}
+      if case .objectLiteralAddElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ObjectLiteralAddElement()
     }
-    set {operation = .objectLiteralAddElement(newValue)}
+    set { _uniqueStorage()._operation = .objectLiteralAddElement(newValue) }
   }
 
   public var objectLiteralAddComputedProperty: Fuzzilli_Protobuf_ObjectLiteralAddComputedProperty {
     get {
-      if case .objectLiteralAddComputedProperty(let v)? = operation {return v}
+      if case .objectLiteralAddComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ObjectLiteralAddComputedProperty()
     }
-    set {operation = .objectLiteralAddComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .objectLiteralAddComputedProperty(newValue) }
   }
 
   public var objectLiteralCopyProperties: Fuzzilli_Protobuf_ObjectLiteralCopyProperties {
     get {
-      if case .objectLiteralCopyProperties(let v)? = operation {return v}
+      if case .objectLiteralCopyProperties(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ObjectLiteralCopyProperties()
     }
-    set {operation = .objectLiteralCopyProperties(newValue)}
+    set { _uniqueStorage()._operation = .objectLiteralCopyProperties(newValue) }
   }
 
   public var objectLiteralSetPrototype: Fuzzilli_Protobuf_ObjectLiteralSetPrototype {
     get {
-      if case .objectLiteralSetPrototype(let v)? = operation {return v}
+      if case .objectLiteralSetPrototype(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ObjectLiteralSetPrototype()
     }
-    set {operation = .objectLiteralSetPrototype(newValue)}
+    set { _uniqueStorage()._operation = .objectLiteralSetPrototype(newValue) }
   }
 
   public var beginObjectLiteralMethod: Fuzzilli_Protobuf_BeginObjectLiteralMethod {
     get {
-      if case .beginObjectLiteralMethod(let v)? = operation {return v}
+      if case .beginObjectLiteralMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginObjectLiteralMethod()
     }
-    set {operation = .beginObjectLiteralMethod(newValue)}
+    set { _uniqueStorage()._operation = .beginObjectLiteralMethod(newValue) }
   }
 
   public var endObjectLiteralMethod: Fuzzilli_Protobuf_EndObjectLiteralMethod {
     get {
-      if case .endObjectLiteralMethod(let v)? = operation {return v}
+      if case .endObjectLiteralMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndObjectLiteralMethod()
     }
-    set {operation = .endObjectLiteralMethod(newValue)}
+    set { _uniqueStorage()._operation = .endObjectLiteralMethod(newValue) }
   }
 
   public var beginObjectLiteralComputedMethod: Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod {
     get {
-      if case .beginObjectLiteralComputedMethod(let v)? = operation {return v}
+      if case .beginObjectLiteralComputedMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod()
     }
-    set {operation = .beginObjectLiteralComputedMethod(newValue)}
+    set { _uniqueStorage()._operation = .beginObjectLiteralComputedMethod(newValue) }
   }
 
   public var endObjectLiteralComputedMethod: Fuzzilli_Protobuf_EndObjectLiteralComputedMethod {
     get {
-      if case .endObjectLiteralComputedMethod(let v)? = operation {return v}
+      if case .endObjectLiteralComputedMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndObjectLiteralComputedMethod()
     }
-    set {operation = .endObjectLiteralComputedMethod(newValue)}
+    set { _uniqueStorage()._operation = .endObjectLiteralComputedMethod(newValue) }
   }
 
   public var beginObjectLiteralGetter: Fuzzilli_Protobuf_BeginObjectLiteralGetter {
     get {
-      if case .beginObjectLiteralGetter(let v)? = operation {return v}
+      if case .beginObjectLiteralGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginObjectLiteralGetter()
     }
-    set {operation = .beginObjectLiteralGetter(newValue)}
+    set { _uniqueStorage()._operation = .beginObjectLiteralGetter(newValue) }
   }
 
   public var endObjectLiteralGetter: Fuzzilli_Protobuf_EndObjectLiteralGetter {
     get {
-      if case .endObjectLiteralGetter(let v)? = operation {return v}
+      if case .endObjectLiteralGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndObjectLiteralGetter()
     }
-    set {operation = .endObjectLiteralGetter(newValue)}
+    set { _uniqueStorage()._operation = .endObjectLiteralGetter(newValue) }
   }
 
   public var beginObjectLiteralSetter: Fuzzilli_Protobuf_BeginObjectLiteralSetter {
     get {
-      if case .beginObjectLiteralSetter(let v)? = operation {return v}
+      if case .beginObjectLiteralSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginObjectLiteralSetter()
     }
-    set {operation = .beginObjectLiteralSetter(newValue)}
+    set { _uniqueStorage()._operation = .beginObjectLiteralSetter(newValue) }
   }
 
   public var endObjectLiteralSetter: Fuzzilli_Protobuf_EndObjectLiteralSetter {
     get {
-      if case .endObjectLiteralSetter(let v)? = operation {return v}
+      if case .endObjectLiteralSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndObjectLiteralSetter()
     }
-    set {operation = .endObjectLiteralSetter(newValue)}
+    set { _uniqueStorage()._operation = .endObjectLiteralSetter(newValue) }
   }
 
   public var endObjectLiteral: Fuzzilli_Protobuf_EndObjectLiteral {
     get {
-      if case .endObjectLiteral(let v)? = operation {return v}
+      if case .endObjectLiteral(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndObjectLiteral()
     }
-    set {operation = .endObjectLiteral(newValue)}
+    set { _uniqueStorage()._operation = .endObjectLiteral(newValue) }
   }
 
   public var beginClassDefinition: Fuzzilli_Protobuf_BeginClassDefinition {
     get {
-      if case .beginClassDefinition(let v)? = operation {return v}
+      if case .beginClassDefinition(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassDefinition()
     }
-    set {operation = .beginClassDefinition(newValue)}
+    set { _uniqueStorage()._operation = .beginClassDefinition(newValue) }
   }
 
   public var beginClassConstructor: Fuzzilli_Protobuf_BeginClassConstructor {
     get {
-      if case .beginClassConstructor(let v)? = operation {return v}
+      if case .beginClassConstructor(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassConstructor()
     }
-    set {operation = .beginClassConstructor(newValue)}
+    set { _uniqueStorage()._operation = .beginClassConstructor(newValue) }
   }
 
   public var endClassConstructor: Fuzzilli_Protobuf_EndClassConstructor {
     get {
-      if case .endClassConstructor(let v)? = operation {return v}
+      if case .endClassConstructor(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassConstructor()
     }
-    set {operation = .endClassConstructor(newValue)}
+    set { _uniqueStorage()._operation = .endClassConstructor(newValue) }
   }
 
   public var classAddInstanceProperty: Fuzzilli_Protobuf_ClassAddInstanceProperty {
     get {
-      if case .classAddInstanceProperty(let v)? = operation {return v}
+      if case .classAddInstanceProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddInstanceProperty()
     }
-    set {operation = .classAddInstanceProperty(newValue)}
+    set { _uniqueStorage()._operation = .classAddInstanceProperty(newValue) }
   }
 
   public var classAddInstanceElement: Fuzzilli_Protobuf_ClassAddInstanceElement {
     get {
-      if case .classAddInstanceElement(let v)? = operation {return v}
+      if case .classAddInstanceElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddInstanceElement()
     }
-    set {operation = .classAddInstanceElement(newValue)}
+    set { _uniqueStorage()._operation = .classAddInstanceElement(newValue) }
   }
 
   public var classAddInstanceComputedProperty: Fuzzilli_Protobuf_ClassAddInstanceComputedProperty {
     get {
-      if case .classAddInstanceComputedProperty(let v)? = operation {return v}
+      if case .classAddInstanceComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddInstanceComputedProperty()
     }
-    set {operation = .classAddInstanceComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .classAddInstanceComputedProperty(newValue) }
   }
 
   public var beginClassInstanceMethod: Fuzzilli_Protobuf_BeginClassInstanceMethod {
     get {
-      if case .beginClassInstanceMethod(let v)? = operation {return v}
+      if case .beginClassInstanceMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassInstanceMethod()
     }
-    set {operation = .beginClassInstanceMethod(newValue)}
+    set { _uniqueStorage()._operation = .beginClassInstanceMethod(newValue) }
   }
 
   public var endClassInstanceMethod: Fuzzilli_Protobuf_EndClassInstanceMethod {
     get {
-      if case .endClassInstanceMethod(let v)? = operation {return v}
+      if case .endClassInstanceMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassInstanceMethod()
     }
-    set {operation = .endClassInstanceMethod(newValue)}
+    set { _uniqueStorage()._operation = .endClassInstanceMethod(newValue) }
   }
 
   public var beginClassInstanceGetter: Fuzzilli_Protobuf_BeginClassInstanceGetter {
     get {
-      if case .beginClassInstanceGetter(let v)? = operation {return v}
+      if case .beginClassInstanceGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassInstanceGetter()
     }
-    set {operation = .beginClassInstanceGetter(newValue)}
+    set { _uniqueStorage()._operation = .beginClassInstanceGetter(newValue) }
   }
 
   public var endClassInstanceGetter: Fuzzilli_Protobuf_EndClassInstanceGetter {
     get {
-      if case .endClassInstanceGetter(let v)? = operation {return v}
+      if case .endClassInstanceGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassInstanceGetter()
     }
-    set {operation = .endClassInstanceGetter(newValue)}
+    set { _uniqueStorage()._operation = .endClassInstanceGetter(newValue) }
   }
 
   public var beginClassInstanceSetter: Fuzzilli_Protobuf_BeginClassInstanceSetter {
     get {
-      if case .beginClassInstanceSetter(let v)? = operation {return v}
+      if case .beginClassInstanceSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassInstanceSetter()
     }
-    set {operation = .beginClassInstanceSetter(newValue)}
+    set { _uniqueStorage()._operation = .beginClassInstanceSetter(newValue) }
   }
 
   public var endClassInstanceSetter: Fuzzilli_Protobuf_EndClassInstanceSetter {
     get {
-      if case .endClassInstanceSetter(let v)? = operation {return v}
+      if case .endClassInstanceSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassInstanceSetter()
     }
-    set {operation = .endClassInstanceSetter(newValue)}
+    set { _uniqueStorage()._operation = .endClassInstanceSetter(newValue) }
   }
 
   public var classAddStaticProperty: Fuzzilli_Protobuf_ClassAddStaticProperty {
     get {
-      if case .classAddStaticProperty(let v)? = operation {return v}
+      if case .classAddStaticProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddStaticProperty()
     }
-    set {operation = .classAddStaticProperty(newValue)}
+    set { _uniqueStorage()._operation = .classAddStaticProperty(newValue) }
   }
 
   public var classAddStaticElement: Fuzzilli_Protobuf_ClassAddStaticElement {
     get {
-      if case .classAddStaticElement(let v)? = operation {return v}
+      if case .classAddStaticElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddStaticElement()
     }
-    set {operation = .classAddStaticElement(newValue)}
+    set { _uniqueStorage()._operation = .classAddStaticElement(newValue) }
   }
 
   public var classAddStaticComputedProperty: Fuzzilli_Protobuf_ClassAddStaticComputedProperty {
     get {
-      if case .classAddStaticComputedProperty(let v)? = operation {return v}
+      if case .classAddStaticComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddStaticComputedProperty()
     }
-    set {operation = .classAddStaticComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .classAddStaticComputedProperty(newValue) }
   }
 
   public var beginClassStaticInitializer: Fuzzilli_Protobuf_BeginClassStaticInitializer {
     get {
-      if case .beginClassStaticInitializer(let v)? = operation {return v}
+      if case .beginClassStaticInitializer(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassStaticInitializer()
     }
     set {operation = .beginClassStaticInitializer(newValue)}
@@ -419,7 +443,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassStaticInitializer: Fuzzilli_Protobuf_EndClassStaticInitializer {
     get {
-      if case .endClassStaticInitializer(let v)? = operation {return v}
+      if case .endClassStaticInitializer(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassStaticInitializer()
     }
     set {operation = .endClassStaticInitializer(newValue)}
@@ -427,7 +451,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var beginClassStaticMethod: Fuzzilli_Protobuf_BeginClassStaticMethod {
     get {
-      if case .beginClassStaticMethod(let v)? = operation {return v}
+      if case .beginClassStaticMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassStaticMethod()
     }
     set {operation = .beginClassStaticMethod(newValue)}
@@ -435,7 +459,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassStaticMethod: Fuzzilli_Protobuf_EndClassStaticMethod {
     get {
-      if case .endClassStaticMethod(let v)? = operation {return v}
+      if case .endClassStaticMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassStaticMethod()
     }
     set {operation = .endClassStaticMethod(newValue)}
@@ -443,7 +467,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var beginClassStaticGetter: Fuzzilli_Protobuf_BeginClassStaticGetter {
     get {
-      if case .beginClassStaticGetter(let v)? = operation {return v}
+      if case .beginClassStaticGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassStaticGetter()
     }
     set {operation = .beginClassStaticGetter(newValue)}
@@ -451,7 +475,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassStaticGetter: Fuzzilli_Protobuf_EndClassStaticGetter {
     get {
-      if case .endClassStaticGetter(let v)? = operation {return v}
+      if case .endClassStaticGetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassStaticGetter()
     }
     set {operation = .endClassStaticGetter(newValue)}
@@ -459,7 +483,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var beginClassStaticSetter: Fuzzilli_Protobuf_BeginClassStaticSetter {
     get {
-      if case .beginClassStaticSetter(let v)? = operation {return v}
+      if case .beginClassStaticSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassStaticSetter()
     }
     set {operation = .beginClassStaticSetter(newValue)}
@@ -467,7 +491,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassStaticSetter: Fuzzilli_Protobuf_EndClassStaticSetter {
     get {
-      if case .endClassStaticSetter(let v)? = operation {return v}
+      if case .endClassStaticSetter(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassStaticSetter()
     }
     set {operation = .endClassStaticSetter(newValue)}
@@ -475,7 +499,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var classAddPrivateInstanceProperty: Fuzzilli_Protobuf_ClassAddPrivateInstanceProperty {
     get {
-      if case .classAddPrivateInstanceProperty(let v)? = operation {return v}
+      if case .classAddPrivateInstanceProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddPrivateInstanceProperty()
     }
     set {operation = .classAddPrivateInstanceProperty(newValue)}
@@ -483,7 +507,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var beginClassPrivateInstanceMethod: Fuzzilli_Protobuf_BeginClassPrivateInstanceMethod {
     get {
-      if case .beginClassPrivateInstanceMethod(let v)? = operation {return v}
+      if case .beginClassPrivateInstanceMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassPrivateInstanceMethod()
     }
     set {operation = .beginClassPrivateInstanceMethod(newValue)}
@@ -491,7 +515,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassPrivateInstanceMethod: Fuzzilli_Protobuf_EndClassPrivateInstanceMethod {
     get {
-      if case .endClassPrivateInstanceMethod(let v)? = operation {return v}
+      if case .endClassPrivateInstanceMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassPrivateInstanceMethod()
     }
     set {operation = .endClassPrivateInstanceMethod(newValue)}
@@ -499,7 +523,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var classAddPrivateStaticProperty: Fuzzilli_Protobuf_ClassAddPrivateStaticProperty {
     get {
-      if case .classAddPrivateStaticProperty(let v)? = operation {return v}
+      if case .classAddPrivateStaticProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ClassAddPrivateStaticProperty()
     }
     set {operation = .classAddPrivateStaticProperty(newValue)}
@@ -507,7 +531,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var beginClassPrivateStaticMethod: Fuzzilli_Protobuf_BeginClassPrivateStaticMethod {
     get {
-      if case .beginClassPrivateStaticMethod(let v)? = operation {return v}
+      if case .beginClassPrivateStaticMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginClassPrivateStaticMethod()
     }
     set {operation = .beginClassPrivateStaticMethod(newValue)}
@@ -515,7 +539,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassPrivateStaticMethod: Fuzzilli_Protobuf_EndClassPrivateStaticMethod {
     get {
-      if case .endClassPrivateStaticMethod(let v)? = operation {return v}
+      if case .endClassPrivateStaticMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassPrivateStaticMethod()
     }
     set {operation = .endClassPrivateStaticMethod(newValue)}
@@ -523,7 +547,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var endClassDefinition: Fuzzilli_Protobuf_EndClassDefinition {
     get {
-      if case .endClassDefinition(let v)? = operation {return v}
+      if case .endClassDefinition(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndClassDefinition()
     }
     set {operation = .endClassDefinition(newValue)}
@@ -531,7 +555,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var createArray: Fuzzilli_Protobuf_CreateArray {
     get {
-      if case .createArray(let v)? = operation {return v}
+      if case .createArray(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateArray()
     }
     set {operation = .createArray(newValue)}
@@ -539,7 +563,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var createIntArray: Fuzzilli_Protobuf_CreateIntArray {
     get {
-      if case .createIntArray(let v)? = operation {return v}
+      if case .createIntArray(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateIntArray()
     }
     set {operation = .createIntArray(newValue)}
@@ -547,7 +571,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var createFloatArray: Fuzzilli_Protobuf_CreateFloatArray {
     get {
-      if case .createFloatArray(let v)? = operation {return v}
+      if case .createFloatArray(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateFloatArray()
     }
     set {operation = .createFloatArray(newValue)}
@@ -555,7 +579,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var createArrayWithSpread: Fuzzilli_Protobuf_CreateArrayWithSpread {
     get {
-      if case .createArrayWithSpread(let v)? = operation {return v}
+      if case .createArrayWithSpread(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateArrayWithSpread()
     }
     set {operation = .createArrayWithSpread(newValue)}
@@ -563,7 +587,7 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var createTemplateString: Fuzzilli_Protobuf_CreateTemplateString {
     get {
-      if case .createTemplateString(let v)? = operation {return v}
+      if case .createTemplateString(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateTemplateString()
     }
     set {operation = .createTemplateString(newValue)}
@@ -571,1050 +595,1050 @@ public struct Fuzzilli_Protobuf_Instruction: Sendable {
 
   public var getProperty: Fuzzilli_Protobuf_GetProperty {
     get {
-      if case .getProperty(let v)? = operation {return v}
+      if case .getProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetProperty()
     }
-    set {operation = .getProperty(newValue)}
+    set { _uniqueStorage()._operation = .getProperty(newValue) }
   }
 
   public var setProperty: Fuzzilli_Protobuf_SetProperty {
     get {
-      if case .setProperty(let v)? = operation {return v}
+      if case .setProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetProperty()
     }
-    set {operation = .setProperty(newValue)}
+    set { _uniqueStorage()._operation = .setProperty(newValue) }
   }
 
   public var updateProperty: Fuzzilli_Protobuf_UpdateProperty {
     get {
-      if case .updateProperty(let v)? = operation {return v}
+      if case .updateProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UpdateProperty()
     }
-    set {operation = .updateProperty(newValue)}
+    set { _uniqueStorage()._operation = .updateProperty(newValue) }
   }
 
   public var deleteProperty: Fuzzilli_Protobuf_DeleteProperty {
     get {
-      if case .deleteProperty(let v)? = operation {return v}
+      if case .deleteProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DeleteProperty()
     }
-    set {operation = .deleteProperty(newValue)}
+    set { _uniqueStorage()._operation = .deleteProperty(newValue) }
   }
 
   public var configureProperty: Fuzzilli_Protobuf_ConfigureProperty {
     get {
-      if case .configureProperty(let v)? = operation {return v}
+      if case .configureProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ConfigureProperty()
     }
-    set {operation = .configureProperty(newValue)}
+    set { _uniqueStorage()._operation = .configureProperty(newValue) }
   }
 
   public var getElement: Fuzzilli_Protobuf_GetElement {
     get {
-      if case .getElement(let v)? = operation {return v}
+      if case .getElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetElement()
     }
-    set {operation = .getElement(newValue)}
+    set { _uniqueStorage()._operation = .getElement(newValue) }
   }
 
   public var setElement: Fuzzilli_Protobuf_SetElement {
     get {
-      if case .setElement(let v)? = operation {return v}
+      if case .setElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetElement()
     }
-    set {operation = .setElement(newValue)}
+    set { _uniqueStorage()._operation = .setElement(newValue) }
   }
 
   public var updateElement: Fuzzilli_Protobuf_UpdateElement {
     get {
-      if case .updateElement(let v)? = operation {return v}
+      if case .updateElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UpdateElement()
     }
-    set {operation = .updateElement(newValue)}
+    set { _uniqueStorage()._operation = .updateElement(newValue) }
   }
 
   public var deleteElement: Fuzzilli_Protobuf_DeleteElement {
     get {
-      if case .deleteElement(let v)? = operation {return v}
+      if case .deleteElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DeleteElement()
     }
-    set {operation = .deleteElement(newValue)}
+    set { _uniqueStorage()._operation = .deleteElement(newValue) }
   }
 
   public var configureElement: Fuzzilli_Protobuf_ConfigureElement {
     get {
-      if case .configureElement(let v)? = operation {return v}
+      if case .configureElement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ConfigureElement()
     }
-    set {operation = .configureElement(newValue)}
+    set { _uniqueStorage()._operation = .configureElement(newValue) }
   }
 
   public var getComputedProperty: Fuzzilli_Protobuf_GetComputedProperty {
     get {
-      if case .getComputedProperty(let v)? = operation {return v}
+      if case .getComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetComputedProperty()
     }
-    set {operation = .getComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .getComputedProperty(newValue) }
   }
 
   public var setComputedProperty: Fuzzilli_Protobuf_SetComputedProperty {
     get {
-      if case .setComputedProperty(let v)? = operation {return v}
+      if case .setComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetComputedProperty()
     }
-    set {operation = .setComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .setComputedProperty(newValue) }
   }
 
   public var updateComputedProperty: Fuzzilli_Protobuf_UpdateComputedProperty {
     get {
-      if case .updateComputedProperty(let v)? = operation {return v}
+      if case .updateComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UpdateComputedProperty()
     }
-    set {operation = .updateComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .updateComputedProperty(newValue) }
   }
 
   public var deleteComputedProperty: Fuzzilli_Protobuf_DeleteComputedProperty {
     get {
-      if case .deleteComputedProperty(let v)? = operation {return v}
+      if case .deleteComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DeleteComputedProperty()
     }
-    set {operation = .deleteComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .deleteComputedProperty(newValue) }
   }
 
   public var configureComputedProperty: Fuzzilli_Protobuf_ConfigureComputedProperty {
     get {
-      if case .configureComputedProperty(let v)? = operation {return v}
+      if case .configureComputedProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ConfigureComputedProperty()
     }
-    set {operation = .configureComputedProperty(newValue)}
+    set { _uniqueStorage()._operation = .configureComputedProperty(newValue) }
   }
 
   public var typeOf: Fuzzilli_Protobuf_TypeOf {
     get {
-      if case .typeOf(let v)? = operation {return v}
+      if case .typeOf(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_TypeOf()
     }
-    set {operation = .typeOf(newValue)}
+    set { _uniqueStorage()._operation = .typeOf(newValue) }
   }
 
   public var void: Fuzzilli_Protobuf_Void {
     get {
-      if case .void(let v)? = operation {return v}
+      if case .void(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Void()
     }
-    set {operation = .void(newValue)}
+    set { _uniqueStorage()._operation = .void(newValue) }
   }
 
   public var testInstanceOf: Fuzzilli_Protobuf_TestInstanceOf {
     get {
-      if case .testInstanceOf(let v)? = operation {return v}
+      if case .testInstanceOf(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_TestInstanceOf()
     }
-    set {operation = .testInstanceOf(newValue)}
+    set { _uniqueStorage()._operation = .testInstanceOf(newValue) }
   }
 
   public var testIn: Fuzzilli_Protobuf_TestIn {
     get {
-      if case .testIn(let v)? = operation {return v}
+      if case .testIn(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_TestIn()
     }
-    set {operation = .testIn(newValue)}
+    set { _uniqueStorage()._operation = .testIn(newValue) }
   }
 
   public var beginPlainFunction: Fuzzilli_Protobuf_BeginPlainFunction {
     get {
-      if case .beginPlainFunction(let v)? = operation {return v}
+      if case .beginPlainFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginPlainFunction()
     }
-    set {operation = .beginPlainFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginPlainFunction(newValue) }
   }
 
   public var endPlainFunction: Fuzzilli_Protobuf_EndPlainFunction {
     get {
-      if case .endPlainFunction(let v)? = operation {return v}
+      if case .endPlainFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndPlainFunction()
     }
-    set {operation = .endPlainFunction(newValue)}
+    set { _uniqueStorage()._operation = .endPlainFunction(newValue) }
   }
 
   public var beginArrowFunction: Fuzzilli_Protobuf_BeginArrowFunction {
     get {
-      if case .beginArrowFunction(let v)? = operation {return v}
+      if case .beginArrowFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginArrowFunction()
     }
-    set {operation = .beginArrowFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginArrowFunction(newValue) }
   }
 
   public var endArrowFunction: Fuzzilli_Protobuf_EndArrowFunction {
     get {
-      if case .endArrowFunction(let v)? = operation {return v}
+      if case .endArrowFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndArrowFunction()
     }
-    set {operation = .endArrowFunction(newValue)}
+    set { _uniqueStorage()._operation = .endArrowFunction(newValue) }
   }
 
   public var beginGeneratorFunction: Fuzzilli_Protobuf_BeginGeneratorFunction {
     get {
-      if case .beginGeneratorFunction(let v)? = operation {return v}
+      if case .beginGeneratorFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginGeneratorFunction()
     }
-    set {operation = .beginGeneratorFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginGeneratorFunction(newValue) }
   }
 
   public var endGeneratorFunction: Fuzzilli_Protobuf_EndGeneratorFunction {
     get {
-      if case .endGeneratorFunction(let v)? = operation {return v}
+      if case .endGeneratorFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndGeneratorFunction()
     }
-    set {operation = .endGeneratorFunction(newValue)}
+    set { _uniqueStorage()._operation = .endGeneratorFunction(newValue) }
   }
 
   public var beginAsyncFunction: Fuzzilli_Protobuf_BeginAsyncFunction {
     get {
-      if case .beginAsyncFunction(let v)? = operation {return v}
+      if case .beginAsyncFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginAsyncFunction()
     }
-    set {operation = .beginAsyncFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginAsyncFunction(newValue) }
   }
 
   public var endAsyncFunction: Fuzzilli_Protobuf_EndAsyncFunction {
     get {
-      if case .endAsyncFunction(let v)? = operation {return v}
+      if case .endAsyncFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndAsyncFunction()
     }
-    set {operation = .endAsyncFunction(newValue)}
+    set { _uniqueStorage()._operation = .endAsyncFunction(newValue) }
   }
 
   public var beginAsyncArrowFunction: Fuzzilli_Protobuf_BeginAsyncArrowFunction {
     get {
-      if case .beginAsyncArrowFunction(let v)? = operation {return v}
+      if case .beginAsyncArrowFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginAsyncArrowFunction()
     }
-    set {operation = .beginAsyncArrowFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginAsyncArrowFunction(newValue) }
   }
 
   public var endAsyncArrowFunction: Fuzzilli_Protobuf_EndAsyncArrowFunction {
     get {
-      if case .endAsyncArrowFunction(let v)? = operation {return v}
+      if case .endAsyncArrowFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndAsyncArrowFunction()
     }
-    set {operation = .endAsyncArrowFunction(newValue)}
+    set { _uniqueStorage()._operation = .endAsyncArrowFunction(newValue) }
   }
 
   public var beginAsyncGeneratorFunction: Fuzzilli_Protobuf_BeginAsyncGeneratorFunction {
     get {
-      if case .beginAsyncGeneratorFunction(let v)? = operation {return v}
+      if case .beginAsyncGeneratorFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginAsyncGeneratorFunction()
     }
-    set {operation = .beginAsyncGeneratorFunction(newValue)}
+    set { _uniqueStorage()._operation = .beginAsyncGeneratorFunction(newValue) }
   }
 
   public var endAsyncGeneratorFunction: Fuzzilli_Protobuf_EndAsyncGeneratorFunction {
     get {
-      if case .endAsyncGeneratorFunction(let v)? = operation {return v}
+      if case .endAsyncGeneratorFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndAsyncGeneratorFunction()
     }
-    set {operation = .endAsyncGeneratorFunction(newValue)}
+    set { _uniqueStorage()._operation = .endAsyncGeneratorFunction(newValue) }
   }
 
   public var beginConstructor: Fuzzilli_Protobuf_BeginConstructor {
     get {
-      if case .beginConstructor(let v)? = operation {return v}
+      if case .beginConstructor(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginConstructor()
     }
-    set {operation = .beginConstructor(newValue)}
+    set { _uniqueStorage()._operation = .beginConstructor(newValue) }
   }
 
   public var endConstructor: Fuzzilli_Protobuf_EndConstructor {
     get {
-      if case .endConstructor(let v)? = operation {return v}
+      if case .endConstructor(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndConstructor()
     }
-    set {operation = .endConstructor(newValue)}
+    set { _uniqueStorage()._operation = .endConstructor(newValue) }
   }
 
   public var directive: Fuzzilli_Protobuf_Directive {
     get {
-      if case .directive(let v)? = operation {return v}
+      if case .directive(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Directive()
     }
-    set {operation = .directive(newValue)}
+    set { _uniqueStorage()._operation = .directive(newValue) }
   }
 
   public var `return`: Fuzzilli_Protobuf_Return {
     get {
-      if case .return(let v)? = operation {return v}
+      if case .return(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Return()
     }
-    set {operation = .return(newValue)}
+    set { _uniqueStorage()._operation = .return(newValue) }
   }
 
   public var yield: Fuzzilli_Protobuf_Yield {
     get {
-      if case .yield(let v)? = operation {return v}
+      if case .yield(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Yield()
     }
-    set {operation = .yield(newValue)}
+    set { _uniqueStorage()._operation = .yield(newValue) }
   }
 
   public var yieldEach: Fuzzilli_Protobuf_YieldEach {
     get {
-      if case .yieldEach(let v)? = operation {return v}
+      if case .yieldEach(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_YieldEach()
     }
-    set {operation = .yieldEach(newValue)}
+    set { _uniqueStorage()._operation = .yieldEach(newValue) }
   }
 
   public var await: Fuzzilli_Protobuf_Await {
     get {
-      if case .await(let v)? = operation {return v}
+      if case .await(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Await()
     }
-    set {operation = .await(newValue)}
+    set { _uniqueStorage()._operation = .await(newValue) }
   }
 
   public var callFunction: Fuzzilli_Protobuf_CallFunction {
     get {
-      if case .callFunction(let v)? = operation {return v}
+      if case .callFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallFunction()
     }
-    set {operation = .callFunction(newValue)}
+    set { _uniqueStorage()._operation = .callFunction(newValue) }
   }
 
   public var callFunctionWithSpread: Fuzzilli_Protobuf_CallFunctionWithSpread {
     get {
-      if case .callFunctionWithSpread(let v)? = operation {return v}
+      if case .callFunctionWithSpread(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallFunctionWithSpread()
     }
-    set {operation = .callFunctionWithSpread(newValue)}
+    set { _uniqueStorage()._operation = .callFunctionWithSpread(newValue) }
   }
 
   public var construct: Fuzzilli_Protobuf_Construct {
     get {
-      if case .construct(let v)? = operation {return v}
+      if case .construct(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Construct()
     }
-    set {operation = .construct(newValue)}
+    set { _uniqueStorage()._operation = .construct(newValue) }
   }
 
   public var constructWithSpread: Fuzzilli_Protobuf_ConstructWithSpread {
     get {
-      if case .constructWithSpread(let v)? = operation {return v}
+      if case .constructWithSpread(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ConstructWithSpread()
     }
-    set {operation = .constructWithSpread(newValue)}
+    set { _uniqueStorage()._operation = .constructWithSpread(newValue) }
   }
 
   public var callMethod: Fuzzilli_Protobuf_CallMethod {
     get {
-      if case .callMethod(let v)? = operation {return v}
+      if case .callMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallMethod()
     }
-    set {operation = .callMethod(newValue)}
+    set { _uniqueStorage()._operation = .callMethod(newValue) }
   }
 
   public var callMethodWithSpread: Fuzzilli_Protobuf_CallMethodWithSpread {
     get {
-      if case .callMethodWithSpread(let v)? = operation {return v}
+      if case .callMethodWithSpread(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallMethodWithSpread()
     }
-    set {operation = .callMethodWithSpread(newValue)}
+    set { _uniqueStorage()._operation = .callMethodWithSpread(newValue) }
   }
 
   public var callComputedMethod: Fuzzilli_Protobuf_CallComputedMethod {
     get {
-      if case .callComputedMethod(let v)? = operation {return v}
+      if case .callComputedMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallComputedMethod()
     }
-    set {operation = .callComputedMethod(newValue)}
+    set { _uniqueStorage()._operation = .callComputedMethod(newValue) }
   }
 
   public var callComputedMethodWithSpread: Fuzzilli_Protobuf_CallComputedMethodWithSpread {
     get {
-      if case .callComputedMethodWithSpread(let v)? = operation {return v}
+      if case .callComputedMethodWithSpread(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallComputedMethodWithSpread()
     }
-    set {operation = .callComputedMethodWithSpread(newValue)}
+    set { _uniqueStorage()._operation = .callComputedMethodWithSpread(newValue) }
   }
 
   public var unaryOperation: Fuzzilli_Protobuf_UnaryOperation {
     get {
-      if case .unaryOperation(let v)? = operation {return v}
+      if case .unaryOperation(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UnaryOperation()
     }
-    set {operation = .unaryOperation(newValue)}
+    set { _uniqueStorage()._operation = .unaryOperation(newValue) }
   }
 
   public var binaryOperation: Fuzzilli_Protobuf_BinaryOperation {
     get {
-      if case .binaryOperation(let v)? = operation {return v}
+      if case .binaryOperation(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BinaryOperation()
     }
-    set {operation = .binaryOperation(newValue)}
+    set { _uniqueStorage()._operation = .binaryOperation(newValue) }
   }
 
   public var ternaryOperation: Fuzzilli_Protobuf_TernaryOperation {
     get {
-      if case .ternaryOperation(let v)? = operation {return v}
+      if case .ternaryOperation(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_TernaryOperation()
     }
-    set {operation = .ternaryOperation(newValue)}
+    set { _uniqueStorage()._operation = .ternaryOperation(newValue) }
   }
 
   public var update: Fuzzilli_Protobuf_Update {
     get {
-      if case .update(let v)? = operation {return v}
+      if case .update(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Update()
     }
-    set {operation = .update(newValue)}
+    set { _uniqueStorage()._operation = .update(newValue) }
   }
 
   public var dup: Fuzzilli_Protobuf_Dup {
     get {
-      if case .dup(let v)? = operation {return v}
+      if case .dup(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Dup()
     }
-    set {operation = .dup(newValue)}
+    set { _uniqueStorage()._operation = .dup(newValue) }
   }
 
   public var reassign: Fuzzilli_Protobuf_Reassign {
     get {
-      if case .reassign(let v)? = operation {return v}
+      if case .reassign(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Reassign()
     }
-    set {operation = .reassign(newValue)}
+    set { _uniqueStorage()._operation = .reassign(newValue) }
   }
 
   public var destructArray: Fuzzilli_Protobuf_DestructArray {
     get {
-      if case .destructArray(let v)? = operation {return v}
+      if case .destructArray(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DestructArray()
     }
-    set {operation = .destructArray(newValue)}
+    set { _uniqueStorage()._operation = .destructArray(newValue) }
   }
 
   public var destructArrayAndReassign: Fuzzilli_Protobuf_DestructArrayAndReassign {
     get {
-      if case .destructArrayAndReassign(let v)? = operation {return v}
+      if case .destructArrayAndReassign(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DestructArrayAndReassign()
     }
-    set {operation = .destructArrayAndReassign(newValue)}
+    set { _uniqueStorage()._operation = .destructArrayAndReassign(newValue) }
   }
 
   public var destructObject: Fuzzilli_Protobuf_DestructObject {
     get {
-      if case .destructObject(let v)? = operation {return v}
+      if case .destructObject(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DestructObject()
     }
-    set {operation = .destructObject(newValue)}
+    set { _uniqueStorage()._operation = .destructObject(newValue) }
   }
 
   public var destructObjectAndReassign: Fuzzilli_Protobuf_DestructObjectAndReassign {
     get {
-      if case .destructObjectAndReassign(let v)? = operation {return v}
+      if case .destructObjectAndReassign(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_DestructObjectAndReassign()
     }
-    set {operation = .destructObjectAndReassign(newValue)}
+    set { _uniqueStorage()._operation = .destructObjectAndReassign(newValue) }
   }
 
   public var compare: Fuzzilli_Protobuf_Compare {
     get {
-      if case .compare(let v)? = operation {return v}
+      if case .compare(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Compare()
     }
-    set {operation = .compare(newValue)}
+    set { _uniqueStorage()._operation = .compare(newValue) }
   }
 
   public var eval: Fuzzilli_Protobuf_Eval {
     get {
-      if case .eval(let v)? = operation {return v}
+      if case .eval(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Eval()
     }
-    set {operation = .eval(newValue)}
+    set { _uniqueStorage()._operation = .eval(newValue) }
   }
 
   public var beginWith: Fuzzilli_Protobuf_BeginWith {
     get {
-      if case .beginWith(let v)? = operation {return v}
+      if case .beginWith(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginWith()
     }
-    set {operation = .beginWith(newValue)}
+    set { _uniqueStorage()._operation = .beginWith(newValue) }
   }
 
   public var endWith: Fuzzilli_Protobuf_EndWith {
     get {
-      if case .endWith(let v)? = operation {return v}
+      if case .endWith(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndWith()
     }
-    set {operation = .endWith(newValue)}
+    set { _uniqueStorage()._operation = .endWith(newValue) }
   }
 
   public var callSuperConstructor: Fuzzilli_Protobuf_CallSuperConstructor {
     get {
-      if case .callSuperConstructor(let v)? = operation {return v}
+      if case .callSuperConstructor(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallSuperConstructor()
     }
-    set {operation = .callSuperConstructor(newValue)}
+    set { _uniqueStorage()._operation = .callSuperConstructor(newValue) }
   }
 
   public var callSuperMethod: Fuzzilli_Protobuf_CallSuperMethod {
     get {
-      if case .callSuperMethod(let v)? = operation {return v}
+      if case .callSuperMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallSuperMethod()
     }
-    set {operation = .callSuperMethod(newValue)}
+    set { _uniqueStorage()._operation = .callSuperMethod(newValue) }
   }
 
   public var getPrivateProperty: Fuzzilli_Protobuf_GetPrivateProperty {
     get {
-      if case .getPrivateProperty(let v)? = operation {return v}
+      if case .getPrivateProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetPrivateProperty()
     }
-    set {operation = .getPrivateProperty(newValue)}
+    set { _uniqueStorage()._operation = .getPrivateProperty(newValue) }
   }
 
   public var setPrivateProperty: Fuzzilli_Protobuf_SetPrivateProperty {
     get {
-      if case .setPrivateProperty(let v)? = operation {return v}
+      if case .setPrivateProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetPrivateProperty()
     }
-    set {operation = .setPrivateProperty(newValue)}
+    set { _uniqueStorage()._operation = .setPrivateProperty(newValue) }
   }
 
   public var updatePrivateProperty: Fuzzilli_Protobuf_UpdatePrivateProperty {
     get {
-      if case .updatePrivateProperty(let v)? = operation {return v}
+      if case .updatePrivateProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UpdatePrivateProperty()
     }
-    set {operation = .updatePrivateProperty(newValue)}
+    set { _uniqueStorage()._operation = .updatePrivateProperty(newValue) }
   }
 
   public var callPrivateMethod: Fuzzilli_Protobuf_CallPrivateMethod {
     get {
-      if case .callPrivateMethod(let v)? = operation {return v}
+      if case .callPrivateMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CallPrivateMethod()
     }
-    set {operation = .callPrivateMethod(newValue)}
+    set { _uniqueStorage()._operation = .callPrivateMethod(newValue) }
   }
 
   public var getSuperProperty: Fuzzilli_Protobuf_GetSuperProperty {
     get {
-      if case .getSuperProperty(let v)? = operation {return v}
+      if case .getSuperProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetSuperProperty()
     }
-    set {operation = .getSuperProperty(newValue)}
+    set { _uniqueStorage()._operation = .getSuperProperty(newValue) }
   }
 
   public var setSuperProperty: Fuzzilli_Protobuf_SetSuperProperty {
     get {
-      if case .setSuperProperty(let v)? = operation {return v}
+      if case .setSuperProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetSuperProperty()
     }
-    set {operation = .setSuperProperty(newValue)}
+    set { _uniqueStorage()._operation = .setSuperProperty(newValue) }
   }
 
   public var getComputedSuperProperty: Fuzzilli_Protobuf_GetComputedSuperProperty {
     get {
-      if case .getComputedSuperProperty(let v)? = operation {return v}
+      if case .getComputedSuperProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_GetComputedSuperProperty()
     }
-    set {operation = .getComputedSuperProperty(newValue)}
+    set { _uniqueStorage()._operation = .getComputedSuperProperty(newValue) }
   }
 
   public var setComputedSuperProperty: Fuzzilli_Protobuf_SetComputedSuperProperty {
     get {
-      if case .setComputedSuperProperty(let v)? = operation {return v}
+      if case .setComputedSuperProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SetComputedSuperProperty()
     }
-    set {operation = .setComputedSuperProperty(newValue)}
+    set { _uniqueStorage()._operation = .setComputedSuperProperty(newValue) }
   }
 
   public var updateSuperProperty: Fuzzilli_Protobuf_UpdateSuperProperty {
     get {
-      if case .updateSuperProperty(let v)? = operation {return v}
+      if case .updateSuperProperty(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_UpdateSuperProperty()
     }
-    set {operation = .updateSuperProperty(newValue)}
+    set { _uniqueStorage()._operation = .updateSuperProperty(newValue) }
   }
 
   public var beginIf: Fuzzilli_Protobuf_BeginIf {
     get {
-      if case .beginIf(let v)? = operation {return v}
+      if case .beginIf(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginIf()
     }
-    set {operation = .beginIf(newValue)}
+    set { _uniqueStorage()._operation = .beginIf(newValue) }
   }
 
   public var beginElse: Fuzzilli_Protobuf_BeginElse {
     get {
-      if case .beginElse(let v)? = operation {return v}
+      if case .beginElse(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginElse()
     }
-    set {operation = .beginElse(newValue)}
+    set { _uniqueStorage()._operation = .beginElse(newValue) }
   }
 
   public var endIf: Fuzzilli_Protobuf_EndIf {
     get {
-      if case .endIf(let v)? = operation {return v}
+      if case .endIf(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndIf()
     }
-    set {operation = .endIf(newValue)}
+    set { _uniqueStorage()._operation = .endIf(newValue) }
   }
 
   public var beginWhileLoopHeader: Fuzzilli_Protobuf_BeginWhileLoopHeader {
     get {
-      if case .beginWhileLoopHeader(let v)? = operation {return v}
+      if case .beginWhileLoopHeader(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginWhileLoopHeader()
     }
-    set {operation = .beginWhileLoopHeader(newValue)}
+    set { _uniqueStorage()._operation = .beginWhileLoopHeader(newValue) }
   }
 
   public var beginWhileLoopBody: Fuzzilli_Protobuf_BeginWhileLoopBody {
     get {
-      if case .beginWhileLoopBody(let v)? = operation {return v}
+      if case .beginWhileLoopBody(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginWhileLoopBody()
     }
-    set {operation = .beginWhileLoopBody(newValue)}
+    set { _uniqueStorage()._operation = .beginWhileLoopBody(newValue) }
   }
 
   public var endWhileLoop: Fuzzilli_Protobuf_EndWhileLoop {
     get {
-      if case .endWhileLoop(let v)? = operation {return v}
+      if case .endWhileLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndWhileLoop()
     }
-    set {operation = .endWhileLoop(newValue)}
+    set { _uniqueStorage()._operation = .endWhileLoop(newValue) }
   }
 
   public var beginDoWhileLoopBody: Fuzzilli_Protobuf_BeginDoWhileLoopBody {
     get {
-      if case .beginDoWhileLoopBody(let v)? = operation {return v}
+      if case .beginDoWhileLoopBody(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginDoWhileLoopBody()
     }
-    set {operation = .beginDoWhileLoopBody(newValue)}
+    set { _uniqueStorage()._operation = .beginDoWhileLoopBody(newValue) }
   }
 
   public var beginDoWhileLoopHeader: Fuzzilli_Protobuf_BeginDoWhileLoopHeader {
     get {
-      if case .beginDoWhileLoopHeader(let v)? = operation {return v}
+      if case .beginDoWhileLoopHeader(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginDoWhileLoopHeader()
     }
-    set {operation = .beginDoWhileLoopHeader(newValue)}
+    set { _uniqueStorage()._operation = .beginDoWhileLoopHeader(newValue) }
   }
 
   public var endDoWhileLoop: Fuzzilli_Protobuf_EndDoWhileLoop {
     get {
-      if case .endDoWhileLoop(let v)? = operation {return v}
+      if case .endDoWhileLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndDoWhileLoop()
     }
-    set {operation = .endDoWhileLoop(newValue)}
+    set { _uniqueStorage()._operation = .endDoWhileLoop(newValue) }
   }
 
   public var beginForLoopInitializer: Fuzzilli_Protobuf_BeginForLoopInitializer {
     get {
-      if case .beginForLoopInitializer(let v)? = operation {return v}
+      if case .beginForLoopInitializer(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForLoopInitializer()
     }
-    set {operation = .beginForLoopInitializer(newValue)}
+    set { _uniqueStorage()._operation = .beginForLoopInitializer(newValue) }
   }
 
   public var beginForLoopCondition: Fuzzilli_Protobuf_BeginForLoopCondition {
     get {
-      if case .beginForLoopCondition(let v)? = operation {return v}
+      if case .beginForLoopCondition(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForLoopCondition()
     }
-    set {operation = .beginForLoopCondition(newValue)}
+    set { _uniqueStorage()._operation = .beginForLoopCondition(newValue) }
   }
 
   public var beginForLoopAfterthought: Fuzzilli_Protobuf_BeginForLoopAfterthought {
     get {
-      if case .beginForLoopAfterthought(let v)? = operation {return v}
+      if case .beginForLoopAfterthought(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForLoopAfterthought()
     }
-    set {operation = .beginForLoopAfterthought(newValue)}
+    set { _uniqueStorage()._operation = .beginForLoopAfterthought(newValue) }
   }
 
   public var beginForLoopBody: Fuzzilli_Protobuf_BeginForLoopBody {
     get {
-      if case .beginForLoopBody(let v)? = operation {return v}
+      if case .beginForLoopBody(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForLoopBody()
     }
-    set {operation = .beginForLoopBody(newValue)}
+    set { _uniqueStorage()._operation = .beginForLoopBody(newValue) }
   }
 
   public var endForLoop: Fuzzilli_Protobuf_EndForLoop {
     get {
-      if case .endForLoop(let v)? = operation {return v}
+      if case .endForLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndForLoop()
     }
-    set {operation = .endForLoop(newValue)}
+    set { _uniqueStorage()._operation = .endForLoop(newValue) }
   }
 
   public var beginForInLoop: Fuzzilli_Protobuf_BeginForInLoop {
     get {
-      if case .beginForInLoop(let v)? = operation {return v}
+      if case .beginForInLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForInLoop()
     }
-    set {operation = .beginForInLoop(newValue)}
+    set { _uniqueStorage()._operation = .beginForInLoop(newValue) }
   }
 
   public var endForInLoop: Fuzzilli_Protobuf_EndForInLoop {
     get {
-      if case .endForInLoop(let v)? = operation {return v}
+      if case .endForInLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndForInLoop()
     }
-    set {operation = .endForInLoop(newValue)}
+    set { _uniqueStorage()._operation = .endForInLoop(newValue) }
   }
 
   public var beginForOfLoop: Fuzzilli_Protobuf_BeginForOfLoop {
     get {
-      if case .beginForOfLoop(let v)? = operation {return v}
+      if case .beginForOfLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForOfLoop()
     }
-    set {operation = .beginForOfLoop(newValue)}
+    set { _uniqueStorage()._operation = .beginForOfLoop(newValue) }
   }
 
   public var beginForOfLoopWithDestruct: Fuzzilli_Protobuf_BeginForOfLoopWithDestruct {
     get {
-      if case .beginForOfLoopWithDestruct(let v)? = operation {return v}
+      if case .beginForOfLoopWithDestruct(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginForOfLoopWithDestruct()
     }
-    set {operation = .beginForOfLoopWithDestruct(newValue)}
+    set { _uniqueStorage()._operation = .beginForOfLoopWithDestruct(newValue) }
   }
 
   public var endForOfLoop: Fuzzilli_Protobuf_EndForOfLoop {
     get {
-      if case .endForOfLoop(let v)? = operation {return v}
+      if case .endForOfLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndForOfLoop()
     }
-    set {operation = .endForOfLoop(newValue)}
+    set { _uniqueStorage()._operation = .endForOfLoop(newValue) }
   }
 
   public var beginRepeatLoop: Fuzzilli_Protobuf_BeginRepeatLoop {
     get {
-      if case .beginRepeatLoop(let v)? = operation {return v}
+      if case .beginRepeatLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginRepeatLoop()
     }
-    set {operation = .beginRepeatLoop(newValue)}
+    set { _uniqueStorage()._operation = .beginRepeatLoop(newValue) }
   }
 
   public var endRepeatLoop: Fuzzilli_Protobuf_EndRepeatLoop {
     get {
-      if case .endRepeatLoop(let v)? = operation {return v}
+      if case .endRepeatLoop(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndRepeatLoop()
     }
-    set {operation = .endRepeatLoop(newValue)}
+    set { _uniqueStorage()._operation = .endRepeatLoop(newValue) }
   }
 
   public var loopBreak: Fuzzilli_Protobuf_LoopBreak {
     get {
-      if case .loopBreak(let v)? = operation {return v}
+      if case .loopBreak(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoopBreak()
     }
-    set {operation = .loopBreak(newValue)}
+    set { _uniqueStorage()._operation = .loopBreak(newValue) }
   }
 
   public var loopContinue: Fuzzilli_Protobuf_LoopContinue {
     get {
-      if case .loopContinue(let v)? = operation {return v}
+      if case .loopContinue(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoopContinue()
     }
-    set {operation = .loopContinue(newValue)}
+    set { _uniqueStorage()._operation = .loopContinue(newValue) }
   }
 
   public var beginTry: Fuzzilli_Protobuf_BeginTry {
     get {
-      if case .beginTry(let v)? = operation {return v}
+      if case .beginTry(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginTry()
     }
-    set {operation = .beginTry(newValue)}
+    set { _uniqueStorage()._operation = .beginTry(newValue) }
   }
 
   public var beginCatch: Fuzzilli_Protobuf_BeginCatch {
     get {
-      if case .beginCatch(let v)? = operation {return v}
+      if case .beginCatch(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginCatch()
     }
-    set {operation = .beginCatch(newValue)}
+    set { _uniqueStorage()._operation = .beginCatch(newValue) }
   }
 
   public var beginFinally: Fuzzilli_Protobuf_BeginFinally {
     get {
-      if case .beginFinally(let v)? = operation {return v}
+      if case .beginFinally(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginFinally()
     }
-    set {operation = .beginFinally(newValue)}
+    set { _uniqueStorage()._operation = .beginFinally(newValue) }
   }
 
   public var endTryCatchFinally: Fuzzilli_Protobuf_EndTryCatchFinally {
     get {
-      if case .endTryCatchFinally(let v)? = operation {return v}
+      if case .endTryCatchFinally(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndTryCatchFinally()
     }
-    set {operation = .endTryCatchFinally(newValue)}
+    set { _uniqueStorage()._operation = .endTryCatchFinally(newValue) }
   }
 
   public var throwException: Fuzzilli_Protobuf_ThrowException {
     get {
-      if case .throwException(let v)? = operation {return v}
+      if case .throwException(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_ThrowException()
     }
-    set {operation = .throwException(newValue)}
+    set { _uniqueStorage()._operation = .throwException(newValue) }
   }
 
   public var beginCodeString: Fuzzilli_Protobuf_BeginCodeString {
     get {
-      if case .beginCodeString(let v)? = operation {return v}
+      if case .beginCodeString(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginCodeString()
     }
-    set {operation = .beginCodeString(newValue)}
+    set { _uniqueStorage()._operation = .beginCodeString(newValue) }
   }
 
   public var endCodeString: Fuzzilli_Protobuf_EndCodeString {
     get {
-      if case .endCodeString(let v)? = operation {return v}
+      if case .endCodeString(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndCodeString()
     }
-    set {operation = .endCodeString(newValue)}
+    set { _uniqueStorage()._operation = .endCodeString(newValue) }
   }
 
   public var beginBlockStatement: Fuzzilli_Protobuf_BeginBlockStatement {
     get {
-      if case .beginBlockStatement(let v)? = operation {return v}
+      if case .beginBlockStatement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginBlockStatement()
     }
-    set {operation = .beginBlockStatement(newValue)}
+    set { _uniqueStorage()._operation = .beginBlockStatement(newValue) }
   }
 
   public var endBlockStatement: Fuzzilli_Protobuf_EndBlockStatement {
     get {
-      if case .endBlockStatement(let v)? = operation {return v}
+      if case .endBlockStatement(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndBlockStatement()
     }
-    set {operation = .endBlockStatement(newValue)}
+    set { _uniqueStorage()._operation = .endBlockStatement(newValue) }
   }
 
   public var beginSwitch: Fuzzilli_Protobuf_BeginSwitch {
     get {
-      if case .beginSwitch(let v)? = operation {return v}
+      if case .beginSwitch(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginSwitch()
     }
-    set {operation = .beginSwitch(newValue)}
+    set { _uniqueStorage()._operation = .beginSwitch(newValue) }
   }
 
   public var beginSwitchCase: Fuzzilli_Protobuf_BeginSwitchCase {
     get {
-      if case .beginSwitchCase(let v)? = operation {return v}
+      if case .beginSwitchCase(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginSwitchCase()
     }
-    set {operation = .beginSwitchCase(newValue)}
+    set { _uniqueStorage()._operation = .beginSwitchCase(newValue) }
   }
 
   public var beginSwitchDefaultCase: Fuzzilli_Protobuf_BeginSwitchDefaultCase {
     get {
-      if case .beginSwitchDefaultCase(let v)? = operation {return v}
+      if case .beginSwitchDefaultCase(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginSwitchDefaultCase()
     }
-    set {operation = .beginSwitchDefaultCase(newValue)}
+    set { _uniqueStorage()._operation = .beginSwitchDefaultCase(newValue) }
   }
 
   public var endSwitchCase: Fuzzilli_Protobuf_EndSwitchCase {
     get {
-      if case .endSwitchCase(let v)? = operation {return v}
+      if case .endSwitchCase(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndSwitchCase()
     }
-    set {operation = .endSwitchCase(newValue)}
+    set { _uniqueStorage()._operation = .endSwitchCase(newValue) }
   }
 
   public var endSwitch: Fuzzilli_Protobuf_EndSwitch {
     get {
-      if case .endSwitch(let v)? = operation {return v}
+      if case .endSwitch(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndSwitch()
     }
-    set {operation = .endSwitch(newValue)}
+    set { _uniqueStorage()._operation = .endSwitch(newValue) }
   }
 
   public var switchBreak: Fuzzilli_Protobuf_SwitchBreak {
     get {
-      if case .switchBreak(let v)? = operation {return v}
+      if case .switchBreak(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_SwitchBreak()
     }
-    set {operation = .switchBreak(newValue)}
+    set { _uniqueStorage()._operation = .switchBreak(newValue) }
   }
 
   public var loadNewTarget: Fuzzilli_Protobuf_LoadNewTarget {
     get {
-      if case .loadNewTarget(let v)? = operation {return v}
+      if case .loadNewTarget(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_LoadNewTarget()
     }
-    set {operation = .loadNewTarget(newValue)}
+    set { _uniqueStorage()._operation = .loadNewTarget(newValue) }
   }
 
   public var print: Fuzzilli_Protobuf_Print {
     get {
-      if case .print(let v)? = operation {return v}
+      if case .print(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Print()
     }
-    set {operation = .print(newValue)}
+    set { _uniqueStorage()._operation = .print(newValue) }
   }
 
   public var explore: Fuzzilli_Protobuf_Explore {
     get {
-      if case .explore(let v)? = operation {return v}
+      if case .explore(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Explore()
     }
-    set {operation = .explore(newValue)}
+    set { _uniqueStorage()._operation = .explore(newValue) }
   }
 
   public var probe: Fuzzilli_Protobuf_Probe {
     get {
-      if case .probe(let v)? = operation {return v}
+      if case .probe(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Probe()
     }
-    set {operation = .probe(newValue)}
+    set { _uniqueStorage()._operation = .probe(newValue) }
   }
 
   public var fixup: Fuzzilli_Protobuf_Fixup {
     get {
-      if case .fixup(let v)? = operation {return v}
+      if case .fixup(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Fixup()
     }
-    set {operation = .fixup(newValue)}
+    set { _uniqueStorage()._operation = .fixup(newValue) }
   }
 
   public var beginWasmModule: Fuzzilli_Protobuf_BeginWasmModule {
     get {
-      if case .beginWasmModule(let v)? = operation {return v}
+      if case .beginWasmModule(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BeginWasmModule()
     }
-    set {operation = .beginWasmModule(newValue)}
+    set { _uniqueStorage()._operation = .beginWasmModule(newValue) }
   }
 
   public var endWasmModule: Fuzzilli_Protobuf_EndWasmModule {
     get {
-      if case .endWasmModule(let v)? = operation {return v}
+      if case .endWasmModule(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_EndWasmModule()
     }
-    set {operation = .endWasmModule(newValue)}
+    set { _uniqueStorage()._operation = .endWasmModule(newValue) }
   }
 
   public var createWasmGlobal: Fuzzilli_Protobuf_CreateWasmGlobal {
     get {
-      if case .createWasmGlobal(let v)? = operation {return v}
+      if case .createWasmGlobal(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateWasmGlobal()
     }
-    set {operation = .createWasmGlobal(newValue)}
+    set { _uniqueStorage()._operation = .createWasmGlobal(newValue) }
   }
 
   public var createWasmMemory: Fuzzilli_Protobuf_CreateWasmMemory {
     get {
-      if case .createWasmMemory(let v)? = operation {return v}
+      if case .createWasmMemory(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateWasmMemory()
     }
-    set {operation = .createWasmMemory(newValue)}
+    set { _uniqueStorage()._operation = .createWasmMemory(newValue) }
   }
 
   public var createWasmTable: Fuzzilli_Protobuf_CreateWasmTable {
     get {
-      if case .createWasmTable(let v)? = operation {return v}
+      if case .createWasmTable(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateWasmTable()
     }
-    set {operation = .createWasmTable(newValue)}
+    set { _uniqueStorage()._operation = .createWasmTable(newValue) }
   }
 
   public var createWasmJstag: Fuzzilli_Protobuf_CreateWasmJSTag {
     get {
-      if case .createWasmJstag(let v)? = operation {return v}
+      if case .createWasmJstag(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateWasmJSTag()
     }
-    set {operation = .createWasmJstag(newValue)}
+    set { _uniqueStorage()._operation = .createWasmJstag(newValue) }
   }
 
   public var createWasmTag: Fuzzilli_Protobuf_CreateWasmTag {
     get {
-      if case .createWasmTag(let v)? = operation {return v}
+      if case .createWasmTag(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_CreateWasmTag()
     }
-    set {operation = .createWasmTag(newValue)}
+    set { _uniqueStorage()._operation = .createWasmTag(newValue) }
   }
 
   public var wrapPromising: Fuzzilli_Protobuf_WrapPromising {
     get {
-      if case .wrapPromising(let v)? = operation {return v}
+      if case .wrapPromising(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_WrapPromising()
     }
-    set {operation = .wrapPromising(newValue)}
+    set { _uniqueStorage()._operation = .wrapPromising(newValue) }
   }
 
   public var wrapSuspending: Fuzzilli_Protobuf_WrapSuspending {
     get {
-      if case .wrapSuspending(let v)? = operation {return v}
+      if case .wrapSuspending(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_WrapSuspending()
     }
-    set {operation = .wrapSuspending(newValue)}
+    set { _uniqueStorage()._operation = .wrapSuspending(newValue) }
   }
 
   public var bindMethod: Fuzzilli_Protobuf_BindMethod {
     get {
-      if case .bindMethod(let v)? = operation {return v}
+      if case .bindMethod(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BindMethod()
     }
-    set {operation = .bindMethod(newValue)}
+    set { _uniqueStorage()._operation = .bindMethod(newValue) }
   }
 
   public var bindFunction: Fuzzilli_Protobuf_BindFunction {
     get {
-      if case .bindFunction(let v)? = operation {return v}
+      if case .bindFunction(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_BindFunction()
     }
-    set {operation = .bindFunction(newValue)}
+    set { _uniqueStorage()._operation = .bindFunction(newValue) }
   }
 
   public var consti64: Fuzzilli_Protobuf_Consti64 {
     get {
-      if case .consti64(let v)? = operation {return v}
+      if case .consti64(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Consti64()
     }
-    set {operation = .consti64(newValue)}
+    set { _uniqueStorage()._operation = .consti64(newValue) }
   }
 
   public var consti32: Fuzzilli_Protobuf_Consti32 {
     get {
-      if case .consti32(let v)? = operation {return v}
+      if case .consti32(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Consti32()
     }
-    set {operation = .consti32(newValue)}
+    set { _uniqueStorage()._operation = .consti32(newValue) }
   }
 
   public var constf32: Fuzzilli_Protobuf_Constf32 {
     get {
-      if case .constf32(let v)? = operation {return v}
+      if case .constf32(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Constf32()
     }
-    set {operation = .constf32(newValue)}
+    set { _uniqueStorage()._operation = .constf32(newValue) }
   }
 
   public var constf64: Fuzzilli_Protobuf_Constf64 {
     get {
-      if case .constf64(let v)? = operation {return v}
+      if case .constf64(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_Constf64()
     }
-    set {operation = .constf64(newValue)}
+    set { _uniqueStorage()._operation = .constf64(newValue) }
   }
 
   public var wasmReturn: Fuzzilli_Protobuf_WasmReturn {
     get {
-      if case .wasmReturn(let v)? = operation {return v}
+      if case .wasmReturn(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_WasmReturn()
     }
-    set {operation = .wasmReturn(newValue)}
+    set { _uniqueStorage()._operation = .wasmReturn(newValue) }
   }
 
   public var wasmJsCall: Fuzzilli_Protobuf_WasmJsCall {
     get {
-      if case .wasmJsCall(let v)? = operation {return v}
+      if case .wasmJsCall(let v)? = _storage._operation { return v }
       return Fuzzilli_Protobuf_WasmJsCall()
     }
-    set {operation = .wasmJsCall(newValue)}
+    set { _uniqueStorage()._operation = .wasmJsCall(newValue) }
   }
 
   public var wasmi32CompareOp: Fuzzilli_Protobuf_Wasmi32CompareOp {
@@ -8852,14 +8876,11 @@ extension Fuzzilli_Protobuf_Program: SwiftProtobuf.Message, SwiftProtobuf._Messa
     _ = _uniqueStorage()
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       while let fieldNumber = try decoder.nextFieldNumber() {
-        // The use of inline closures is to circumvent an issue where the compiler
-        // allocates stack space for every case branch when no optimizations are
-        // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try { try decoder.decodeSingularBytesField(value: &_storage._uuid) }()
-        case 2: try { try decoder.decodeRepeatedMessageField(value: &_storage._code) }()
-        case 3: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufSInt32,SwiftProtobuf.ProtobufString>.self, value: &_storage._comments) }()
-        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._parent) }()
+        case 1: try decoder.decodeSingularBytesField(value: &_storage._uuid)
+        case 2: try decoder.decodeRepeatedMessageField(value: &_storage._code)
+        case 3: try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufSInt32,SwiftProtobuf.ProtobufString>.self, value: &_storage._comments)
+        case 4: try decoder.decodeSingularMessageField(value: &_storage._parent)
         default: break
         }
       }
@@ -8868,10 +8889,6 @@ extension Fuzzilli_Protobuf_Program: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every if/case branch local when no optimizations
-      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-      // https://github.com/apple/swift-protobuf/issues/1182
       if !_storage._uuid.isEmpty {
         try visitor.visitSingularBytesField(value: _storage._uuid, fieldNumber: 1)
       }
@@ -8881,9 +8898,9 @@ extension Fuzzilli_Protobuf_Program: SwiftProtobuf.Message, SwiftProtobuf._Messa
       if !_storage._comments.isEmpty {
         try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufSInt32,SwiftProtobuf.ProtobufString>.self, value: _storage._comments, fieldNumber: 3)
       }
-      try { if let v = _storage._parent {
+      if let v = _storage._parent {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-      } }()
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }

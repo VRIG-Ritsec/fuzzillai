@@ -20,6 +20,7 @@ public enum ExecutionOutcome: CustomStringConvertible, Equatable, Hashable {
     case failed(Int)
     case succeeded
     case timedOut
+    case differential
 
     public var description: String {
         switch self {
@@ -31,6 +32,8 @@ public enum ExecutionOutcome: CustomStringConvertible, Equatable, Hashable {
             return "Succeeded"
         case .timedOut:
             return "TimedOut"
+        case .differential:
+            return "Differential"
         }
     }
 
@@ -51,11 +54,23 @@ public enum ExecutionOutcome: CustomStringConvertible, Equatable, Hashable {
     }
 }
 
+// has to be kept in sync with V8
+enum JITTypeBits: Int {
+    case turbofanB = 1  // 1 << 0
+    case maglevB = 2    // 1 << 1
+    case sparkplugB = 4 // 1 << 2
+}
+
 /// The result of executing a program.
 public protocol Execution {
-    var outcome: ExecutionOutcome { get }
+    var outcome: ExecutionOutcome { get set }
     var stdout: String { get }
     var stderr: String { get }
     var fuzzout: String { get }
-    var execTime: TimeInterval { get }
+    var execTime: TimeInterval { get set }
+    var compilersUsed: [JITType] { get set }
+    var unOptStdout: String? { get set }
+    var optStdout: String? { get set }
+    var reproducesInNonReplMode: Bool? { get set }
+    var bugOracleTime: TimeInterval? { get set }
 }

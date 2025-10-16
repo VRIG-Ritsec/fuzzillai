@@ -1,0 +1,107 @@
+diff a/Sources/Fuzzilli/Protobuf/sync.pb.swift b/Sources/Fuzzilli/Protobuf/sync.pb.swift	(rejected hunks)
+@@ -58,9 +58,9 @@ public struct Fuzzilli_Protobuf_FuzzerState {
+   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+   // methods supported on all messages.
+ 
+-  public var corpus: Data = Data()
++  public var corpus: Data = SwiftProtobuf.Internal.emptyData
+ 
+-  public var evaluatorState: Data = Data()
++  public var evaluatorState: Data = SwiftProtobuf.Internal.emptyData
+ 
+   public var unknownFields = SwiftProtobuf.UnknownStorage()
+ 
+@@ -181,12 +226,6 @@ public struct Fuzzilli_Protobuf_Statistics {
+   fileprivate var _storage = _StorageClass.defaultInstance
+ }
+ 
+-#if swift(>=5.5) && canImport(_Concurrency)
+-extension Fuzzilli_Protobuf_LogMessage: @unchecked Sendable {}
+-extension Fuzzilli_Protobuf_FuzzerState: @unchecked Sendable {}
+-extension Fuzzilli_Protobuf_Statistics: @unchecked Sendable {}
+-#endif  // swift(>=5.5) && canImport(_Concurrency)
+-
+ // MARK: - Code below here is support for the SwiftProtobuf runtime.
+ 
+ fileprivate let _protobuf_package = "fuzzilli.protobuf"
+@@ -250,12 +286,9 @@ extension Fuzzilli_Protobuf_FuzzerState: SwiftProtobuf.Message, SwiftProtobuf._M
+ 
+   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+     while let fieldNumber = try decoder.nextFieldNumber() {
+-      // The use of inline closures is to circumvent an issue where the compiler
+-      // allocates stack space for every case branch when no optimizations are
+-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+       switch fieldNumber {
+-      case 1: try { try decoder.decodeSingularBytesField(value: &self.corpus) }()
+-      case 2: try { try decoder.decodeSingularBytesField(value: &self.evaluatorState) }()
++      case 1: try decoder.decodeSingularBytesField(value: &self.corpus)
++      case 2: try decoder.decodeSingularBytesField(value: &self.evaluatorState)
+       default: break
+       }
+     }
+@@ -299,6 +332,15 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
+     15: .same(proto: "coverage"),
+     16: .same(proto: "correctnessRate"),
+     17: .same(proto: "timeoutRate"),
++    18: .same(proto: "differentialSamples"),
++    19: .same(proto: "turbofanSamples"),
++    20: .same(proto: "maglevSamples"),
++    21: .same(proto: "relationsPerformed"),
++    22: .same(proto: "sparkplugSamples"),
++    23: .same(proto: "avgBugOracleTime"),
++    24: .same(proto: "jitSamples"),
++    25: .same(proto: "avgDumpSizeOpt"),
++    26: .same(proto: "avgDumpSizeUnOpt"),
+   ]
+ 
+   fileprivate class _StorageClass {
+@@ -319,6 +361,15 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
+     var _coverage: Double = 0
+     var _correctnessRate: Double = 0
+     var _timeoutRate: Double = 0
++    var _differentialSamples: UInt64 = 0
++    var _turbofanSamples: UInt64 = 0
++    var _maglevSamples: UInt64 = 0
++    var _relationsPerformed: UInt64 = 0
++    var _sparkplugSamples: UInt64 = 0
++    var _avgBugOracleTime: Double = 0
++    var _jitSamples: UInt64 = 0
++    var _avgDumpSizeOpt: Double = 0
++    var _avgDumpSizeUnOpt: Double = 0
+ 
+     static let defaultInstance = _StorageClass()
+ 
+@@ -436,6 +502,33 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
+       if _storage._timeoutRate != 0 {
+         try visitor.visitSingularDoubleField(value: _storage._timeoutRate, fieldNumber: 17)
+       }
++      if _storage._differentialSamples != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._differentialSamples, fieldNumber: 18)
++      }
++      if _storage._turbofanSamples != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._turbofanSamples, fieldNumber: 19)
++      }
++      if _storage._maglevSamples != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._maglevSamples, fieldNumber: 20)
++      }
++      if _storage._relationsPerformed != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._relationsPerformed, fieldNumber: 21)
++      }
++      if _storage._sparkplugSamples != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._sparkplugSamples, fieldNumber: 22)
++      }
++      if _storage._avgBugOracleTime != 0 {
++        try visitor.visitSingularDoubleField(value: _storage._avgBugOracleTime, fieldNumber: 23)
++      }
++      if _storage._jitSamples != 0 {
++        try visitor.visitSingularUInt64Field(value: _storage._jitSamples, fieldNumber: 24)
++      }
++      if _storage._avgDumpSizeOpt != 0 {
++        try visitor.visitSingularDoubleField(value: _storage._avgDumpSizeOpt, fieldNumber: 25)
++      }
++      if _storage._avgDumpSizeUnOpt != 0 {
++        try visitor.visitSingularDoubleField(value: _storage._avgDumpSizeUnOpt, fieldNumber: 26)
++      }
+     }
+     try unknownFields.traverse(visitor: &visitor)
+   }

@@ -38,6 +38,14 @@ public class Contributor: Hashable {
     // Total number of instructions added to programs by this contributor.
     private var totalInstructionProduced = 0
 
+    private var differentialSamples = 0
+
+    private var turbofanSamples = 0
+
+    private var maglevSamples = 0
+
+    private var sparkplugSamples = 0
+
     public init(name: String) {
         self.name = name
     }
@@ -66,6 +74,22 @@ public class Contributor: Hashable {
         invocationCount += 1
     }
 
+    func generatedDifferentialSample() {
+        differentialSamples += 1
+    }
+
+    func generatedTurbofanSample() {
+        turbofanSamples += 1
+    }
+
+    func generatedMaglevSample() {
+        maglevSamples += 1
+    }
+
+    func generatedSparkplugSample() {
+        sparkplugSamples += 1
+    }
+
     func addedInstructions(_ n: Int) {
         assert(n >= 0)
         totalInstructionProduced += n
@@ -80,6 +104,22 @@ public class Contributor: Hashable {
 
     public var crashesFound: Int {
         return crashingSamples
+    }
+
+    public var differentialsFound: Int {
+        return differentialSamples
+    }
+
+    public var turbofanSamplesFound: Int {
+        return turbofanSamples
+    }
+
+    public var maglevSamplesFound: Int {
+        return maglevSamples
+    }
+
+    public var sparkplugSamplesFound: Int {
+        return sparkplugSamples
     }
 
     public var totalSamples: Int {
@@ -150,5 +190,21 @@ extension Contributors {
 
     public func generatedTimeOutSample() {
         forEach { $0.generatedTimeOutSample() }
+    }
+
+    public func generatedDifferentialSample() {
+        forEach { $0.generatedDifferentialSample() }
+    }
+
+    public func generatedTurbofanSample() {
+        forEach { $0.generatedTurbofanSample() }
+    }
+
+    public func generatedMaglevSample() {
+        forEach { $0.generatedMaglevSample() }
+    }
+
+    public func generatedSparkplugSample() {
+        forEach { $0.generatedSparkplugSample() }
     }
 }

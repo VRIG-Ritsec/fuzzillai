@@ -32,17 +32,27 @@ public class FuzzEngine: ComponentBase {
         fatalError("Must be implemented by child classes")
     }
 
-    final func execute(_ program: Program, withTimeout timeout: UInt32? = nil) -> ExecutionOutcome {
+}
+
+extension FuzzEngine {
+    public func execute(_ program: Program, withTimeout timeout: UInt32? = nil) -> ExecutionOutcome {
         let program = postProcessor?.process(program, for: fuzzer) ?? program
 
         fuzzer.dispatchEvent(fuzzer.events.ProgramGenerated, data: program)
 
-        let execution = fuzzer.execute(program, withTimeout: timeout, purpose: .fuzzing)
+        let postprocessedProgram: Program
+        postprocessedProgram = program
+
+        let execution = fuzzer.execute(postprocessedProgram, withTimeout: timeout, purpose: .fuzzing, differentialExecute: .force)
 
         switch execution.outcome {
             case .crashed(let termsig):
-                fuzzer.processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
-                program.contributors.generatedCrashingSample()
+                fuzzer.processCrash(postprocessedProgram, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
+                postprocessedProgram.contributors.generatedCrashingSample()
+
+            case .differential:
+            fuzzer.processDifferential(postprocessedProgram, withStderr: execution.stderr, withStdout: execution.unOptStdout!, origin: .local, optStdout: execution.optStdout!)
+                postprocessedProgram.contributors.generatedDifferentialSample()
 
             case .succeeded:
                 fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
@@ -63,19 +73,19 @@ public class FuzzEngine: ComponentBase {
 
             case .failed(_):
                 if fuzzer.config.enableDiagnostics {
-                    program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
+                    postprocessedProgram.comments.add("Stdout:\n" + execution.stdout, at: .footer)
                 }
-                fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
-                program.contributors.generatedInvalidSample()
+                fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: postprocessedProgram)
+                postprocessedProgram.contributors.generatedInvalidSample()
 
             case .timedOut:
-                fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
-                program.contributors.generatedTimeOutSample()
+                fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: postprocessedProgram)
+                postprocessedProgram.contributors.generatedTimeOutSample()
         }
 
         if fuzzer.config.enableDiagnostics {
             // Ensure deterministic execution behaviour. This can for example help detect and debug REPRL issues.
-            ensureDeterministicExecutionOutcomeForDiagnostic(of: program)
+            ensureDeterministicExecutionOutcomeForDiagnostic(of: postprocessedProgram)
         }
 
         return execution.outcome

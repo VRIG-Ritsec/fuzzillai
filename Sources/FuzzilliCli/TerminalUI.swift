@@ -38,6 +38,40 @@ class TerminalUI {
         }
     }
 
+    private func getProcessIDsForD8(_ d8Path: String) -> [pid_t] {
+        var pids: [pid_t] = []
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/ps")
+        task.arguments = ["-e", "-o", "pid,command"]
+
+        let pipe = Pipe()
+        task.standardOutput = pipe
+
+        do {
+            try task.run()
+        } catch  {
+            return []
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let output = String(data: data, encoding: .utf8) {
+            let lines = output.components(separatedBy: "\n")
+            for line in lines {
+                if line.contains(d8Path) && !line.contains("ps -e -o pid,command") && !line.contains("FuzzilliCli") {
+                    let components = line.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: " ")
+                    if let pid = pid_t(components[0]) {
+                        pids.append(pid)
+                    }
+                }
+            }
+        }
+
+        task.waitUntilExit()
+
+        return pids
+    }
+
     func initOnFuzzerQueue(_ fuzzer: Fuzzer) {
         // Register log event listener now to be able to print log messages
         // generated during fuzzer initialization
@@ -49,6 +83,13 @@ class TerminalUI {
                 // Mark message as coming from a worker by including its id
                 let shortId = ev.origin.uuidString.split(separator: "-")[0]
                 print("\u{001B}[0;\(color.rawValue)m[\(shortId):\(ev.label)] \(ev.message)\u{001B}[0;\(Color.reset.rawValue)m")
+            }
+        }
+
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { diff in
+            if diff.reproducesInNonReplMode {
+                print("########## Unique Differential Found ##########")
+                print(fuzzer.lifter.lift(diff.program, withOptions: .includeComments))
             }
         }
 
@@ -90,12 +131,41 @@ class TerminalUI {
                     print()
                 }
 
+                // Nuke stray d8 processes. Pretty terrible but it is what it is
+                // With default timeout 250ms this will nuke a d8 process if it survives longer than ~30 minutes
+                fuzzer.timers.scheduleTask(every: (15 * Minutes + Double.random(in: (1 * Minutes)...(10 * Minutes)))) {
+                    let nukeAfterSeconds = ((Double(fuzzer.config.timeout) / 1000.0) * 8.0) * Double((fuzzer.runner as! REPRL).maxExecsBeforeRespawn)
+                    let d8Path = fuzzer.runner.processArguments[0]
+                    let pids = self.getProcessIDsForD8(d8Path)
+                    for p in pids {
+                        let statFilePath = "/proc/\(p)/stat"
+
+                        var fileStats = stat()
+
+                        if stat(statFilePath, &fileStats) == 0 {
+                            let accessTime = Double(fileStats.st_atim.tv_sec)
+
+                            let currentTime = Date().timeIntervalSince1970
+
+                            let secondsElapsed = currentTime - accessTime
+                            if (secondsElapsed >= nukeAfterSeconds) {
+                                let result = kill(p, SIGKILL)
+                                if result == 0 {
+                                    print("Nuked stray d8 process \(p)")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Randomly sample generated and interesting programs and print them.
                 // The goal of this is to give users a better "feeling" for what the fuzzer is currently doing.
+                /*
                 fuzzer.timers.scheduleTask(every: 5 * Minutes) {
                     self.printNextInterestingProgram = true
                     self.printNextGeneratedProgram = true
                 }
+                */
             }
         }
     }
@@ -125,28 +195,49 @@ class TerminalUI {
         } else {
             print("Fuzzer Statistics")
         }
+
+        let bugOracleUsageRate = (Float(stats.relationsPerformed) / Float(stats.totalExecs)) * 100
+        let jitUsageRate = (Float(stats.jitSamples) / Float(stats.totalExecs)) * 100
+
+        let cestDateFormatter = DateFormatter()
+        cestDateFormatter.dateFormat = "HH:mm:ss - dd.MM.yyyy"
+
+        cestDateFormatter.timeZone = TimeZone(abbreviation: "CEST")
+        let date = Date()
+
         print("""
         -----------------
-        Fuzzer state:                 \(state)
-        Uptime:                       \(formatTimeInterval(fuzzer.uptime()))
-        Total Samples:                \(stats.totalSamples)
-        Interesting Samples Found:    \(stats.interestingSamples)
-        Last Interesting Sample:      \(formatTimeInterval(timeSinceLastInterestingProgram))
-        Valid Samples Found:          \(stats.validSamples)
-        Corpus Size:                  \(fuzzer.corpus.size)\(maybeAvgCorpusSize)
-        Correctness Rate:             \(String(format: "%.2f%%", stats.correctnessRate * 100)) (overall: \(String(format: "%.2f%%", stats.overallCorrectnessRate * 100)))
-        Timeout Rate:                 \(String(format: "%.2f%%", stats.timeoutRate * 100)) (overall: \(String(format: "%.2f%%", stats.overallTimeoutRate * 100)))
-        Crashes Found:                \(stats.crashingSamples)
-        Timeouts Hit:                 \(stats.timedOutSamples)
-        Coverage:                     \(String(format: "%.2f%%", stats.coverage * 100))
-        Avg. program size:            \(String(format: "%.2f", stats.avgProgramSize))
-        Avg. corpus program size:     \(String(format: "%.2f", stats.avgCorpusProgramSize))
-        Avg. program execution time:  \(Int(stats.avgExecutionTime * 1000))ms
-        Connected nodes:              \(stats.numChildNodes)
-        Execs / Second:               \(String(format: "%.2f", stats.execsPerSecond))
-        Fuzzer Overhead:              \(String(format: "%.2f", stats.fuzzerOverhead * 100))%
-        Minimization Overhead:        \(String(format: "%.2f", stats.minimizationOverhead * 100))%
-        Total Execs:                  \(stats.totalExecs)
+        Fuzzer state:                   \(state)
+        Uptime:                         \(formatTimeInterval(fuzzer.uptime()))
+        Current Time:                   \(cestDateFormatter.string(from: date))
+        Total Samples:                  \(stats.totalSamples)
+        Interesting Samples Found:      \(stats.interestingSamples)
+        Last Interesting Sample:        \(formatTimeInterval(timeSinceLastInterestingProgram))
+        Valid Samples Found:            \(stats.validSamples)
+        Corpus Size:                    \(fuzzer.corpus.size)\(maybeAvgCorpusSize)
+        Correctness Rate:               \(String(format: "%.2f%%", stats.correctnessRate * 100)) (overall: \(String(format: "%.2f%%", stats.overallCorrectnessRate * 100)))
+        Timeout Rate:                   \(String(format: "%.2f%%", stats.timeoutRate * 100)) (overall: \(String(format: "%.2f%%", stats.overallTimeoutRate * 100)))
+        Crashes Found:                  \(stats.crashingSamples)
+        Differentials Found:            \(stats.differentialSamples)
+        Sparkplug Executions:           \(stats.sparkplugSamples)
+        Maglev Executions:              \(stats.maglevSamples)
+        TurboFan Executions:            \(stats.turbofanSamples)
+        Relations Performed:            \(stats.relationsPerformed)
+        Bug Oracle Usage:               \(String(format: "%.2f%%", bugOracleUsageRate))
+        JIT Usage Rate:                 \(String(format: "%.2f%%", jitUsageRate))
+        Timeouts Hit:                   \(stats.timedOutSamples)
+        Coverage:                       \(String(format: "%.2f%%", stats.coverage * 100))
+        Avg. program size:              \(String(format: "%.2f", stats.avgProgramSize))
+        Avg. corpus program size:       \(String(format: "%.2f", stats.avgCorpusProgramSize))
+        Avg. program execution time:    \(Int(stats.avgExecutionTime * 1000))ms
+        Avg. bug oracle execution time: \(Int(stats.avgBugOracleTime * 1000))ms
+        Avg. dump size (opt):           \(String(format: "%.2f", stats.avgDumpSizeOpt / 1000.0))KB
+        Avg. dump size (unopt):         \(String(format: "%.2f", stats.avgDumpSizeUnOpt / 1000.0))KB
+        Connected nodes:                \(stats.numChildNodes)
+        Execs / Second:                 \(String(format: "%.2f", stats.execsPerSecond))
+        Fuzzer Overhead:                \(String(format: "%.2f", stats.fuzzerOverhead * 100))%
+        Minimization Overhead:          \(String(format: "%.2f", stats.minimizationOverhead * 100))%
+        Total Execs:                    \(stats.totalExecs)
         """)
     }
 

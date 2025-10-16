@@ -1,0 +1,13 @@
+diff a/Sources/FuzzilliCli/Profiles/QjsProfile.swift b/Sources/FuzzilliCli/Profiles/QjsProfile.swift	(rejected hunks)
+@@ -35,6 +38,11 @@ let qjsProfile = Profile(
+ 
+     crashTests: ["fuzzilli('FUZZILLI_CRASH', 0)", "fuzzilli('FUZZILLI_CRASH', 1)", "fuzzilli('FUZZILLI_CRASH', 2)"],
+ 
++    differentialTests: [],
++
++    differentialTestsInvariant: [],
++
++
+     additionalCodeGenerators: [],
+ 
+     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),

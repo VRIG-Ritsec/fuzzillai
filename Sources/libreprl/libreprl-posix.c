@@ -37,6 +37,10 @@
 #include <time.h>
 #include <unistd.h>
 
+// The REPRL protocol version. Must be identical between server and client.
+// Bump this up whenever there are non-backwards-compatible changes to the protocol
+#define REPRL_PROTOCOL_VERSION 2
+
 // Well-known file descriptor numbers for reprl <-> child communication, child process side
 #define REPRL_CHILD_CTRL_IN 100
 #define REPRL_CHILD_CTRL_OUT 101
@@ -275,20 +279,27 @@ static int reprl_spawn_child(struct reprl_context* ctx)
     }
     ctx->pid = pid;
 
-    char helo[5] = { 0 };
-    if (read(ctx->ctrl_in, helo, 4) != 4) {
+    char handshake[5] = { 0 };
+    if (read(ctx->ctrl_in, handshake, 4) != 4) {
         reprl_terminate_child(ctx);
-        return reprl_error(ctx, "Did not receive HELO message from child: %s", strerror(errno));
+        return reprl_error(ctx, "Did not receive handshake message from child: %s", strerror(errno));
     }
 
-    if (strncmp(helo, "HELO", 4) != 0) {
+    if (strncmp(handshake, "HELO", 4) == 0) {
+        // Client is using protocol version 1.
         reprl_terminate_child(ctx);
-        return reprl_error(ctx, "Received invalid HELO message from child: %s", helo);
+        return reprl_error(ctx, "The client uses an old version of the REPRL protocol, please update it to the latest version");
     }
 
-    if (write(ctx->ctrl_out, helo, 4) != 4) {
+    if (strncmp(handshake, "XDXD", 4) != 0) {
         reprl_terminate_child(ctx);
-        return reprl_error(ctx, "Failed to send HELO reply message to child: %s", strerror(errno));
+        return reprl_error(ctx, "Received invalid handshake message from child: %s", handshake);
+    }
+
+    // The server side just sends back the handshake message, but not the protocol version.
+    if (write(ctx->ctrl_out, handshake, 4) != 4) {
+        reprl_terminate_child(ctx);
+        return reprl_error(ctx, "Failed to send handshake reply message to child: %s", strerror(errno));
     }
 
 #ifdef __linux__
@@ -367,7 +378,7 @@ void reprl_destroy_context(struct reprl_context* ctx)
     free(ctx);
 }
 
-int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script_size, uint64_t timeout, uint64_t* execution_time, int fresh_instance)
+int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script_size, uint64_t timeout, uint64_t* execution_time, int fresh_instance, uint32_t source_pos_dump_seed, uint8_t* jit_state)
 {
     if (!ctx->initialized) {
         return reprl_error(ctx, "REPRL context is not initialized");
@@ -392,6 +403,7 @@ int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script
     lseek(ctx->data_in->fd, 0, SEEK_SET);
     if (ctx->child_stdout) {
         lseek(ctx->child_stdout->fd, 0, SEEK_SET);
+        memset(ctx->child_stdout->mapping, 0, REPRL_MAX_DATA_SIZE);
     }
     if (ctx->child_stderr) {
         lseek(ctx->child_stderr->fd, 0, SEEK_SET);
@@ -408,6 +420,7 @@ int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script
 
     // Tell child to execute the script.
     if (write(ctx->ctrl_out, "exec", 4) != 4 ||
+        write(ctx->ctrl_out, &source_pos_dump_seed, sizeof(source_pos_dump_seed)) != sizeof(source_pos_dump_seed) ||
         write(ctx->ctrl_out, &script_size, 8) != 8) {
         // These can fail if the child unexpectedly terminated between executions.
         // Check for that here to be able to provide a better error message.
@@ -439,11 +452,20 @@ int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script
     }
 
     // Poll succeeded, so there must be something to read now (either the status or EOF).
+    #pragma pack(1)
+    struct {
+        int status;
+        uint8_t jit_state;
+    } s;
+    // we only want to read 5 bytes and not care about padding
+    // just to be sure for the future
+    const size_t ssize = 5;
+    ssize_t rv = read(ctx->ctrl_in, &s, ssize);
+    
     int status;
-    ssize_t rv = read(ctx->ctrl_in, &status, 4);
     if (rv < 0) {
         return reprl_error(ctx, "Failed to read from control pipe: %s", strerror(errno));
-    } else if (rv != 4) {
+    } else if (rv != ssize) {
         // Most likely, the child process crashed and closed the write end of the control pipe.
         // Unfortunately, there probably is nothing that guarantees that waitpid() will immediately succeed now,
         // and we also don't want to block here. So just retry waitpid() a few times...
@@ -471,6 +493,9 @@ int reprl_execute(struct reprl_context* ctx, const char* script, uint64_t script
             // This shouldn't happen, since we don't specify WUNTRACED for waitpid...
             return reprl_error(ctx, "Waitpid returned unexpected child state %i", status);
         }
+    } else {
+        status = s.status;
+        *jit_state = s.jit_state;
     }
 
     // The status must be a positive number, see the status encoding format below.

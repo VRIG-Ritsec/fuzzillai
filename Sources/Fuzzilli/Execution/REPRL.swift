@@ -19,7 +19,7 @@ import libreprl
 /// scripts, but resets the global state in between executions.
 public class REPRL: ComponentBase, ScriptRunner {
     /// Kill and restart the child process after this many script executions
-    private let maxExecsBeforeRespawn: Int
+    public let maxExecsBeforeRespawn: Int
 
     /// Commandline arguments for the executable
     public private(set) var processArguments: [String]
@@ -87,7 +87,7 @@ public class REPRL: ComponentBase, ScriptRunner {
         env.append(key + "=" + value)
     }
 
-    public func run(_ script: String, withTimeout timeout: UInt32) -> Execution {
+    public func run(_ script: String, withTimeout timeout: UInt32, differentialFuzzingPositionDumpSeed: UInt32) -> Execution {
         // Log the current script into the buffer if diagnostics are enabled.
         if fuzzer.config.enableDiagnostics {
             self.scriptBuffer += script + "\n"
@@ -116,8 +116,10 @@ public class REPRL: ComponentBase, ScriptRunner {
         var execTime: UInt64 = 0        // In microseconds
         let timeout = UInt64(timeout) * 1000        // In microseconds
         var status: Int32 = 0
+        var encodedJitState: UInt8 = 0
         script.withCString { ptr in
-            status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, freshInstance)
+            status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, freshInstance,
+                differentialFuzzingPositionDumpSeed, &encodedJitState)
             // If we fail, we retry after a short timeout and with a fresh instance. If we still fail, we give up trying
             // to execute this program. If we repeatedly fail to execute any program, we abort.
             if status < 0 {
@@ -126,7 +128,8 @@ public class REPRL: ComponentBase, ScriptRunner {
                     fuzzer.dispatchEvent(fuzzer.events.DiagnosticsEvent, data: (name: "REPRLFail", content: scriptBuffer.data(using: .utf8)!))
                 }
                 Thread.sleep(forTimeInterval: 1)
-                status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, 1)
+                status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, 1,
+                    differentialFuzzingPositionDumpSeed, &encodedJitState)
             }
         }
 
@@ -158,6 +161,16 @@ public class REPRL: ComponentBase, ScriptRunner {
         }
         execution.execTime = Double(execTime) / 1_000_000
 
+        if encodedJitState & UInt8(JITTypeBits.turbofanB.rawValue) != 0 {
+            execution.compilersUsed.append(.turbofan)
+        }
+        if encodedJitState & UInt8(JITTypeBits.maglevB.rawValue) != 0 {
+            execution.compilersUsed.append(.maglev)
+        }
+        if encodedJitState & UInt8(JITTypeBits.sparkplugB.rawValue) != 0 {
+            execution.compilersUsed.append(.sparkplug)
+        }
+
         return execution
     }
 }
@@ -171,7 +184,12 @@ class REPRLExecution: Execution {
     private let execId: Int
 
     var outcome = ExecutionOutcome.succeeded
+    var compilersUsed: [JITType] = []
     var execTime: TimeInterval = 0
+    var unOptStdout: String? = nil
+    var optStdout: String? = nil
+    var reproducesInNonReplMode: Bool? = nil
+    var bugOracleTime: TimeInterval? = nil
 
     init(from reprl: REPRL) {
         self.reprl = reprl
@@ -186,11 +204,17 @@ class REPRLExecution: Execution {
 
     var stdout: String {
         assert(outputStreamsAreValid)
+        let x = String(cString: reprl_fetch_stdout(reprl.reprlContext))
         if cachedStdout == nil {
             cachedStdout = String(cString: reprl_fetch_stdout(reprl.reprlContext))
             let data = cachedStdout!.data(using: .utf8) ?? Data()
             reprl.fuzzer.dispatchEvent(reprl.fuzzer.events.Feedback, data: (name: "feedback-updates", content: data, programId: reprl.currentProgramId))
-        } 
+        } else if (cachedStdout != x) {
+            print(cachedStdout!)
+            print("-----------------------------------")
+            print(x)
+            fatalError("repl is bricked!")
+        }
         return cachedStdout!
     }
 

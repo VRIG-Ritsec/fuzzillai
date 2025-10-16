@@ -1,0 +1,9 @@
+diff a/Sources/Fuzzilli/Util/MockFuzzer.swift b/Sources/Fuzzilli/Util/MockFuzzer.swift	(rejected hunks)
+@@ -206,6 +217,7 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
+                         lifter: lifter,
+                         corpus: corpus,
+                         minimizer: minimizer,
++                        localId: 0,
+                         queue: DispatchQueue.main)
+ 
+     fuzzer.registerEventListener(for: fuzzer.events.Log) { ev in

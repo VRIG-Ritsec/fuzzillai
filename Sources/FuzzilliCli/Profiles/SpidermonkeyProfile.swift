@@ -27,16 +27,24 @@ fileprivate let GcGenerator = CodeGenerator("GcGenerator") { b in
     b.callFunction(b.createNamedVariable(forBuiltin: "gc"))
 }
 
+fileprivate let commonArgs = [
+    "--baseline-warmup-threshold=10",
+    "--fuzzing-safe",
+    "--disable-oom-functions",
+    "--reprl"
+]
+
+fileprivate let differentialArgs = [
+    "--differential-testing"
+]
+
 let spidermonkeyProfile = Profile(
     processArgs: { randomize in
-        var args = [
+        var args = commonArgs + [
             "--baseline-warmup-threshold=10",
             "--ion-warmup-threshold=100",
             "--ion-check-range-analysis",
-            "--ion-extra-checks",
-            "--fuzzing-safe",
-            "--disable-oom-functions",
-            "--reprl"]
+            "--ion-extra-checks"]
 
         guard randomize else { return args }
 
@@ -70,6 +78,11 @@ let spidermonkeyProfile = Profile(
         return args
     },
 
+    processArgsReference: commonArgs + differentialArgs + [
+        "--no-threads",
+        "--no-ion",
+    ],
+
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
@@ -77,6 +90,7 @@ let spidermonkeyProfile = Profile(
     timeout: 250,
 
     codePrefix: """
+                const fhash = fuzzilli_hash;
                 """,
 
     codeSuffix: """
@@ -96,6 +110,11 @@ let spidermonkeyProfile = Profile(
 
         // TODO we could try to check that OOM crashes are ignored here ( with.shouldNotCrash).
     ],
+
+    differentialTests: ["for(let i=0; i<200; i++) {fuzzilli_hash(fuzzilli('FUZZILLI_RANDOM'))}",],
+
+    differentialTestsInvariant: ["for(let i=0; i < 200; i++) {fuzzilli_hash(Math.random())}",
+                                 "for(let i=0; i < 200; i++) {fuzzilli_hash(Date.now())}",],
 
     additionalCodeGenerators: [
         (ForceSpidermonkeyIonGenerator, 10),

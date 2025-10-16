@@ -1,0 +1,125 @@
+diff a/Sources/Fuzzilli/Fuzzer.swift b/Sources/Fuzzilli/Fuzzer.swift	(rejected hunks)
+@@ -155,9 +168,9 @@ public class Fuzzer {
+ 
+     /// Constructs a new fuzzer instance with the provided components.
+     public init(
+-        configuration: Configuration, scriptRunner: ScriptRunner, engine: FuzzEngine, mutators: WeightedList<Mutator>,
++        configuration: Configuration, scriptRunner: ScriptRunner, referenceRunner: ScriptRunner, engine: FuzzEngine, mutators: WeightedList<Mutator>,
+         codeGenerators: WeightedList<CodeGenerator>, programTemplates: WeightedList<ProgramTemplate>, evaluator: ProgramEvaluator,
+-        environment: Environment, lifter: Lifter, corpus: Corpus, minimizer: Minimizer, queue: DispatchQueue? = nil
++        environment: Environment, lifter: Lifter, corpus: Corpus, minimizer: Minimizer, localId: UInt32, queue: DispatchQueue? = nil
+     ) {
+         let uniqueId = UUID()
+         self.id = uniqueId
+@@ -175,9 +188,13 @@ public class Fuzzer {
+         self.lifter = lifter
+         self.corpus = corpus
+         self.runner = scriptRunner
++        self.referenceRunner = referenceRunner
+         self.minimizer = minimizer
++        self.localId = localId
+         self.logger = Logger(withLabel: "Fuzzer")
+ 
++        // self.removeMetadataFilesIfExist()
++
+         // Register this fuzzer instance with its queue so that it is possible to
+         // obtain a reference to the Fuzzer instance when running on its queue.
+         // This creates a reference cycle, but Fuzzer instances aren't expected
+@@ -383,6 +431,9 @@ public class Fuzzer {
+             // from another instance triggers a crash in this instance.
+             processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: origin, withExectime: execution.execTime)
+ 
++        case .differential:
++            processDifferential(program, withStderr: execution.stderr, withStdout: execution.unOptStdout!, origin: origin, optStdout: execution.optStdout!)
++
+         case .succeeded:
+             var imported = false
+             if let aspects = evaluator.evaluate(execution) {
+@@ -403,6 +454,18 @@ public class Fuzzer {
+         return execution.outcome
+     }
+ 
++    public func importDifferential(_ program: Program, origin: ProgramOrigin) {
++        dispatchPrecondition(condition: .onQueue(queue))
++        let execution = execute(program, purpose: .other)
++        if case .differential = execution.outcome {
++            processDifferential(program, withStderr: execution.stderr, withStdout: execution.unOptStdout!, origin: origin, optStdout: execution.optStdout!)
++        } else {
++            // Non-deterministic differential
++            dispatchEvent(events.DifferentialFound, data: (program, behaviour: .flaky, origin: origin, opt_stdout: "remote import", unopt_stdout: "remote import", reproducesInNonReplMode: false))
++        }
++    }
++
++
+     /// Imports a crashing program into this fuzzer.
+     ///
+     /// Similar to importProgram, but will make sure to generate a CrashFound event even if the crash does not reproduce.
+@@ -583,6 +868,38 @@ public class Fuzzer {
+         }
+     }
+ 
++    func processDifferential(_ program: Program, withStderr stderr: String, withStdout stdout: String, origin: ProgramOrigin, optStdout: String) {
++        func processCommon(_ program: Program) {
++            let hasDiffInfo = program.comments.at(.footer)?.contains("DIFFERENTIAL INFO") ?? false
++            if !hasDiffInfo {
++                program.comments.add("DIFFERENTIAL INFO\n==========\n", at: .footer)
++
++                program.comments.add("STDERR:\n" + stderr, at: .footer)
++                program.comments.add("ARGS: \(runner.processArguments.joined(separator: " "))\n", at: .footer)
++                program.comments.add("REFERENCE ARGS: \(referenceRunner.processArguments.joined(separator: " "))\n", at: .footer)
++            }
++            assert(program.comments.at(.footer)?.contains("DIFFERENTIAL INFO") ?? false)
++
++            // Check for uniqueness only after minimization
++            let execution = execute(program, withTimeout: self.config.timeout * 2, purpose: .other)
++            if case .differential = execution.outcome {
++                dispatchEvent(events.DifferentialFound, data: (program, .deterministic, origin, optStdout, stdout, execution.reproducesInNonReplMode!))
++            } else {
++                dispatchEvent(events.DifferentialFound, data: (program, .flaky, origin, optStdout, stdout, false))
++            }
++        }
++
++        if !origin.requiresMinimization() {
++            return processCommon(program)
++        }
++
++        fuzzGroup.enter()
++        minimizer.withMinimizedCopy(program, withAspects: ProgramAspects(outcome: .differential)) { minimizedProgram in
++            self.fuzzGroup.leave()
++             processCommon(minimizedProgram)
++        }
++    }
++
+     /// Constructs a new ProgramBuilder using this fuzzing context.
+     public func makeBuilder(forMutating parent: Program? = nil, mode: ProgramBuilder.Mode = .aggressive) -> ProgramBuilder {
+         dispatchPrecondition(condition: .onQueue(queue))
+@@ -699,20 +1016,6 @@ public class Fuzzer {
+         return b.finalize()
+     }
+ 
+-    // Verifies that the fuzzer is not creating a large number of core dumps
+-    public func checkCoreFileGeneration() {
+-        #if os(Linux)
+-        do {
+-            let corePattern = try String(contentsOfFile: "/proc/sys/kernel/core_pattern", encoding: String.Encoding.ascii)
+-            if !corePattern.hasPrefix("|/bin/false") {
+-                logger.fatal("Please run: sudo sysctl -w 'kernel.core_pattern=|/bin/false'")
+-            }
+-        } catch {
+-            logger.warning("Could not check core dump behaviour. Please ensure core_pattern is set to '|/bin/false'")
+-        }
+-        #endif
+-    }
+-
+     /// Runs a number of startup tests to check whether everything is configured correctly.
+     public func runStartupTests() {
+         assert(isInitialized)
+@@ -801,7 +1105,7 @@ public class Fuzzer {
+ 
+         mutating func notifyImportOutcome(_ outcome: ExecutionOutcome) {
+             switch outcome {
+-            case .crashed:
++            case .crashed, .differential:
+                 // This is unexpected so we don't track these
+                 break
+             case .failed:

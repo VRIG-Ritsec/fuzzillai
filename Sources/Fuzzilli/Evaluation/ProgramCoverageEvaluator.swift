@@ -20,10 +20,10 @@ public class CovEdgeSet: ProgramAspects {
     private var numEdges: UInt32
     fileprivate var edges: UnsafeMutablePointer<UInt32>?
 
-    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false) {
+    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false, jitExecution: ExecutionType = .unknown) {
         self.numEdges = numEdges
         self.edges = edges
-        super.init(outcome: .succeeded, hasFeedbackNexusDelta: hasFeedbackNexusDelta, hasOptimizationDelta: hasOptimizationDelta)
+        super.init(outcome: .succeeded, hasFeedbackNexusDelta: hasFeedbackNexusDelta, hasOptimizationDelta: hasOptimizationDelta, jitExecution: jitExecution)
     }
 
     deinit {
@@ -216,8 +216,8 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
             return false
         }
 
-        if execution.outcome.isCrash() {
-            // For crashes, we don't care about the edges that were triggered, just about the outcome itself.
+        if execution.outcome.isCrash() || execution.outcome == .differential {
+            // For crashes and differentials?, we don't care about the edges that were triggered, just about the outcome itself.
             return true
         }
 
@@ -261,6 +261,15 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         let intersectedCovEdgeSet = secondCovEdgeSet
         intersectedCovEdgeSet.setEdges(intersectedEdgeSet)
 
+        if execution.compilersUsed.count != 0 {
+            if execution.compilersUsed.contains(.turbofan) {
+                intersectedCovEdgeSet.jitExecution = .turbofan
+            }
+            else if execution.compilersUsed.contains(.maglev) {
+                intersectedCovEdgeSet.jitExecution = .maglev
+            }
+            // dont care about sparkplug here
+        }
         return intersectedCovEdgeSet
     }
 

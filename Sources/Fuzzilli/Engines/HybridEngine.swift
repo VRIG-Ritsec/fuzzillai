@@ -24,6 +24,7 @@ public class HybridEngine: FuzzEngine {
         case generatedCodeFailed = "Generated code failed"
         case generatedCodeTimedOut = "Generated code timed out"
         case generatedCodeCrashed = "Generated code crashed"
+        case generatedCodeDifferential = "Generated code differential"
     }
     private var outcomeCounts = [CodeGenerationOutcome: Int]()
 
@@ -112,6 +113,8 @@ public class HybridEngine: FuzzEngine {
             return recordOutcome(.generatedCodeTimedOut)
         case .crashed:
             return recordOutcome(.generatedCodeCrashed)
+        case .differential:
+            return recordOutcome(.generatedCodeDifferential)
         }
 
         // Now perform one round of fixup to improve the generated program based on runtime information and in particular remove all try-catch guards that are not needed.

@@ -12,6 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+public struct V8DifferentialConfig {
+    public let commonArgs: [String] = [
+        "--expose-gc",
+        "--omit-quit",
+        "--allow-natives-for-differential-fuzzing",
+        "--fuzzing",
+        "--future",
+        "--harmony",
+        "--predictable",
+        "--trace",
+        "--correctness-fuzzer-suppressions",
+        "--no-lazy-feedback-allocation",
+    ]
+
+    public let differentialArgs: [String] = [
+        "--turbofan-dumping",
+        "--generate-dump-positions",
+        // "--verify-heap-on-jit-dump",
+        "--turbofan-dumping-print-deopt-frames",
+        "--jit-return-dump",
+        "--maglev-dumping",
+        "--no-sparkplug",
+        "--jit-fuzzing",
+    ]
+
+    public let referenceArgs: [String] = ["--no-turbofan", "--no-maglev", "--load-dump-positions", "--sparkplug-dumping", "--interpreter-dumping"]
+
+    public init() {}
+}
+
+
 public struct Configuration {
     /// The commandline arguments used by this instance.
     public let arguments: [String]
@@ -61,6 +92,15 @@ public struct Configuration {
     /// also appended as a comment in the footer of crashing samples.
     public let tag: String?
 
+    /// The path to the relate tool.
+    public let relateToolPath: String?
+
+    /// The depth of the dumpling tree.
+    public let dumplingDepth: UInt32
+
+    /// The number of properties to sample for each dumpling node.
+    public let dumplingPropCount: UInt32
+
     // Whether the fuzzer is running with wasm features or without. If false,
     // this disables all wasm-related code generators.
     public let isWasmEnabled: Bool
@@ -73,6 +113,15 @@ public struct Configuration {
     // differential fuzzers can inspect (via mutating the JS program to print defined variables).
     public let forDifferentialFuzzing: Bool
 
+    /// Code snippets that cause an observable difference of output
+    /// in the target engine. Used to verify that crashes can be detected.
+    public let differentialTests: [String]
+
+    /// Code snippets that must not cause an observable difference of output
+    /// in the target engine. Used to verify that common sources of
+    /// entropy (Math.random, ...) are deterministic.
+    public let differentialTestsInvariant: [String]
+
     // The subdirectory in {config.storagePath} at which all programs are stored which could not
     // be imported due to disabled wasm capabilities in the fuzzer.
     public static let excludedWasmDirectory = "excluded_wasm_programs"
@@ -81,6 +130,8 @@ public struct Configuration {
                 timeout: UInt32 = 250,
                 skipStartupTests: Bool = false,
                 logLevel: LogLevel = .info,
+                differentialTests: [String] = [],
+                differentialTestsInvariant: [String] = [],
                 startupTests: [(String, ExpectedStartupTestResult)] = [],
                 minimizationLimit: Double = 0.0,
                 dropoutRate: Double = 0,
@@ -89,6 +140,9 @@ public struct Configuration {
                 enableInspection: Bool = false,
                 staticCorpus: Bool = false,
                 tag: String? = nil,
+                relateToolPath: String? = nil,
+                dumplingDepth: UInt32 = 3,
+                dumplingPropCount: UInt32 = 5,
                 isWasmEnabled: Bool = false,
                 storagePath: String? = nil,
                 forDifferentialFuzzing: Bool = false) {
@@ -106,6 +160,11 @@ public struct Configuration {
         self.isWasmEnabled = isWasmEnabled
         self.storagePath = storagePath
         self.forDifferentialFuzzing = forDifferentialFuzzing
+        self.differentialTests = differentialTests
+        self.differentialTestsInvariant = differentialTestsInvariant
+        self.relateToolPath = relateToolPath
+        self.dumplingDepth = dumplingDepth
+        self.dumplingPropCount = dumplingPropCount
     }
 }
 

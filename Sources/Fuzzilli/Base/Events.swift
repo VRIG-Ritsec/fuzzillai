@@ -59,6 +59,12 @@ public class Events {
     /// Signals that a crashing program has been found. Dispatched after the crashing program has been minimized.
     public let CrashFound = Event<(program: Program, behaviour: CrashBehaviour, isUnique: Bool, origin: ProgramOrigin)>()
 
+    public let DifferentialFound = Event<(program: Program, behaviour: CrashBehaviour, origin: ProgramOrigin, opt_stdout: String?, unopt_stdout: String, reproducesInNonReplMode: Bool)>()
+
+    public let JITExecutingProgramFound = Event<(program: Program, compilers: [JITType], is_optimizing: Bool)>()
+
+    public let RelationPerformed = Event<(program: Program, execution: Execution)>()
+
     /// Signals that a program causing a timeout has been found.
     public let TimeOutFound = Event<Program>()
 
@@ -90,6 +96,12 @@ public class Events {
 
     /// Signals that a corpus import is complete.
     public let CorpusImportComplete = Event<()>()
+}
+
+public enum JITType: String {
+    case sparkplug = "sparkplug"
+    case maglev    = "maglev"
+    case turbofan  = "turbofan"
 }
 
 /// Crash behavior of a program.

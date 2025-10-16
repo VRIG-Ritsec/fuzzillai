@@ -19,6 +19,8 @@ let duktapeProfile = Profile(
         ["--reprl"]
     },
 
+    processArgsReference: ["--reprl"],
+
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
@@ -26,6 +28,7 @@ let duktapeProfile = Profile(
     timeout: 250,
 
     codePrefix: """
+                const fhash = () => null;
                 """,
 
     codeSuffix: """
@@ -41,6 +44,10 @@ let duktapeProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 0)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [],
 

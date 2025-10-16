@@ -290,6 +290,8 @@ let xsProfile = Profile(
         ["-f"]
     },
 
+    processArgsReference: ["-f"],
+
     processEnv: ["UBSAN_OPTIONS":"handle_segv=0:symbolize=1:print_stacktrace=1:silence_unsigned_overflow=1",
                  "ASAN_OPTIONS": "handle_segv=0:abort_on_error=1:symbolize=1",
                  "MSAN_OPTIONS": "handle_segv=0:abort_on_error=1:symbolize=1",
@@ -300,6 +302,7 @@ let xsProfile = Profile(
     timeout: 250,
 
     codePrefix: """
+                const fhash = () => null;
                 """,
 
     codeSuffix: """
@@ -317,6 +320,11 @@ let xsProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
     ],
+
+    differentialTests: ["fuzzilli_hash(fuzzilli('FUZZILLI_RANDOM'))",],
+
+    differentialTestsInvariant: ["fuzzilli_hash(Math.random())",
+                                 "fuzzilli_hash(Date.now())",],
 
     additionalCodeGenerators: [
         (StressXSMemoryFail,            5),

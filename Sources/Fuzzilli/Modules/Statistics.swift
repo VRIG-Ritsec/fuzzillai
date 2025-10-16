@@ -50,6 +50,14 @@ public class Statistics: Module {
     /// This is only computed for successful executions, and so excludes e.g. samples that timed out.
     private var executionTimeAvg = MovingAverage(n: 1000)
 
+    /// Moving average over the cummulative time it takes in the fuzzer to get through a bug oracle run
+    /// This will consider both executions and the time spent in the python script
+    private var cumbugOracleTimeAvg = MovingAverage(n: 1000)
+
+    private var optDumpSizeAvg = MovingAverage(n: 10000)
+    private var unOptDumpSizeAvg = MovingAverage(n: 10000)
+
+
     /// Moving average of the number of valid programs in the last 1000 generated programs.
     private var correctnessRate = MovingAverage(n: 1000)
 
@@ -81,6 +89,9 @@ public class Statistics: Module {
         ownData.avgProgramSize = programSizeAvg.currentValue
         ownData.avgCorpusProgramSize = corpusProgramSizeAvg.currentValue
         ownData.avgExecutionTime = executionTimeAvg.currentValue
+        ownData.avgBugOracleTime = cumbugOracleTimeAvg.currentValue
+        ownData.avgDumpSizeOpt = optDumpSizeAvg.currentValue
+        ownData.avgDumpSizeUnOpt = unOptDumpSizeAvg.currentValue
         ownData.fuzzerOverhead = fuzzerOverheadAvg.currentValue
         ownData.minimizationOverhead = minimizationOverheadAvg.currentValue
         ownData.correctnessRate = correctnessRate.currentValue
@@ -96,6 +107,13 @@ public class Statistics: Module {
             data.timedOutSamples += node.timedOutSamples
             data.totalExecs += node.totalExecs
 
+            data.relationsPerformed += node.relationsPerformed
+            data.sparkplugSamples += node.sparkplugSamples
+            data.maglevSamples += node.maglevSamples
+            data.turbofanSamples += node.turbofanSamples
+            data.jitSamples += node.jitSamples
+
+
             if !inactiveNodes.contains(id) {
                 // Add fields that only have meaning for active nodes
 
@@ -108,6 +126,9 @@ public class Statistics: Module {
                 data.avgProgramSize += node.avgProgramSize * numNodesRepresentedByData
                 data.avgCorpusProgramSize += node.avgCorpusProgramSize * numNodesRepresentedByData
                 data.avgExecutionTime += node.avgExecutionTime * numNodesRepresentedByData
+                data.avgBugOracleTime += node.avgBugOracleTime * numNodesRepresentedByData
+                data.avgDumpSizeOpt += node.avgDumpSizeOpt * numNodesRepresentedByData
+                data.avgDumpSizeUnOpt += node.avgDumpSizeUnOpt * numNodesRepresentedByData
                 data.execsPerSecond += node.execsPerSecond
                 data.fuzzerOverhead += node.fuzzerOverhead * numNodesRepresentedByData
                 data.minimizationOverhead += node.minimizationOverhead * numNodesRepresentedByData
@@ -124,6 +145,9 @@ public class Statistics: Module {
         data.avgProgramSize /= totalNumberOfNodes
         data.avgCorpusProgramSize /= totalNumberOfNodes
         data.avgExecutionTime /= totalNumberOfNodes
+        data.avgBugOracleTime /= totalNumberOfNodes
+        data.avgDumpSizeOpt /= totalNumberOfNodes
+        data.avgDumpSizeUnOpt /= totalNumberOfNodes
         data.fuzzerOverhead /= totalNumberOfNodes
         data.minimizationOverhead /= totalNumberOfNodes
         data.correctnessRate /= totalNumberOfNodes
@@ -135,6 +159,40 @@ public class Statistics: Module {
     public func initialize(with fuzzer: Fuzzer) {
         fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { _ in
             self.ownData.crashingSamples += 1
+
+        }
+        fuzzer.registerEventListener(for: fuzzer.events.JITExecutingProgramFound) { ev in
+            for cu in ev.compilers {
+                if (cu == .turbofan) {
+                    self.ownData.turbofanSamples += 1
+                } else if (cu == .maglev) {
+                    self.ownData.maglevSamples += 1
+                } else {
+                    assert(cu == .sparkplug)
+                    self.ownData.sparkplugSamples += 1
+                }
+            }
+            if (ev.is_optimizing) {
+                assert(!ev.compilers.contains(.sparkplug))
+                self.ownData.jitSamples += 1
+            }
+        }
+        fuzzer.registerEventListener(for: fuzzer.events.RelationPerformed) { ev in
+            self.cumbugOracleTimeAvg.add(ev.execution.bugOracleTime!)
+            self.optDumpSizeAvg.add(ev.execution.optStdout!.count)
+            self.unOptDumpSizeAvg.add(ev.execution.unOptStdout!.count)
+
+            self.ownData.relationsPerformed += 1
+        }
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { ev in
+            if (ev.reproducesInNonReplMode) {
+                self.ownData.differentialSamples += 1
+            }
+            /*
+            if self.ownData.differentialSamples > 200 {
+                fatalError("Found more than 200 differentials, stopping")
+            }
+            */
         }
         fuzzer.registerEventListener(for: fuzzer.events.TimeOutFound) { _ in
             self.ownData.timedOutSamples += 1
@@ -171,6 +229,7 @@ public class Statistics: Module {
             let now = Date()
             let totalTime = now.timeIntervalSince(self.lastExecDate)
             self.lastExecDate = now
+
 
             let overhead = 1.0 - (exec.execTime / totalTime)
             self.fuzzerOverheadAvg.add(overhead)

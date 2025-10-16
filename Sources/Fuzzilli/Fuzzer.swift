@@ -14,6 +14,14 @@
 
 import Foundation
 
+
+fileprivate let prependJS = try! String(contentsOfFile: "prepend.js")
+fileprivate let B = 1;
+fileprivate let KB = 1024 * B;
+fileprivate let MB = 1024 * KB;
+
+fileprivate let execPoison = ["(see crbug.com/", "Aborting on ", "Fatal JavaScript out of memory:"];
+
 public class Fuzzer {
     /// Id of this fuzzer.
     public let id: UUID
@@ -35,6 +43,9 @@ public class Fuzzer {
 
     /// The script runner used to execute generated scripts.
     public let runner: ScriptRunner
+
+    /// The script runners used to compare against in differential executions.
+    public let referenceRunner: ScriptRunner
 
     /// The fuzzer engine producing new programs from existing ones and executing them.
     public let engine: FuzzEngine
@@ -65,6 +76,8 @@ public class Fuzzer {
 
     /// The minimizer to shrink programs that cause crashes or trigger new interesting behaviour.
     public let minimizer: Minimizer
+
+    private let localId: UInt32
 
     /// The engine used for initial corpus generation (if performed).
     public let corpusGenerationEngine = GenerativeEngine()
@@ -158,9 +171,9 @@ public class Fuzzer {
 
     /// Constructs a new fuzzer instance with the provided components.
     public init(
-        configuration: Configuration, scriptRunner: ScriptRunner, engine: FuzzEngine, mutators: WeightedList<Mutator>,
+        configuration: Configuration, scriptRunner: ScriptRunner, referenceRunner: ScriptRunner, engine: FuzzEngine, mutators: WeightedList<Mutator>,
         codeGenerators: WeightedList<CodeGenerator>, programTemplates: WeightedList<ProgramTemplate>, evaluator: ProgramEvaluator,
-        environment: JavaScriptEnvironment, lifter: Lifter, corpus: Corpus, minimizer: Minimizer, queue: DispatchQueue? = nil
+        environment: JavaScriptEnvironment, lifter: Lifter, corpus: Corpus, minimizer: Minimizer, localId: UInt32, queue: DispatchQueue? = nil
     ) {
         let uniqueId = UUID()
         self.id = uniqueId
@@ -179,7 +192,9 @@ public class Fuzzer {
         self.lifter = lifter
         self.corpus = corpus
         self.runner = scriptRunner
+        self.referenceRunner = referenceRunner
         self.minimizer = minimizer
+        self.localId = localId
         self.logger = Logger(withLabel: "Fuzzer")
         self.contextGraph = ContextGraph(for: codeGenerators, withLogger: self.logger)
 
@@ -193,6 +208,36 @@ public class Fuzzer {
         // This creates a reference cycle, but Fuzzer instances aren't expected
         // to be deallocated, so this is ok.
         self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: self)
+    }
+
+    private func jitMetadataFileURL(_ seed: UInt32) -> URL {
+        let jitMetadataFileName = String(format: "%u_position_dump.json", seed)
+        return URL(fileURLWithPath: "/tmp").appendingPathComponent(jitMetadataFileName)
+    }
+
+    private func outputMetadataFileURL(_ seed: UInt32) -> URL {
+        let jitMetadataFileName = String(format: "%u_output_dump.txt", seed)
+        return URL(fileURLWithPath: "/tmp").appendingPathComponent(jitMetadataFileName)
+    }
+
+    private func jitMetadataFileExists(_ seed: UInt32) -> Bool {
+        return FileManager.default.fileExists(atPath: self.jitMetadataFileURL(seed).path)
+    }
+
+    private func outputMetadataFileExists(_ seed: UInt32) -> Bool {
+        return FileManager.default.fileExists(atPath: self.outputMetadataFileURL(seed).path)
+    }
+
+
+    private func removeMetadataFilesIfExist(_ seed: UInt32) {
+        if self.jitMetadataFileExists(seed) {
+            let fileURL = jitMetadataFileURL(seed);
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+        }
+        if self.outputMetadataFileExists(seed) {
+            let fileURL = outputMetadataFileURL(seed);
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+        }
     }
 
     /// Returns the fuzzer for the active DispatchQueue.
@@ -247,6 +292,7 @@ public class Fuzzer {
         assert(!isInitialized)
 
         // Initialize the script runner first so we are able to execute programs.
+        referenceRunner.initialize(with: self)
         runner.initialize(with: self)
 
         // Then initialize all components.
@@ -448,6 +494,8 @@ public class Fuzzer {
             // from another instance triggers a crash in this instance.
             processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: origin, withExectime: execution.execTime)
 
+        case .differential:
+            processDifferential(program, withStderr: execution.stderr, withStdout: execution.unOptStdout!, origin: origin, optStdout: execution.optStdout!)
 
         case .succeeded:
             if let aspects = evaluator.evaluate(execution) {
@@ -481,6 +529,17 @@ public class Fuzzer {
         } else {
             // Non-deterministic crash
             dispatchEvent(events.CrashFound, data: (program, behaviour: .flaky, isUnique: true, origin: origin))
+        }
+    }
+
+    public func importDifferential(_ program: Program, origin: ProgramOrigin) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        let execution = execute(program, purpose: .other)
+        if case .differential = execution.outcome {
+            processDifferential(program, withStderr: execution.stderr, withStdout: execution.unOptStdout!, origin: origin, optStdout: execution.optStdout!)
+        } else {
+            // Non-deterministic differential
+            dispatchEvent(events.DifferentialFound, data: (program, behaviour: .flaky, origin: origin, opt_stdout: "remote import", unopt_stdout: "remote import", reproducesInNonReplMode: false))
         }
     }
 
@@ -664,6 +723,133 @@ public class Fuzzer {
         return currentCorpusImportJob.progress()
     }
 
+    public enum DifferentialExecute {
+        case force
+        case disabled
+        case auto
+    }
+
+
+    private func formatDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMddHHmmss"
+        return formatter.string(from: Date())
+    }
+
+    func crashReproducesWithoutDumping(_ program: Program, _ script: String) -> Bool {
+        // write script to tmp file
+        let filename = "crash_repro_program_\(self.formatDate())_\(program.id).js"
+        let fileURL = URL(fileURLWithPath: "/tmp").appendingPathComponent(filename)
+
+        do {
+            try script.write(to: fileURL, atomically: false, encoding: String.Encoding.utf8)
+        } catch {
+            logger.error("Failed to write file \(fileURL): \(error)")
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+            return false
+        }
+
+        let task = Process()
+
+        let d8Path = self.runner.processArguments[0]
+        let d8SDumpingFlags = ["--turbofan-dumping", "--generate-dump-positions", "--verify-heap-on-jit-dump", "--maglev-dumping", "--sparkplug-dumping"]
+        let d8FlagsWithoutDumping = self.runner.processArguments.filter { !d8SDumpingFlags.contains($0) && $0 != d8Path }
+
+        let errorPipe = Pipe()
+
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/timeout")
+        task.arguments = ["15", d8Path] + d8FlagsWithoutDumping + [fileURL.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = errorPipe
+
+        do {
+            try task.run()
+        } catch let error {
+            logger.error(error.localizedDescription)
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+            return false
+        }
+
+        task.waitUntilExit()
+
+        if task.isRunning {
+            task.terminate()
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+            return false
+        }
+
+        try? FileManager.default.removeItem(atPath: fileURL.path)
+
+        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: String.Encoding.utf8)
+
+        if stderr == nil {
+            return false
+        }
+        for p in execPoison {
+            if stderr!.contains(p) {
+                return false
+            }
+        }
+        return task.terminationStatus != 0 && task.terminationStatus != 124
+    }
+
+    func differentialReproducesInNonReplMode(_ program: Program, _ script: String, _ differentialFuzzingPositionDumpSeed: UInt32) -> Bool {
+        // write script to tmp file
+        let filename = "program_\(self.formatDate())_\(program.id)_\(differentialFuzzingPositionDumpSeed).js"
+        let fileURL = URL(fileURLWithPath: "/tmp").appendingPathComponent(filename)
+
+        // also prepend a filter for benign differentials here
+        let prependedScript = prependJS + script
+
+        do {
+            try prependedScript.write(to: fileURL, atomically: false, encoding: String.Encoding.utf8)
+        } catch {
+            logger.error("Failed to write file \(fileURL): \(error)")
+            return false
+        }
+
+        let task = Process()
+
+        let d8Path = self.runner.processArguments[0]
+
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/timeout")
+        task.arguments = ["15", self.config.relateToolPath!, "--validate", "--d8=\(d8Path)", "--poc=\(fileURL.path)"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+        } catch let error {
+            logger.error(error.localizedDescription)
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+            return false
+        }
+
+        task.waitUntilExit()
+
+        if task.isRunning {
+            task.terminate()
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+            return false
+        }
+        try? FileManager.default.removeItem(atPath: fileURL.path)
+        return task.terminationStatus != 0 && task.terminationStatus != 124
+    }
+
+    private func readOutputDump(_ seed: UInt32) -> String? {
+        let filename = "/tmp/\(seed)_output_dump.txt"
+        let fileURL = URL(fileURLWithPath: filename)
+
+        guard let data = try? Data(contentsOf: fileURL) else {
+            logger.warning("Failed to read output file at \(fileURL)")
+            return nil
+        }
+
+        let asciiData = Data(data.filter { byte in byte <= 127 })
+
+        return String(data: asciiData, encoding: .utf8)!
+    }
+
     /// Executes a program.
     ///
     /// This will first lift the given FuzzIL program to the target language, then use the configured script runner to execute it.
@@ -672,17 +858,113 @@ public class Fuzzer {
     ///   - program: The FuzzIL program to execute.
     ///   - timeout: The timeout after which to abort execution. If nil, the default timeout of this fuzzer will be used.
     ///   - purpose: The purpose of this program execution.
+    ///   - differentialExecute: force disabled or auto (default)
     /// - Returns: An Execution structure representing the execution outcome.
-    public func execute(_ program: Program, withTimeout timeout: UInt32? = nil, purpose: ExecutionPurpose) -> Execution {
+    public func execute(_ program: Program, withTimeout timeout: UInt32? = nil,
+                        purpose: ExecutionPurpose,
+                        differentialExecute: DifferentialExecute = .auto) -> Execution {
         dispatchPrecondition(condition: .onQueue(queue))
         assert(runner.isInitialized)
 
-        let script = lifter.lift(program)
+        let startTime = Date();
 
+        var g = SystemRandomNumberGenerator()
+
+        // use unique localId for the seed
+        let differentialFuzzingPositionDumpSeed = localId * 100000 + UInt32(Int.random(in: 1...99999, using: &g));
+
+        self.removeMetadataFilesIfExist(differentialFuzzingPositionDumpSeed)
+
+        let script = lifter.lift(program)
         dispatchEvent(events.PreExecute, data: (program, purpose))
-        let execution = runner.run(script, withTimeout: timeout ?? config.timeout)
+
+        var execution = runner.run(script, withTimeout: timeout ?? config.timeout,
+            differentialFuzzingPositionDumpSeed: differentialFuzzingPositionDumpSeed)
         dispatchEvent(events.PostExecute, data: execution)
 
+
+        if execution.execTime * 1000 >= Double((timeout ?? config.timeout) + 500) {
+            logger.warning("execution took longer than expected \(execution.execTime * 1000)")
+        }
+
+        let isJitExecution = execution.compilersUsed.count >= 1
+
+        if isJitExecution && execution.outcome == .succeeded {
+            dispatchEvent(events.JITExecutingProgramFound, data: (program, execution.compilersUsed, true))
+        }
+
+        if execution.outcome == .succeeded && isJitExecution && self.jitMetadataFileExists(differentialFuzzingPositionDumpSeed) &&
+         differentialExecute != .disabled && purpose != .runtimeAssistedMutation {
+            assert(referenceRunner.isInitialized)
+
+            // read the file /tmp/{dumpling_seed}_output_dump.txt as a string
+            let opt_stdout = readOutputDump(differentialFuzzingPositionDumpSeed)
+            if opt_stdout == nil {
+                self.removeMetadataFilesIfExist(differentialFuzzingPositionDumpSeed)
+                return execution
+            }
+
+            let diff = referenceRunner.run(script, withTimeout: (timeout ?? config.timeout) * 2,
+                differentialFuzzingPositionDumpSeed: differentialFuzzingPositionDumpSeed)
+            // sparkplug is enabled in unopt runs so log that usage as well
+
+            if diff.compilersUsed.contains(.sparkplug) {
+                assert(!diff.compilersUsed.contains(.maglev) && !diff.compilersUsed.contains(.turbofan))
+                dispatchEvent(events.JITExecutingProgramFound, data: (program, diff.compilersUsed, false))
+            }
+
+            dispatchEvent(events.PostExecute, data: diff)
+
+            if (diff.outcome == .timedOut) {
+                // treat this as a timeout here so that we can
+                execution.outcome = .timedOut
+            }
+            if Double(diff.execTime * 1000) >= Double((timeout ?? config.timeout)*2 + 500) {
+                logger.warning("diff execution took longer than expected \(diff.execTime * 1000)")
+            }
+
+            // execution.execTime += diff.execTime
+            if (diff.outcome == .succeeded) {
+                let unopt_stdout = readOutputDump(differentialFuzzingPositionDumpSeed)
+                if unopt_stdout == nil {
+                    self.removeMetadataFilesIfExist(differentialFuzzingPositionDumpSeed)
+                    return execution
+                }
+                execution.unOptStdout = unopt_stdout
+                execution.optStdout = opt_stdout
+                if !relate(opt_stdout!, with: unopt_stdout!) {
+                    execution.outcome = .differential
+                    execution.reproducesInNonReplMode = differentialReproducesInNonReplMode(program, script, differentialFuzzingPositionDumpSeed)
+                }
+                let now = Date()
+                execution.bugOracleTime = now.timeIntervalSince(startTime)
+                if (execution.bugOracleTime!) * 1000 >= 8000.0 {
+                    logger.warning("bugOracle took longer than expected \(execution.bugOracleTime! * 1000)")
+                }
+                dispatchEvent(events.RelationPerformed, data: (program, execution))
+            } else {
+                // return diff
+            }
+
+            self.removeMetadataFilesIfExist(differentialFuzzingPositionDumpSeed)
+        } else {
+            self.removeMetadataFilesIfExist(differentialFuzzingPositionDumpSeed)
+
+            if case .crashed(_) = execution.outcome {
+                var poisoned = false
+                for p in execPoison {
+                    if execution.stderr.contains(p) {
+                        execution.outcome = .failed(1)
+                        poisoned = true
+                    }
+                }
+                if !poisoned && !crashReproducesWithoutDumping(program, script) {
+                    execution.outcome = .failed(2)
+                }
+            }
+        }
+
+        // assert(!self.jitMetadataFileExists(differentialFuzzingPositionDumpSeed))
         return execution
     }
 
@@ -773,11 +1055,10 @@ public class Fuzzer {
                 program.comments.add("TERMSIG: \(termsig)", at: .footer)
                 program.comments.add("STDERR:", at: .footer)
                 program.comments.add(stderr.trimmingCharacters(in: .newlines), at: .footer)
-                program.comments.add("STDOUT:", at: .footer)
-                program.comments.add(stdout.trimmingCharacters(in: .newlines), at: .footer)
                 program.comments.add("FUZZER ARGS: \(config.arguments.joined(separator: " "))", at: .footer)
                 program.comments.add("TARGET ARGS: \(runner.processArguments.joined(separator: " "))", at: .footer)
                 program.comments.add("CONTRIBUTORS: \(program.contributors.map({ $0.name }).joined(separator: ", "))", at: .footer)
+                program.comments.add("REFERENCE ARGS: \(referenceRunner.processArguments.joined(separator: " "))\n", at: .footer)
                 program.comments.add("EXECUTION TIME: \(Int(exectime * 1000))ms", at: .footer)
             }
             assert(program.comments.at(.footer)?.contains("CRASH INFO") ?? false)
@@ -800,6 +1081,38 @@ public class Fuzzer {
         minimizer.withMinimizedCopy(program, withAspects: ProgramAspects(outcome: .crashed(termsig))) { minimizedProgram in
             self.fuzzGroup.leave()
             processCommon(minimizedProgram)
+        }
+    }
+
+    func processDifferential(_ program: Program, withStderr stderr: String, withStdout stdout: String, origin: ProgramOrigin, optStdout: String) {
+        func processCommon(_ program: Program) {
+            let hasDiffInfo = program.comments.at(.footer)?.contains("DIFFERENTIAL INFO") ?? false
+            if !hasDiffInfo {
+                program.comments.add("DIFFERENTIAL INFO\n==========\n", at: .footer)
+
+                program.comments.add("STDERR:\n" + stderr, at: .footer)
+                program.comments.add("ARGS: \(runner.processArguments.joined(separator: " "))\n", at: .footer)
+                program.comments.add("REFERENCE ARGS: \(referenceRunner.processArguments.joined(separator: " "))\n", at: .footer)
+            }
+            assert(program.comments.at(.footer)?.contains("DIFFERENTIAL INFO") ?? false)
+
+            // Check for uniqueness only after minimization
+            let execution = execute(program, withTimeout: self.config.timeout * 2, purpose: .other)
+            if case .differential = execution.outcome {
+                dispatchEvent(events.DifferentialFound, data: (program, .deterministic, origin, optStdout, stdout, execution.reproducesInNonReplMode!))
+            } else {
+                dispatchEvent(events.DifferentialFound, data: (program, .flaky, origin, optStdout, stdout, false))
+            }
+        }
+
+        if !origin.requiresMinimization() {
+            return processCommon(program)
+        }
+
+        fuzzGroup.enter()
+        minimizer.withMinimizedCopy(program, withAspects: ProgramAspects(outcome: .differential)) { minimizedProgram in
+            self.fuzzGroup.leave()
+             processCommon(minimizedProgram)
         }
     }
 
@@ -961,6 +1274,7 @@ public class Fuzzer {
         let complexProgram = makeComplexProgram()
         for _ in 0..<5 {
             let execution = execute(complexProgram, purpose: .startup)
+            logger.info("Execution time: \(execution.execTime * 1000)ms")
             maxExecutionTime = max(maxExecutionTime, execution.execTime)
         }
 
@@ -1093,7 +1407,7 @@ public class Fuzzer {
                 numberOfProgramsRequiringWasmButDisabled += 1
             case .failed(let outcome):
                 switch outcome {
-                case .crashed, .succeeded:
+                case .crashed, .succeeded, .differential:
                     // This is unexpected so we don't track these.
                     break
                 case .failed:

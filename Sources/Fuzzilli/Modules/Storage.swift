@@ -19,6 +19,7 @@ public class Storage: Module {
     private let storageDir: String
     private let crashesDir: String
     private let duplicateCrashesDir: String
+    private let differentialsDir: String
     private let corpusDir: String
     private let statisticsDir: String
     private let stateFile: String
@@ -37,6 +38,7 @@ public class Storage: Module {
         self.storageDir = storageDir
         self.crashesDir = storageDir + "/crashes"
         self.duplicateCrashesDir = storageDir + "/crashes/duplicates"
+        self.differentialsDir = storageDir + "/differentials"
         self.corpusDir = storageDir + "/corpus"
         self.failedDir = storageDir + "/failed"
         self.timeOutDir = storageDir + "/timeouts"
@@ -56,6 +58,7 @@ public class Storage: Module {
         do {
             try FileManager.default.createDirectory(atPath: crashesDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(atPath: duplicateCrashesDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(atPath: differentialsDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(atPath: corpusDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(atPath: statisticsDir, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(atPath: feedbackDir, withIntermediateDirectories: true)
@@ -98,6 +101,21 @@ public class Storage: Module {
                 self.storeProgram(ev.program, as: filename, in: self.crashesDir)
             } else {
                 self.storeProgram(ev.program, as: filename, in: self.duplicateCrashesDir)
+            }
+        }
+
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { ev in
+            let filename = "program_\(self.formatDate())_\(ev.program.id)_\(ev.behaviour.rawValue)"
+            var storeDir: String;
+            if (ev.reproducesInNonReplMode) {
+                storeDir = self.differentialsDir
+            } else {
+                return
+            }
+
+            self.storeProgram(ev.program, as: filename, in: storeDir)
+            if ev.opt_stdout != nil {
+                self.storeDifferentialDump(ev.opt_stdout!, and: ev.unopt_stdout, as: filename, in: storeDir)
             }
         }
 
@@ -255,6 +273,13 @@ public class Storage: Module {
         } catch {
             logger.error("Failed to write file \(url): \(error)")
         }
+    }
+
+    private func storeDifferentialDump(_ opt: String, and unopt: String, as filename: String, in directory: String) {
+        let opt_url = URL(fileURLWithPath: "\(directory)/\(filename)_opt.txt")
+        let unopt_url = URL(fileURLWithPath: "\(directory)/\(filename)_unopt.txt")
+        createFile(opt_url, withContent: opt)
+        createFile(unopt_url, withContent: unopt)
     }
 
     func storeProgram(_ program: Program, as filename: String, in directory: String) {

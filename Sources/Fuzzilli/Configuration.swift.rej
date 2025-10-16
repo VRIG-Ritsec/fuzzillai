@@ -1,0 +1,67 @@
+diff a/Sources/Fuzzilli/Configuration.swift b/Sources/Fuzzilli/Configuration.swift	(rejected hunks)
+@@ -26,6 +57,15 @@ public struct Configuration {
+     /// Used to verify that crashes can be detected.
+     public let crashTests: [String]
+ 
++    /// Code snippets that cause an observable difference of output
++    /// in the target engine. Used to verify that crashes can be detected.
++    public let differentialTests: [String]
++
++    /// Code snippets that must not cause an observable difference of output
++    /// in the target engine. Used to verify that common sources of
++    /// entropy (Math.random, ...) are deterministic.
++    public let differentialTestsInvariant: [String]
++
+     /// The fraction of instruction to keep from the original program when minimizing.
+     /// This setting is useful to avoid "over-minimization", which can negatively impact the fuzzer's
+     /// performance if program features are removed that could later be mutated to trigger new
+@@ -57,28 +97,48 @@ public struct Configuration {
+     /// also appended as a comment in the footer of crashing samples.
+     public let tag: String?
+ 
++    public let relateToolPath: String?
++
++    public let dumplingDepth: UInt32?
++
++    public let dumplingPropCount: UInt32?
++
++    public let storagePath: String?
++
+     public init(arguments: [String] = [],
+                 timeout: UInt32 = 250,
+                 skipStartupTests: Bool = false,
+                 logLevel: LogLevel = .info,
+                 crashTests: [String] = [],
++                differentialTests: [String] = [],
++                differentialTestsInvariant: [String] = [],
+                 minimizationLimit: Double = 0.0,
+                 dropoutRate: Double = 0,
+                 collectRuntimeTypes: Bool = false,
+                 enableDiagnostics: Bool = false,
+                 enableInspection: Bool = false,
+                 staticCorpus: Bool = false,
+-                tag: String? = nil) {
++                tag: String? = nil,
++                relateToolPath: String? = nil,
++                dumplingDepth: UInt32 = 3,
++                dumplingPropCount: UInt32 = 5,
++                storagePath: String? = nil) {
+         self.arguments = arguments
+         self.timeout = timeout
+         self.logLevel = logLevel
+         self.crashTests = crashTests
++        self.differentialTests = differentialTests
++        self.differentialTestsInvariant = differentialTestsInvariant
+         self.dropoutRate = dropoutRate
+         self.minimizationLimit = minimizationLimit
+         self.enableDiagnostics = enableDiagnostics
+         self.enableInspection = enableInspection
+         self.staticCorpus = staticCorpus
+         self.tag = tag
++        self.relateToolPath = relateToolPath
++        self.dumplingDepth = dumplingDepth
++        self.dumplingPropCount = dumplingPropCount
++        self.storagePath = storagePath
+     }
+ }
+ 

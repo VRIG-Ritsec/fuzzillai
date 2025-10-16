@@ -17,22 +17,31 @@ import Foundation
 // Mock implementations of fuzzer components for testing.
 
 struct MockExecution: Execution {
-    let outcome: ExecutionOutcome
+    var outcome: ExecutionOutcome
     let stdout: String
     let stderr: String
     let fuzzout: String
-    let execTime: TimeInterval
+    var execTime: TimeInterval
+    let executionHash: Int
+    var compilersUsed: [JITType]
+    var unOptStdout: String?=nil
+    var optStdout: String?=nil
+    var reproducesInNonReplMode: Bool?=false
+    var bugOracleTime: TimeInterval?=nil
 }
 
 class MockScriptRunner: ScriptRunner {
     var processArguments: [String] = []
 
-    func run(_ script: String, withTimeout timeout: UInt32) -> Execution {
+    func run(_ script: String, withTimeout timeout: UInt32,
+        differentialFuzzingPositionDumpSeed: UInt32) -> Execution {
         return MockExecution(outcome: .succeeded,
                              stdout: "",
                              stderr: "",
                              fuzzout: "",
-                             execTime: TimeInterval(0.1))
+                             execTime: TimeInterval(0.1),
+                             executionHash: 0,
+                             compilersUsed: [])
     }
 
     func setEnvironmentVariable(_ key: String, to value: String) {}
@@ -87,6 +96,7 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
 
     // A script runner to execute JavaScript code in an instrumented JS engine.
     let runner = maybeRunner ?? MockScriptRunner()
+    let referenceRunner = maybeRunner ?? MockScriptRunner()
 
     // the mutators to use for this fuzzing engine.
     let mutators = WeightedList<Mutator>([
@@ -128,6 +138,7 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
     // Construct the fuzzer instance.
     let fuzzer = Fuzzer(configuration: configuration,
                         scriptRunner: runner,
+                        referenceRunner: referenceRunner,
                         engine: engine,
                         mutators: mutators,
                         codeGenerators: codeGenerators,
@@ -137,6 +148,7 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
                         lifter: lifter,
                         corpus: corpus,
                         minimizer: minimizer,
+                        localId: 0,
                         queue: queue ?? DispatchQueue.main)
 
     let initializeFuzzer =  {

@@ -59,9 +59,9 @@ public struct Fuzzilli_Protobuf_FuzzerState: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var corpus: Data = Data()
+  public var corpus: Data = SwiftProtobuf.Internal.emptyData
 
-  public var evaluatorState: Data = Data()
+  public var evaluatorState: Data = SwiftProtobuf.Internal.emptyData
 
   public var isWasmEnabled: Bool = false
 
@@ -135,6 +135,11 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
     set {_uniqueStorage()._avgExecutionTime = newValue}
   }
 
+  public var avgBugOracleTime: Double {
+    get {return _storage._avgBugOracleTime}
+    set {_uniqueStorage()._avgBugOracleTime = newValue}
+  }
+
   //// The current number of executions per second.
   public var execsPerSecond: Double {
     get {return _storage._execsPerSecond}
@@ -177,6 +182,46 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
     set {_uniqueStorage()._timeoutRate = newValue}
   }
 
+  public var differentialSamples: UInt64 {
+    get {return _storage._differentialSamples}
+    set {_uniqueStorage()._differentialSamples = newValue}
+  }
+
+  public var turbofanSamples: UInt64 {
+    get {return _storage._turbofanSamples}
+    set {_uniqueStorage()._turbofanSamples = newValue}
+  }
+
+  public var maglevSamples: UInt64 {
+    get {return _storage._maglevSamples}
+    set {_uniqueStorage()._maglevSamples = newValue}
+  }
+
+  public var sparkplugSamples: UInt64 {
+    get {return _storage._sparkplugSamples}
+    set {_uniqueStorage()._sparkplugSamples = newValue}
+  }
+
+  public var relationsPerformed: UInt64 {
+    get {return _storage._relationsPerformed}
+    set {_uniqueStorage()._relationsPerformed = newValue}
+  }
+
+  public var jitSamples: UInt64 {
+    get {return _storage._jitSamples}
+    set {_uniqueStorage()._jitSamples = newValue}
+  }
+
+  public var avgDumpSizeOpt: Double {
+    get {return _storage._avgDumpSizeOpt}
+    set {_uniqueStorage()._avgDumpSizeOpt = newValue}
+  }
+
+  public var avgDumpSizeUnOpt: Double {
+    get {return _storage._avgDumpSizeUnOpt}
+    set {_uniqueStorage()._avgDumpSizeUnOpt = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -194,14 +239,11 @@ extension Fuzzilli_Protobuf_LogMessage: SwiftProtobuf.Message, SwiftProtobuf._Me
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.origin) }()
-      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.level) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.label) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.content) }()
+      case 1: try decoder.decodeSingularStringField(value: &self.origin)
+      case 2: try decoder.decodeSingularUInt32Field(value: &self.level)
+      case 3: try decoder.decodeSingularStringField(value: &self.label)
+      case 4: try decoder.decodeSingularStringField(value: &self.content)
       default: break
       }
     }
@@ -295,6 +337,15 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
     var _coverage: Double = 0
     var _correctnessRate: Double = 0
     var _timeoutRate: Double = 0
+    var _differentialSamples: UInt64 = 0
+    var _turbofanSamples: UInt64 = 0
+    var _maglevSamples: UInt64 = 0
+    var _relationsPerformed: UInt64 = 0
+    var _sparkplugSamples: UInt64 = 0
+    var _avgBugOracleTime: Double = 0
+    var _jitSamples: UInt64 = 0
+    var _avgDumpSizeOpt: Double = 0
+    var _avgDumpSizeUnOpt: Double = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -322,6 +373,15 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       _coverage = source._coverage
       _correctnessRate = source._correctnessRate
       _timeoutRate = source._timeoutRate
+      _differentialSamples = source._differentialSamples
+      _turbofanSamples = source._turbofanSamples
+      _maglevSamples = source._maglevSamples
+      _relationsPerformed = source._relationsPerformed
+      _sparkplugSamples = source._sparkplugSamples
+      _avgBugOracleTime = source._avgBugOracleTime
+      _jitSamples = source._jitSamples
+      _avgDumpSizeOpt = source._avgDumpSizeOpt
+      _avgDumpSizeUnOpt = source._avgDumpSizeUnOpt
     }
   }
 
@@ -336,27 +396,33 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
     _ = _uniqueStorage()
     try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
       while let fieldNumber = try decoder.nextFieldNumber() {
-        // The use of inline closures is to circumvent an issue where the compiler
-        // allocates stack space for every case branch when no optimizations are
-        // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
-        case 1: try { try decoder.decodeSingularUInt64Field(value: &_storage._totalSamples) }()
-        case 2: try { try decoder.decodeSingularUInt64Field(value: &_storage._validSamples) }()
-        case 3: try { try decoder.decodeSingularUInt64Field(value: &_storage._interestingSamples) }()
-        case 4: try { try decoder.decodeSingularUInt64Field(value: &_storage._timedOutSamples) }()
-        case 5: try { try decoder.decodeSingularUInt64Field(value: &_storage._crashingSamples) }()
-        case 6: try { try decoder.decodeSingularUInt64Field(value: &_storage._totalExecs) }()
-        case 7: try { try decoder.decodeSingularDoubleField(value: &_storage._avgCorpusSize) }()
-        case 8: try { try decoder.decodeSingularDoubleField(value: &_storage._avgProgramSize) }()
-        case 9: try { try decoder.decodeSingularDoubleField(value: &_storage._avgCorpusProgramSize) }()
-        case 10: try { try decoder.decodeSingularDoubleField(value: &_storage._avgExecutionTime) }()
-        case 11: try { try decoder.decodeSingularDoubleField(value: &_storage._execsPerSecond) }()
-        case 12: try { try decoder.decodeSingularDoubleField(value: &_storage._fuzzerOverhead) }()
-        case 13: try { try decoder.decodeSingularDoubleField(value: &_storage._minimizationOverhead) }()
-        case 14: try { try decoder.decodeSingularUInt64Field(value: &_storage._numChildNodes) }()
-        case 15: try { try decoder.decodeSingularDoubleField(value: &_storage._coverage) }()
-        case 16: try { try decoder.decodeSingularDoubleField(value: &_storage._correctnessRate) }()
-        case 17: try { try decoder.decodeSingularDoubleField(value: &_storage._timeoutRate) }()
+        case 1: try decoder.decodeSingularUInt64Field(value: &_storage._totalSamples)
+        case 2: try decoder.decodeSingularUInt64Field(value: &_storage._validSamples)
+        case 3: try decoder.decodeSingularUInt64Field(value: &_storage._interestingSamples)
+        case 4: try decoder.decodeSingularUInt64Field(value: &_storage._timedOutSamples)
+        case 5: try decoder.decodeSingularUInt64Field(value: &_storage._crashingSamples)
+        case 6: try decoder.decodeSingularUInt64Field(value: &_storage._totalExecs)
+        case 7: try decoder.decodeSingularDoubleField(value: &_storage._avgCorpusSize)
+        case 8: try decoder.decodeSingularDoubleField(value: &_storage._avgProgramSize)
+        case 9: try decoder.decodeSingularDoubleField(value: &_storage._avgCorpusProgramSize)
+        case 10: try decoder.decodeSingularDoubleField(value: &_storage._avgExecutionTime)
+        case 11: try decoder.decodeSingularDoubleField(value: &_storage._execsPerSecond)
+        case 12: try decoder.decodeSingularDoubleField(value: &_storage._fuzzerOverhead)
+        case 13: try decoder.decodeSingularDoubleField(value: &_storage._minimizationOverhead)
+        case 14: try decoder.decodeSingularUInt64Field(value: &_storage._numChildNodes)
+        case 15: try decoder.decodeSingularDoubleField(value: &_storage._coverage)
+        case 16: try decoder.decodeSingularDoubleField(value: &_storage._correctnessRate)
+        case 17: try decoder.decodeSingularDoubleField(value: &_storage._timeoutRate)
+        case 18: try decoder.decodeSingularUInt64Field(value: &_storage._differentialSamples)
+        case 19: try decoder.decodeSingularUInt64Field(value: &_storage._turbofanSamples)
+        case 20: try decoder.decodeSingularUInt64Field(value: &_storage._maglevSamples)
+        case 21: try decoder.decodeSingularUInt64Field(value: &_storage._relationsPerformed)
+        case 22: try decoder.decodeSingularUInt64Field(value: &_storage._sparkplugSamples)
+        case 23: try decoder.decodeSingularDoubleField(value: &_storage._avgBugOracleTime)
+        case 24: try decoder.decodeSingularUInt64Field(value: &_storage._jitSamples)
+        case 25: try decoder.decodeSingularDoubleField(value: &_storage._avgDumpSizeOpt)
+        case 26: try decoder.decodeSingularDoubleField(value: &_storage._avgDumpSizeUnOpt)
         default: break
         }
       }
@@ -416,6 +482,33 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       if _storage._timeoutRate.bitPattern != 0 {
         try visitor.visitSingularDoubleField(value: _storage._timeoutRate, fieldNumber: 17)
       }
+      if _storage._differentialSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._differentialSamples, fieldNumber: 18)
+      }
+      if _storage._turbofanSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._turbofanSamples, fieldNumber: 19)
+      }
+      if _storage._maglevSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._maglevSamples, fieldNumber: 20)
+      }
+      if _storage._relationsPerformed != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._relationsPerformed, fieldNumber: 21)
+      }
+      if _storage._sparkplugSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._sparkplugSamples, fieldNumber: 22)
+      }
+      if _storage._avgBugOracleTime != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._avgBugOracleTime, fieldNumber: 23)
+      }
+      if _storage._jitSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._jitSamples, fieldNumber: 24)
+      }
+      if _storage._avgDumpSizeOpt != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._avgDumpSizeOpt, fieldNumber: 25)
+      }
+      if _storage._avgDumpSizeUnOpt != 0 {
+        try visitor.visitSingularDoubleField(value: _storage._avgDumpSizeUnOpt, fieldNumber: 26)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -442,6 +535,15 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
         if _storage._coverage != rhs_storage._coverage {return false}
         if _storage._correctnessRate != rhs_storage._correctnessRate {return false}
         if _storage._timeoutRate != rhs_storage._timeoutRate {return false}
+        if _storage._differentialSamples != rhs_storage._differentialSamples {return false}
+        if _storage._turbofanSamples != rhs_storage._turbofanSamples {return false}
+        if _storage._maglevSamples != rhs_storage._maglevSamples {return false}
+        if _storage._relationsPerformed != rhs_storage._relationsPerformed {return false}
+        if _storage._sparkplugSamples != rhs_storage._sparkplugSamples {return false}
+        if _storage._avgBugOracleTime != rhs_storage._avgBugOracleTime {return false}
+        if _storage._jitSamples != rhs_storage._jitSamples {return false}
+        if _storage._avgDumpSizeOpt != rhs_storage._avgDumpSizeOpt {return false}
+        if _storage._avgDumpSizeUnOpt != rhs_storage._avgDumpSizeUnOpt {return false}
         return true
       }
       if !storagesAreEqual {return false}

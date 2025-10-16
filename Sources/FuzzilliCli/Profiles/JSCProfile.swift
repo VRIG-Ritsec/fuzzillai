@@ -36,9 +36,14 @@ fileprivate let GcGenerator = CodeGenerator("GcGenerator") { b in
     b.callFunction(b.createNamedVariable(forBuiltin: "gc"))
 }
 
+fileprivate let commonArgs = [
+    "--validateOptions=true",
+    "--reprl",
+]
+
 let jscProfile = Profile(
     processArgs: { randomize in
-        var args = [
+        var args = commonArgs + [
             "--validateOptions=true",
             // No need to call functions thousands of times before they are JIT compiled
             "--thresholdForJITSoon=10",
@@ -49,8 +54,7 @@ let jscProfile = Profile(
             "--thresholdForFTLOptimizeAfterWarmUp=1000",
             "--thresholdForFTLOptimizeSoon=1000",
             // Enable bounds check elimination validation
-            "--validateBCE=true",
-            "--reprl"]
+            "--validateBCE=true"]
 
         guard randomize else { return args }
 
@@ -69,6 +73,13 @@ let jscProfile = Profile(
         return args
     },
 
+    processArgsReference: commonArgs + [
+                       "--useConcurrentGC=false",
+                       // Disable JIT
+                       "--useFTLJIT=false",
+                       "--useBaselineJIT=false",
+                       "--useDFGJIT=false"],
+
     processEnv: ["UBSAN_OPTIONS":"handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
@@ -76,6 +87,7 @@ let jscProfile = Profile(
     timeout: 250,
 
     codePrefix: """
+                const fhash = fuzzilli_hash;
                 """,
 
     codeSuffix: """
@@ -95,6 +107,11 @@ let jscProfile = Profile(
 
         // TODO we could try to check that OOM crashes are ignored here ( with.shouldNotCrash).
     ],
+
+    differentialTests: ["fuzzilli_hash(fuzzilli('FUZZILLI_RANDOM'))",],
+
+    differentialTestsInvariant: ["fuzzilli_hash(Math.random())",
+                                 "fuzzilli_hash(Date.now())",],
 
     additionalCodeGenerators: [
         (ForceDFGCompilationGenerator, 5),

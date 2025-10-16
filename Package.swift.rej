@@ -1,0 +1,27 @@
+diff a/Package.swift b/Package.swift	(rejected hunks)
+@@ -56,18 +56,22 @@ let package = Package(
+                     .copy("Protobuf/ast.proto"),
+                     .copy("Compiler/Parser")]),
+ 
++        .target(name: "FuzzILTool",
++                dependencies: ["Fuzzilli"]),
++        
+         .target(name: "REPRLRun",
+                 dependencies: ["libreprl"]),
+ 
+         .target(name: "FuzzilliCli",
+                 dependencies: ["Fuzzilli"]),
+-
+-        .target(name: "FuzzILTool",
++        
++        .target(name: "RelateTool",
+                 dependencies: ["Fuzzilli"]),
+ 
++
+         .testTarget(name: "FuzzilliTests",
+                     dependencies: ["Fuzzilli"],
+-                    resources: [.copy("CompilerTests")]),
++                    resources: [ .copy("CompilerTests"), ]),
+     ],
+     swiftLanguageVersions: [.v5]
+ )

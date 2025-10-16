@@ -1,0 +1,38 @@
+diff a/Sources/Fuzzilli/Base/Contributor.swift b/Sources/Fuzzilli/Base/Contributor.swift	(rejected hunks)
+@@ -29,6 +29,14 @@ public class Contributor: Hashable {
+     // Number of crashing programs produced.
+     private var crashingSamples = 0
+ 
++    private var differentialSamples = 0
++
++    private var turbofanSamples = 0
++
++    private var maglevSamples = 0
++
++    private var sparkplugSamples = 0
++
+     // Number of times this instance failed to generate/mutate code.
+     private var failures = 0
+     // Total number of instructions added to programs by this contributor.
+@@ -58,6 +66,21 @@ public class Contributor: Hashable {
+         crashingSamples += 1
+     }
+ 
++    func generatedDifferentialSample() {
++        differentialSamples += 1
++    }
++
++    func generatedTurbofanSample() {
++        turbofanSamples += 1
++    }
++
++    func generatedMaglevSample() {
++        maglevSamples += 1
++    }
++
++    func generatedSparkplugSample() {
++        sparkplugSamples += 1
++    }
+ 
+     func addedInstructions(_ n: Int) {
+         guard n > 0 else { return }

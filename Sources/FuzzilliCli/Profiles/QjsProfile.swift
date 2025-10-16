@@ -19,6 +19,8 @@ let qjsProfile = Profile(
         ["--reprl"]
     },
 
+    processArgsReference: ["--reprl"],
+
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
     maxExecsBeforeRespawn: 1000,
@@ -26,6 +28,7 @@ let qjsProfile = Profile(
     timeout: 250,
 
     codePrefix: """
+                const fhash = () => null;
                 """,
 
     codeSuffix: """
@@ -42,6 +45,10 @@ let qjsProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [],
 

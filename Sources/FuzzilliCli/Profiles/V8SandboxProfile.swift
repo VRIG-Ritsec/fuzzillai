@@ -67,6 +67,8 @@ let v8SandboxProfile = Profile(
         return args
     },
 
+    processArgsReference: [""],   
+
     // ASan options.
     // - abort_on_error=true: We need asan to exit in a way that's detectable for Fuzzilli as a crash
     // - symbolize=false: Symbolization can tak a _very_ long time (> 1s), which may cause crashing samples to time out before the stack trace has been captured (in which case Fuzzilli will discard the sample)
@@ -477,6 +479,10 @@ let v8SandboxProfile = Profile(
         // This triggers a std::vector OOB access that should be caught by the libc++ hardening.
         ("fuzzilli('FUZZILLI_CRASH', 5)", .shouldNotCrash),
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [
         (ForceJITCompilationThroughLoopGenerator,  5),

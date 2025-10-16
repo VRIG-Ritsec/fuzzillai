@@ -1,0 +1,126 @@
+diff a/Sources/FuzzilliCli/main.swift b/Sources/FuzzilliCli/main.swift	(rejected hunks)
+@@ -97,6 +97,9 @@ Options:
+     --additionalArguments=args   : Pass additional arguments to the JS engine. If multiple arguments are passed, they should be separated by a comma.
+     --tag=tag                    : Optional string tag associated with this instance which will be stored in the settings.json file as well as in crashing samples.
+                                    This can for example be used to remember the target revision that is being fuzzed.
++    --dumpling-depth             : Depth used during dumping to traverse objects (default: 3)
++    --dumpling-prop-count        : Amount of properties/array elements to consider during dumping (default: 5)
++
+ """)
+     exit(0)
+ }
+@@ -152,6 +155,9 @@ let swarmTesting = args.has("--swarmTesting")
+ let argumentRandomization = args.has("--argumentRandomization")
+ let additionalArguments = args["--additionalArguments"] ?? ""
+ let tag = args["--tag"]
++let dumplingDepth = UInt32(args.int(for: "--dumpling-depth") ?? 3)
++let dumplingPropCount = UInt32(args.int(for: "--dumpling-prop-count") ?? 5)
++
+ 
+ guard numJobs >= 1 else {
+     configError("Must have at least 1 job")
+@@ -461,10 +471,11 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
+ 
+     // Minimizer to minimize crashes and interesting programs.
+     let minimizer = Minimizer()
+-    
++
+     // Construct the fuzzer instance.
+     return Fuzzer(configuration: configuration,
+                   scriptRunner: runner,
++                  referenceRunner: referenceRunner,
+                   engine: engine,
+                   mutators: mutators,
+                   codeGenerators: codeGenerators,
+@@ -473,21 +484,45 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
+                   environment: environment,
+                   lifter: lifter,
+                   corpus: corpus,
+-                  minimizer: minimizer)
++                  minimizer: minimizer,
++                  localId: localId)
+ }
+ 
++let cwd = FileManager.default.currentDirectoryPath
++#if DEBUG
++    public let relateToolPath = "\(cwd)/.build/debug/RelateTool"
++#else
++    public let relateToolPath = "\(cwd)/.build/release/RelateTool"
++#endif
++if !FileManager.default.fileExists(atPath: relateToolPath) {
++    logger.fatal("RelateTool not found in cwd (\(relateToolPath))")
++}
++if !FileManager.default.fileExists(atPath: "/usr/bin/timeout") {
++    logger.fatal("/usr/bin/timeout not found")
++}
++if !FileManager.default.fileExists(atPath: "/bin/ps") {
++    logger.fatal("/bin/ps not found")
++}
++
++
+ // The configuration of the main fuzzer instance.
+ let mainConfig = Configuration(arguments: CommandLine.arguments,
+                                timeout: UInt32(timeout),
+                                logLevel: logLevel,
+                                crashTests: profile.crashTests,
++                               differentialTests: profile.differentialTests,
++                               differentialTestsInvariant: profile.differentialTestsInvariant,
+                                minimizationLimit: minimizationLimit,
+                                enableDiagnostics: diagnostics,
+                                enableInspection: inspect,
+                                staticCorpus: staticCorpus,
+-                               tag: tag)
++                               tag: tag,
++                               relateToolPath: relateToolPath,
++                               dumplingDepth: dumplingDepth,
++                               dumplingPropCount: dumplingPropCount,
++                               storagePath: storagePath)
+ 
+-let fuzzer = makeFuzzer(with: mainConfig)
++let fuzzer = makeFuzzer(with: mainConfig, localId: 1)
+ 
+ // Create a "UI". We do this now, before fuzzer initialization, so
+ // we are able to print log messages generated during initialization.
+@@ -514,9 +549,6 @@ fuzzer.sync {
+     // Always want some statistics.
+     fuzzer.addModule(Statistics())
+ 
+-    // Check core file generation on linux, prior to moving corpus file directories
+-    fuzzer.checkCoreFileGeneration()
+-
+     // Exit this process when the main fuzzer stops.
+     fuzzer.registerEventListener(for: fuzzer.events.ShutdownComplete) { reason in
+         if resume, let path = storagePath {
+@@ -617,20 +649,27 @@ let workerConfig = Configuration(arguments: CommandLine.arguments,
+                                  timeout: UInt32(timeout),
+                                  logLevel: .warning,
+                                  crashTests: profile.crashTests,
++                                 differentialTests: profile.differentialTests,
++                                 differentialTestsInvariant: profile.differentialTestsInvariant,
+                                  minimizationLimit: minimizationLimit,
+                                  enableDiagnostics: false,
+                                  enableInspection: inspect,
+                                  staticCorpus: staticCorpus,
+-                                 tag: tag)
+-
+-for _ in 1..<numJobs {
+-    let worker = makeFuzzer(with: workerConfig)
++                                 tag: tag,
++                                 relateToolPath: relateToolPath,
++                                 dumplingDepth: dumplingDepth,
++                                 dumplingPropCount: dumplingPropCount,
++                                 storagePath: storagePath)
++
++for i in 1..<numJobs {
++    let localId = UInt32(i + 1);
++    let worker = makeFuzzer(with: workerConfig, localId: localId)
+     worker.async {
+         // Wait some time between starting workers to reduce the load on the main instance.
+         // If we start the workers right away, they will all very quickly find new coverage
+         // and send lots of (probably redundant) programs to the main instance.
+         let minDelay = 1 * Minutes
+-        let maxDelay = 10 * Minutes
++        let maxDelay = 5 * Minutes
+         let delay = Double.random(in: minDelay...maxDelay)
+         Thread.sleep(forTimeInterval: delay)
+ 

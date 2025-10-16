@@ -24,6 +24,7 @@ let v8DebugProfile = Profile(
         ]
         return args
     },
+    processArgsReference: [""],
 
     // We typically fuzz without any sanitizer instrumentation, but if any sanitizers are active, "abort_on_error=1" must probably be set so that sanitizer errors can be detected.
     processEnv: [:],
@@ -58,6 +59,10 @@ let v8DebugProfile = Profile(
 
         // TODO we could try to check that OOM crashes are ignored here ( with.shouldNotCrash).
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [
         (ForceJITCompilationThroughLoopGenerator,  5),

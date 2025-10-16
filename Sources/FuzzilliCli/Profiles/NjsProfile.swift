@@ -18,6 +18,7 @@ let njsProfile = Profile(
     processArgs: { randomize in
         ["fuzz"]
     },
+    processArgsReference: [""],   
 
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
@@ -42,6 +43,10 @@ let njsProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [],
 

@@ -36,6 +36,8 @@ let v8HoleFuzzingProfile = Profile(
         return args
     },
 
+    processArgsReference: [""], 
+
     processEnv: [:],
 
     maxExecsBeforeRespawn: 1000,
@@ -65,6 +67,10 @@ let v8HoleFuzzingProfile = Profile(
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldNotCrash),
         ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldNotCrash),
     ],
+
+    differentialTests: [],
+
+    differentialTestsInvariant: [],
 
     additionalCodeGenerators: [
         (ForceJITCompilationThroughLoopGenerator,  5),

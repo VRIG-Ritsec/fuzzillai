@@ -99,6 +99,8 @@ Options:
                                    This can for example be used to remember the target revision that is being fuzzed.
     --wasm                       : Enable Wasm CodeGenerators (see WasmCodeGenerators.swift).
     --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
+    --dumpling-depth             : Depth used during dumping to traverse objects (default: 3)
+    --dumpling-prop-count        : Amount of properties/array elements to consider during dumping (default: 5)
 
 """)
     exit(0)
@@ -157,6 +159,8 @@ let additionalArguments = args["--additionalArguments"] ?? ""
 let tag = args["--tag"]
 let enableWasm = args.has("--wasm")
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
+let dumplingDepth = UInt32(args.int(for: "--dumpling-depth") ?? 3)
+let dumplingPropCount = UInt32(args.int(for: "--dumpling-prop-count") ?? 5)
 
 guard numJobs >= 1 else {
     configError("Must have at least 1 job")
@@ -380,12 +384,16 @@ func loadCorpus(from dirPath: String) -> [Program] {
 // When using multiple jobs, all Fuzzilli instances should use the same arguments for the JS shell, even if
 // argument randomization is enabled. This way, their corpora are "compatible" and crashes that require
 // (a subset of) the randomly chosen flags can be reproduced on the main instance.
-let jsShellArguments = profile.processArgs(argumentRandomization) + additionalArguments.split(separator: ",").map(String.init)
+let jsShellArguments = profile.processArgs(argumentRandomization) + additionalArguments.split(separator: ",").map(String.init) + ["--dumpling-depth=\(dumplingDepth)", "--dumpling-prop-count=\(dumplingPropCount)"]
 logger.info("Using the following arguments for the target engine: \(jsShellArguments)")
+let jsShellRefArguments = profile.processArgsReference + ["--dumpling-depth=\(dumplingDepth)", "--dumpling-prop-count=\(dumplingPropCount)"]
 
-func makeFuzzer(with configuration: Configuration) -> Fuzzer {
+func makeFuzzer(with configuration: Configuration, localId: UInt32) -> Fuzzer {
+    assert(localId >= 1)
+
     // A script runner to execute JavaScript code in an instrumented JS engine.
     let runner = REPRL(executable: jsShellPath, processArguments: jsShellArguments, processEnvironment: profile.processEnv, maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn)
+    let referenceRunner = REPRL(executable: jsShellPath, processArguments: jsShellRefArguments, processEnvironment: profile.processEnv, maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn)
 
     /// The mutation fuzzer responsible for mutating programs from the corpus and evaluating the outcome.
     let disabledMutators = Set(profile.disabledMutators)
@@ -503,6 +511,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     // Construct the fuzzer instance.
     return Fuzzer(configuration: configuration,
                   scriptRunner: runner,
+                  referenceRunner: referenceRunner,
                   engine: engine,
                   mutators: mutators,
                   codeGenerators: codeGenerators,
@@ -511,23 +520,45 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
                   environment: environment,
                   lifter: lifter,
                   corpus: corpus,
-                  minimizer: minimizer)
+                  minimizer: minimizer,
+                  localId: localId)
+}
+
+let cwd = FileManager.default.currentDirectoryPath
+#if DEBUG
+    public let relateToolPath = "\(cwd)/.build/debug/RelateTool"
+#else
+    public let relateToolPath = "\(cwd)/.build/release/RelateTool"
+#endif
+if !FileManager.default.fileExists(atPath: relateToolPath) {
+    logger.fatal("RelateTool not found in cwd (\(relateToolPath))")
+}
+if !FileManager.default.fileExists(atPath: "/usr/bin/timeout") {
+    logger.fatal("/usr/bin/timeout not found")
+}
+if !FileManager.default.fileExists(atPath: "/bin/ps") {
+    logger.fatal("/bin/ps not found")
 }
 
 // The configuration of the main fuzzer instance.
 let mainConfig = Configuration(arguments: CommandLine.arguments,
                                timeout: UInt32(timeout),
                                logLevel: logLevel,
+                               differentialTests: profile.differentialTests,
+                               differentialTestsInvariant: profile.differentialTestsInvariant,
                                startupTests: profile.startupTests,
                                minimizationLimit: minimizationLimit,
                                enableDiagnostics: diagnostics,
                                enableInspection: inspect,
                                staticCorpus: staticCorpus,
                                tag: tag,
+                               relateToolPath: relateToolPath,
+                               dumplingDepth: dumplingDepth,
+                               dumplingPropCount: dumplingPropCount,
                                isWasmEnabled: enableWasm,
                                storagePath: storagePath)
 
-let fuzzer = makeFuzzer(with: mainConfig)
+let fuzzer = makeFuzzer(with: mainConfig, localId: 1)
 
 // Create a "UI". We do this now, before fuzzer initialization, so
 // we are able to print log messages generated during initialization.
@@ -653,23 +684,29 @@ fuzzer.sync {
 let workerConfig = Configuration(arguments: CommandLine.arguments,
                                  timeout: UInt32(timeout),
                                  logLevel: .warning,
+                                 differentialTests: profile.differentialTests,
+                                 differentialTestsInvariant: profile.differentialTestsInvariant,
                                  startupTests: profile.startupTests,
                                  minimizationLimit: minimizationLimit,
                                  enableDiagnostics: false,
                                  enableInspection: inspect,
                                  staticCorpus: staticCorpus,
                                  tag: tag,
+                                 relateToolPath: relateToolPath,
+                                 dumplingDepth: dumplingDepth,
+                                 dumplingPropCount: dumplingPropCount,
                                  isWasmEnabled: enableWasm,
                                  storagePath: storagePath)
 
-for _ in 1..<numJobs {
-    let worker = makeFuzzer(with: workerConfig)
+for i in 1..<numJobs {
+    let localId = UInt32(i + 1);
+    let worker = makeFuzzer(with: workerConfig, localId: localId)
     worker.async {
         // Wait some time between starting workers to reduce the load on the main instance.
         // If we start the workers right away, they will all very quickly find new coverage
         // and send lots of (probably redundant) programs to the main instance.
         let minDelay = 1 * Minutes
-        let maxDelay = 10 * Minutes
+        let maxDelay = 5 * Minutes
         let delay = Double.random(in: minDelay...maxDelay)
         Thread.sleep(forTimeInterval: delay)
 

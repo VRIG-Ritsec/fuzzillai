@@ -483,6 +483,36 @@ public class ProgramBuilder {
         return probability(0.5) ? randomBuiltinMethodName() : randomCustomMethodName()
     }
 
+    private static func generateConstrained<T: Equatable>(
+            _ generator: () -> T,
+            notIn: any Collection<T>,
+            fallback: () -> T) -> T {
+        var result: T
+        var attempts = 0
+        repeat {
+            if attempts >= 10 {
+                return fallback()
+            }
+            result = generator()
+            attempts += 1
+        } while notIn.contains(result)
+        return result
+    }
+
+    // Generate a string not already contained in `notIn` using the provided `generator`. If it fails
+    // repeatedly, return a random string instead.
+    public func generateString(_ generator: () -> String, notIn: any Collection<String>) -> String {
+        Self.generateConstrained(generator, notIn: notIn,
+            fallback: {String.random(ofLength: Int.random(in: 1...5))})
+    }
+
+    // Find a random variable to use as a string that isn't contained in `notIn`. If it fails
+    // repeatedly, create a random string literal instead.
+    public func findOrGenerateStringLikeVariable(notIn: any Collection<Variable>) -> Variable {
+        return Self.generateConstrained(randomJsVariable, notIn: notIn,
+            fallback: {loadString(String.random(ofLength: Int.random(in: 1...5)))})
+    }
+
     // Settings and constants controlling the behavior of randomParameters() below.
     // This determines how many variables of a given type need to be visible before
     // that type is considered a candidate for a parameter type. For example, if this
@@ -686,6 +716,13 @@ public class ProgramBuilder {
                     // Note that builtin constructors are handled above in the maybeGenerateConstructorAsPath call.
                     return self.randomVariable(forUseAs: .function())
                 }),
+            (.unboundFunction(), {
+                // TODO: We have the same issue as above for functions.
+                // First try to find an existing unbound function. if not present, try to find any
+                // function. Using any function as an unbound function is fine, it just misses the
+                // information about the receiver type (which for many functions doesn't matter).
+                return self.randomVariable(ofType: .unboundFunction()) ?? self.randomVariable(forUseAs: .function())
+            }),
             (.undefined, { return self.loadUndefined() }),
             (.constructor(), {
                     // TODO: We have the same issue as above for functions.
@@ -3823,17 +3860,20 @@ public class ProgramBuilder {
         }
 
         public func wasmTableInit(elementSegment: Variable, table: Variable, tableOffset: Variable, elementSegmentOffset: Variable, nrOfElementsToUpdate: Variable) {
-            // TODO: b/427115604 - assert that table.elemType IS_SUBTYPE_OF elementSegment.elemType (depending on refactor outcome).
+            let elementSegmentType = ILType.wasmFuncRef
+            let tableElemType = b.type(of: table).wasmTableType!.elementType
+            assert(elementSegmentType.Is(tableElemType))
+
             let addrType = b.type(of: table).wasmTableType!.isTable64 ? ILType.wasmi64 : ILType.wasmi32
             b.emit(WasmTableInit(), withInputs: [elementSegment, table, tableOffset, elementSegmentOffset, nrOfElementsToUpdate],
-                types: [.wasmElementSegment(), .object(ofGroup: "WasmTable"), addrType, addrType, addrType])
+                types: [.wasmElementSegment(), .object(ofGroup: "WasmTable"), addrType, .wasmi32, .wasmi32])
         }
 
         public func wasmTableCopy(dstTable: Variable, srcTable: Variable, dstOffset: Variable, srcOffset: Variable, count: Variable) {
-            // TODO: b/427115604 - assert that srcTable.elemType IS_SUBTYPE_OF dstTable.elemType (depending on refactor outcome).
             let dstTableType = b.type(of: dstTable).wasmTableType!
             let srcTableType = b.type(of: srcTable).wasmTableType!
             assert(dstTableType.isTable64 == srcTableType.isTable64)
+            assert(srcTableType.elementType.Is(dstTableType.elementType))
 
             let addrType = dstTableType.isTable64 ? ILType.wasmi64 : ILType.wasmi32
             b.emit(WasmTableCopy(), withInputs: [dstTable, srcTable, dstOffset, srcOffset, count],
@@ -4354,20 +4394,26 @@ public class ProgramBuilder {
 
         @discardableResult
         public func addTable(elementType: ILType, minSize: Int, maxSize: Int? = nil, definedEntries: [WasmTableType.IndexInTableAndWasmSignature] = [], definedEntryValues: [Variable] = [], isTable64: Bool) -> Variable {
-            let inputTypes = if elementType == .wasmFuncRef {
-                Array(repeating: .wasmFunctionDef() | .function(), count: definedEntries.count)
-            } else {
-                [ILType]()
-            }
+            let inputTypes = Array(repeating: getEntryTypeForTable(elementType: elementType), count: definedEntries.count)
             return b.emit(WasmDefineTable(elementType: elementType, limits: Limits(min: minSize, max: maxSize), definedEntries: definedEntries, isTable64: isTable64),
                 withInputs: definedEntryValues, types: inputTypes).output
         }
 
         @discardableResult
-        public func addElementSegment(elementsType: ILType,  elements: [Variable]) -> Variable {
-            let inputTypes = Array(repeating: elementsType, count: elements.count)
+        public func addElementSegment(elements: [Variable]) -> Variable {
+            let inputTypes = Array(repeating: getEntryTypeForTable(elementType: ILType.wasmFuncRef), count: elements.count)
             return b.emit(WasmDefineElementSegment(size: UInt32(elements.count)), withInputs: elements, types: inputTypes).output
         }
+
+        public func getEntryTypeForTable(elementType: ILType) -> ILType {
+            switch elementType {
+                case .wasmFuncRef:
+                    return .wasmFunctionDef() | .function()
+                default:
+                    return .object()
+            }
+        }
+
 
         // This result can be ignored right now, as we can only define one memory per module
         // Also this should be tracked like a global / table.

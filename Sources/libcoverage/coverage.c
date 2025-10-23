@@ -15,6 +15,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,6 +91,13 @@ int cov_initialize(struct cov_context* context)
     context->shmem = mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     close(fd);
 #endif
+
+    // Initialize turbofan optimization bits tracking
+    // Perform the initialzation here instead of cov_finish_initialization so when cov_clear_bitmap calls clear_optimization_bits,
+    // we don't lose track of the previous optimziation bits
+    context->turbofan_optimization_bits_current = 0;
+    context->turbofan_optimization_bits_previous = 0;
+
     return 0;
 }
 
@@ -133,6 +141,10 @@ void cov_finish_initialization(struct cov_context* context, int should_track_edg
     } else {
         context->edge_count = NULL;
     }
+    
+    // Initialize feedback nexus tracking
+    context->current_feedback_nexus = NULL;
+    context->previous_feedback_nexus = NULL;
 
     // Zeroth edge is ignored, see above.
     clear_edge(context->virgin_bits, 0);
@@ -153,8 +165,10 @@ void cov_shutdown(struct cov_context* context)
 
 static uint32_t internal_evaluate(struct cov_context* context, uint8_t* virgin_bits, struct edge_set* new_edges)
 {
-    uint64_t* current = (uint64_t*)context->shmem->edges;
-    uint64_t* end = (uint64_t*)(context->shmem->edges + context->bitmap_size);
+    // Calculate offset to edges array (after feedback nexus data)
+    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    uint64_t* current = (uint64_t*)edges_ptr;
+    uint64_t* end = (uint64_t*)(edges_ptr + context->bitmap_size);
     uint64_t* virgin = (uint64_t*)virgin_bits;
     new_edges->count = 0;
     new_edges->edge_indices = NULL;
@@ -164,9 +178,9 @@ static uint32_t internal_evaluate(struct cov_context* context, uint8_t* virgin_b
         if (*current && unlikely(*current & *virgin)) {
             // New edge(s) found!
             // We know that we have <= UINT32_MAX edges, so every index can safely be truncated to 32 bits.
-            uint32_t index = (uint32_t)((uintptr_t)current - (uintptr_t)context->shmem->edges) * 8;
+            uint32_t index = (uint32_t)((uintptr_t)current - (uintptr_t)edges_ptr) * 8;
             for (uint32_t i = index; i < index + 64; i++) {
-                if (edge(context->shmem->edges, i) == 1 && edge(virgin_bits, i) == 1) {
+                if (edge(edges_ptr, i) == 1 && edge(virgin_bits, i) == 1) {
                     clear_edge(virgin_bits, i);
                     new_edges->count += 1;
                     size_t new_num_entries = new_edges->count;
@@ -184,11 +198,11 @@ static uint32_t internal_evaluate(struct cov_context* context, uint8_t* virgin_b
     // This is in a separate block to increase readability, with a negligible performance penalty in practice,
     // as this pass takes 10-20x as long as the first pass
     if (context->should_track_edges) {
-        current = (uint64_t*)context->shmem->edges;
+        current = (uint64_t*)edges_ptr;
         while (current < end) {
-            uint64_t index = ((uintptr_t)current - (uintptr_t)context->shmem->edges) * 8;
+            uint64_t index = ((uintptr_t)current - (uintptr_t)edges_ptr) * 8;
             for (uint64_t i = index; i < index + 64; i++) {
-                if (edge(context->shmem->edges, i) == 1) {
+                if (edge(edges_ptr, i) == 1) {
                     context->edge_count[i]++;
                 }
             }
@@ -203,7 +217,14 @@ int cov_evaluate(struct cov_context* context, struct edge_set* new_edges)
     uint32_t num_new_edges = internal_evaluate(context, context->virgin_bits, new_edges);
     // TODO found_edges should also include crash bits
     context->found_edges += num_new_edges;
-    return num_new_edges > 0;
+
+    // Checks for feedback nexus and optimziation delta are done separetly in evaluate in ProgramCoverageEvaluator.swift
+    // so just update the feedback nexus and optimization bits here and return whether new edges were found.
+    cov_update_feedback_nexus(context);
+    cov_update_optimization_bits(context);
+
+    // Return 1 if either new edges found
+    return (num_new_edges > 0);
 }
 
 int cov_evaluate_crash(struct cov_context* context)
@@ -216,9 +237,12 @@ int cov_evaluate_crash(struct cov_context* context)
 
 int cov_compare_equal(struct cov_context* context, uint32_t* edges, uint32_t num_edges)
 {
+    // Calculate offset to edges array (after feedback nexus data)
+    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    
     for (int i = 0; i < num_edges; i++) {
         int idx = edges[i];
-        if (edge(context->shmem->edges, idx) == 0)
+        if (edge(edges_ptr, idx) == 0)
             return 0;
     }
 
@@ -227,7 +251,11 @@ int cov_compare_equal(struct cov_context* context, uint32_t* edges, uint32_t num
 
 void cov_clear_bitmap(struct cov_context* context)
 {
-    memset(context->shmem->edges, 0, context->bitmap_size);
+    // Calculate offset to edges array (after feedback nexus data)
+    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    memset(edges_ptr, 0, context->bitmap_size);
+    clear_feedback_nexus(context);
+    clear_optimization_bits(context);
 }
 
 int cov_get_edge_counts(struct cov_context* context, struct edge_counts* edges)
@@ -264,5 +292,91 @@ void cov_reset_state(struct cov_context* context) {
     clear_edge(context->crash_bits, 0);
 
     context->found_edges = 0;
+    
+    // Reset feedback nexus tracking
+    if (context->current_feedback_nexus) {
+        free(context->current_feedback_nexus->nexus_data);
+        free(context->current_feedback_nexus);
+        context->current_feedback_nexus = NULL;
+    }
+    if (context->previous_feedback_nexus) {
+        free(context->previous_feedback_nexus->nexus_data);
+        free(context->previous_feedback_nexus);
+        context->previous_feedback_nexus = NULL;
+    }
+
+    // Reset turbofan optimization bits tracking
+    context->turbofan_optimization_bits_current = 0;
+    context->turbofan_optimization_bits_previous = 0;
+
+    // // Reset maglev optimization bits tracking
+    // context->maglev_optimization_bits_current = 0;
+    // context->maglev_optimization_bits_previous = 0;
 }
 
+int cov_evaluate_feedback_nexus(struct cov_context* context) {
+    if (!context->current_feedback_nexus || !context->previous_feedback_nexus) {
+        return 0;
+    }
+    
+    if (context->current_feedback_nexus->count != context->previous_feedback_nexus->count) {
+        return 1; // delta in # of feedback nexus
+    }
+    
+    // check for delta in feedback nexus data
+    for (uint32_t i = 0; i < context->current_feedback_nexus->count; i++) {
+        struct feedback_nexus_data* current = &context->current_feedback_nexus->nexus_data[i];
+        struct feedback_nexus_data* previous = &context->previous_feedback_nexus->nexus_data[i];
+        
+        if (current->vector_address != previous->vector_address ||
+            current->ic_state != previous->ic_state) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void cov_update_feedback_nexus(struct cov_context* context) {
+    if (!context->shmem) return;
+    
+    // allocate current feedback nexus if not already allocated
+    if (!context->current_feedback_nexus) {
+        context->current_feedback_nexus = malloc(sizeof(struct feedback_nexus_set));
+        context->current_feedback_nexus->nexus_data = malloc(sizeof(struct feedback_nexus_data) * MAX_FEEDBACK_NEXUS);
+    }
+    
+    // copy data from shared memory
+    context->current_feedback_nexus->count = context->shmem->feedback_nexus_count;
+    for (uint32_t i = 0; i < context->current_feedback_nexus->count && i < MAX_FEEDBACK_NEXUS; i++) {
+        context->current_feedback_nexus->nexus_data[i] = context->shmem->feedback_nexus_data[i];
+    }
+}
+
+void clear_feedback_nexus(struct cov_context* context) {
+    struct feedback_nexus_set* temp = context->previous_feedback_nexus;
+    context->previous_feedback_nexus = context->current_feedback_nexus;
+    context->current_feedback_nexus = temp;
+    if (context->current_feedback_nexus) {
+        context->current_feedback_nexus->count = 0;
+    }
+}   
+
+int cov_evaluate_optimization_bits(struct cov_context* context) {
+    if (!context->shmem) return 0;
+    uint8_t delta = 0;
+    // Only check for a delta if current is not 0 and previous is "something"
+    // Otherwise if previous is 0, then there is no delta anyway
+    if (context->turbofan_optimization_bits_current != 0)
+        delta = (uint8_t)(context->turbofan_optimization_bits_current != context->turbofan_optimization_bits_previous);
+    return delta;
+}
+
+void cov_update_optimization_bits(struct cov_context* context) {
+    if (!context->shmem) return;
+    context->turbofan_optimization_bits_current = context->shmem->turbofan_optimization_bits;
+}
+
+void clear_optimization_bits(struct cov_context* context) {
+    context->turbofan_optimization_bits_previous = context->turbofan_optimization_bits_current;
+    context->shmem->turbofan_optimization_bits = 0;
+}

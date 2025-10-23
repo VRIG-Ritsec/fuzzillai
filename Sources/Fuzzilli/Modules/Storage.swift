@@ -152,6 +152,8 @@ public class Storage: Module {
             guard !matched.isEmpty else { return }
 
             let toWrite = matched.joined(separator: "\n") + "\n"
+            
+            
             if let data = toWrite.data(using: .utf8) {
                 if FileManager.default.fileExists(atPath: url.path) {
                     self.appendToFile(url, withContent: data)

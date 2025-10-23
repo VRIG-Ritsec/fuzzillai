@@ -33,16 +33,65 @@ struct edge_counts {
     uint32_t * edge_hit_count;
 };
 
+// Feedback nexus data structure (matches cov.cc)
+struct feedback_nexus_data {
+    uint32_t vector_address;        // Address of FeedbackVector in V8 heap
+    uint32_t ic_state;             // InlineCacheState
+};
+
+// Tracks a set of feedback nexus data
+struct feedback_nexus_set {
+    uint32_t count;
+    struct feedback_nexus_data * nexus_data;
+};
+
 // Size of the shared memory region. Defines an upper limit on the number of
 // coverage edges that can be tracked. When bumping this number, please also
 // update Target/coverage.c.
-#define SHM_SIZE 0x200000
+#define SHM_SIZE 0x202000
 #define MAX_EDGES ((SHM_SIZE - 4) * 8)
+#define MAX_FEEDBACK_NEXUS 100000
 
 // Structure of the shared memory region.
 struct shmem_data {
     uint32_t num_edges;
-    uint8_t edges[];
+    uint32_t feedback_nexus_count; 
+    uint32_t max_feedback_nexus;
+    uint32_t turbofan_flags;
+    uint64_t turbofan_optimization_bits;
+    // uint32_t maglev_optimization_bits;
+    struct feedback_nexus_data feedback_nexus_data[MAX_FEEDBACK_NEXUS];
+    unsigned char edges[];
+};
+
+// Optimization bitmap bit indices (matches V8's OptimizedCompilationInfo::OptimizationBit)
+// Update bitmap if ordering changes.
+enum optimization_bit {
+    BROKER_INIT_AND_SERIALIZATION = 0,
+    GRAPH_BUILDER,
+    INLINING,
+    EARLY_GRAPH_TRIMMING,
+    TYPER,
+    TYPED_LOWERING,
+    LOOP_PEELING,
+    LOOP_EXIT_ELIMINATION,
+    LOAD_ELIMINATION,
+    ESCAPE_ANALYSIS,
+    TYPE_ASSERTIONS,
+    SIMPLIFIED_LOWERING,
+    JS_WASM_INLINING,
+    WASM_TYPING,
+    WASM_GC_OPTIMIZATION,
+    JS_WASM_LOWERING,
+    WASM_OPTIMIZATION,
+    UNTYPER,
+    GENERIC_LOWERING,
+    EARLY_OPTIMIZATION,
+    SCHEDULING,
+    INSTRUCTION_SELECTION,
+    REGISTER_ALLOCATION,
+    CODE_GENERATION,
+    COUNT
 };
 
 struct cov_context {
@@ -76,6 +125,18 @@ struct cov_context {
 
     // Count of occurrences per edge
     uint32_t * edge_count;
+    
+    // Feedback nexus tracking
+    struct feedback_nexus_set * current_feedback_nexus;
+    struct feedback_nexus_set * previous_feedback_nexus;
+
+    // Turbofan optimization pass tracking
+    uint64_t turbofan_optimization_bits_current;
+    uint64_t turbofan_optimization_bits_previous;
+
+    // // Maglev optimization pass tracking
+    // uint32_t maglev_optimization_bits_current;
+    // uint32_t maglev_optimization_bits_previous;
 };
 
 int cov_initialize(struct cov_context*);
@@ -92,5 +153,16 @@ void cov_clear_bitmap(struct cov_context*);
 int cov_get_edge_counts(struct cov_context* context, struct edge_counts* edges);
 void cov_clear_edge_data(struct cov_context* context, uint32_t index);
 void cov_reset_state(struct cov_context* context);
+
+// Feedback nexus functions
+int cov_evaluate_feedback_nexus(struct cov_context* context);
+void cov_update_feedback_nexus(struct cov_context* context);
+void clear_feedback_nexus(struct cov_context* context);
+
+
+// Turbofan and Maglev optimization bits functions
+int cov_evaluate_optimization_bits(struct cov_context* context);
+void cov_update_optimization_bits(struct cov_context* context);
+void clear_optimization_bits(struct cov_context* context);
 
 #endif

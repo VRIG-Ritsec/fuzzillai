@@ -20,23 +20,30 @@ public class CovEdgeSet: ProgramAspects {
     private var numEdges: UInt32
     fileprivate var edges: UnsafeMutablePointer<UInt32>?
 
-    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32) {
+    init(edges: UnsafeMutablePointer<UInt32>?, numEdges: UInt32, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false) {
         self.numEdges = numEdges
         self.edges = edges
-        super.init(outcome: .succeeded)
+        super.init(outcome: .succeeded, hasFeedbackNexusDelta: hasFeedbackNexusDelta, hasOptimizationDelta: hasOptimizationDelta)
     }
 
     deinit {
         free(edges)
     }
 
-    /// The number of aspects is simply the number of newly discovered coverage edges.
+    /// The number of aspects is the number of newly discovered coverage edges plus feedback nexus delta.
     public override var count: UInt32 {
-        return numEdges
+        return numEdges //+ (hasFeedbackNexusDelta ? 1 : 0) + (hasOptimizationDelta ? 1 : 0)
     }
 
     public override var description: String {
-        return "new coverage: \(count) newly discovered edge\(count > 1 ? "s" : "") in the CFG of the target"
+        var desc = "new coverage: \(numEdges) newly discovered edge\(numEdges > 1 ? "s" : "") in the CFG of the target"
+        if hasFeedbackNexusDelta {
+            desc += " with feedback nexus delta"
+        }
+        if hasOptimizationDelta {
+            desc += " with optimization delta"
+        }
+        return desc
     }
 
     /// Returns an array of all the newly discovered edges of this CovEdgeSet.
@@ -163,12 +170,29 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
             return nil
         }
 
-        if result == 1 {
-            return CovEdgeSet(edges: newEdgeSet.edge_indices, numEdges: newEdgeSet.count)
-        } else {
-            assert(newEdgeSet.edge_indices == nil && newEdgeSet.count == 0)
-            return nil
+        // Check for feedback nexus delta separately
+        let feedbackNexusDelta = libcoverage.cov_evaluate_feedback_nexus(&context)
+
+        // Check for optimization delta separately
+        let optimizationDelta = libcoverage.cov_evaluate_optimization_bits(&context)
+
+        let hasFeedbackDelta = feedbackNexusDelta == 1
+        let hasOptimizationDelta = optimizationDelta == 1
+        let hasNewEdges = newEdgeSet.count > 0
+
+        if result == 1 || hasOptimizationDelta || hasFeedbackDelta {
+            return hasNewEdges
+                ? CovEdgeSet(edges: newEdgeSet.edge_indices,
+                             numEdges: newEdgeSet.count,
+                             hasFeedbackNexusDelta: hasFeedbackDelta,
+                             hasOptimizationDelta: hasOptimizationDelta)
+                : ProgramAspects(outcome: .succeeded,
+                                 hasFeedbackNexusDelta: hasFeedbackDelta,
+                                 hasOptimizationDelta: hasOptimizationDelta)
         }
+        
+        assert(newEdgeSet.edge_indices == nil && newEdgeSet.count == 0)
+        return nil
     }
 
     public func evaluateCrash(_ execution: Execution) -> ProgramAspects? {
@@ -197,15 +221,17 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
             return true
         }
 
-        guard let edgeSet = aspects as? CovEdgeSet else {
-            fatalError("Invalid aspects passed to hasAspects")
+        // Handle both CovEdgeSet and basic ProgramAspects
+        if let edgeSet = aspects as? CovEdgeSet {
+            let result = libcoverage.cov_compare_equal(&context, edgeSet.edges, edgeSet.count)
+            if result == -1 {
+                logger.error("Could not compare progam executions")
+            }
+            return result == 1
+        } else {
+            // For non-coverage aspects (like basic ProgramAspects), just check if outcomes match
+            return execution.outcome == aspects.outcome
         }
-
-        let result = libcoverage.cov_compare_equal(&context, edgeSet.edges, edgeSet.count)
-        if result == -1 {
-            logger.error("Could not compare progam executions")
-        }
-        return result == 1
     }
 
     public func computeAspectIntersection(of program: Program, with aspects: ProgramAspects) -> ProgramAspects? {

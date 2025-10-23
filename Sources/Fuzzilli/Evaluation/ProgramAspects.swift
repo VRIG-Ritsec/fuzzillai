@@ -15,17 +15,28 @@
 /// Aspects of a program that make it special.
 public class ProgramAspects: CustomStringConvertible {
     let outcome: ExecutionOutcome
+    let hasFeedbackNexusDelta: Bool
+    let hasOptimizationDelta: Bool
 
-    public init(outcome: ExecutionOutcome) {
+    public init(outcome: ExecutionOutcome, hasFeedbackNexusDelta: Bool = false, hasOptimizationDelta: Bool = false) {
         self.outcome = outcome
+        self.hasFeedbackNexusDelta = hasFeedbackNexusDelta
+        self.hasOptimizationDelta = hasOptimizationDelta
     }
 
     public var description: String {
-        return "execution outcome \(outcome)"
+        var desc = "execution outcome \(outcome)"
+        if hasFeedbackNexusDelta {
+            desc += " with feedback nexus delta"
+        }
+        if hasOptimizationDelta {
+            desc += " with optimization delta"
+        }
+        return desc
     }
 
     // The total number of aspects
     public var count: UInt32 {
-        return 0
+        return hasFeedbackNexusDelta ? 1 : 0
     }
 }

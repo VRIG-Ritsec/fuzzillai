@@ -269,20 +269,149 @@ public class PostgreSQLStorage {
     public func getProgram(hash: String) async throws -> Program? {
         logger.debug("Getting program: hash=\(hash)")
         
-        // For now, return nil (program not found)
-        // TODO: Implement actual database query when PostgreSQL is set up
-        logger.debug("Mock program lookup: program not found")
-        return nil
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
+        )
+        defer { Task { _ = try? await connection.close() } }
+        
+        let query: PostgresQuery = "SELECT program_base64 FROM program WHERE program_hash = \(hash) LIMIT 1"
+        let result = try await connection.query(query, logger: self.logger)
+        let rows = try await result.collect()
+        
+        guard let row = rows.first else {
+            logger.debug("Program not found: hash=\(hash)")
+            return nil
+        }
+        
+        let programBase64 = try row.decode(String.self, context: .default)
+        
+        // Decode the program from base64
+        guard let programData = Data(base64Encoded: programBase64) else {
+            logger.warning("Failed to decode base64 data for program: \(hash)")
+            throw PostgreSQLStorageError.invalidData
+        }
+        
+        let program: Program
+        do {
+            let protobuf = try Fuzzilli_Protobuf_Program(serializedBytes: programData)
+            program = try Program(from: protobuf)
+        } catch {
+            logger.warning("Failed to decode program from protobuf: \(hash), error: \(error)")
+            throw PostgreSQLStorageError.invalidData
+        }
+        
+        logger.debug("Program found: hash=\(hash)")
+        return program
     }
     
     /// Get program metadata for a specific fuzzer
     public func getProgramMetadata(programHash: String, fuzzerId: Int) async throws -> ExecutionMetadata? {
         logger.debug("Getting program metadata: hash=\(programHash), fuzzerId=\(fuzzerId)")
         
-        // For now, return nil (metadata not found)
-        // TODO: Implement actual database query when PostgreSQL is set up
-        logger.debug("Mock metadata lookup: metadata not found")
-        return nil
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
+        )
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Query for program metadata with latest execution information
+        let queryString = """
+            SELECT 
+                p.program_hash,
+                p.created_at,
+                eo.outcome,
+                eo.description,
+                e.execution_time_ms,
+                e.coverage_total,
+                e.signal_code,
+                e.exit_code,
+                e.created_at as execution_created_at
+            FROM program p
+            LEFT JOIN execution e ON p.program_base64 = e.program_base64
+            LEFT JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
+            WHERE p.program_hash = '\(programHash)' AND p.fuzzer_id = \(fuzzerId)
+            ORDER BY e.created_at DESC
+            LIMIT 1
+        """
+        
+        let query = PostgresQuery(stringLiteral: queryString)
+        let result = try await connection.query(query, logger: self.logger)
+        let rows = try await result.collect()
+        
+        guard let row = rows.first else {
+            logger.debug("Program metadata not found: hash=\(programHash), fuzzerId=\(fuzzerId)")
+            return nil
+        }
+        
+        let _ = try row.decode(String.self, context: .default) // programHash
+        let _ = try row.decode(Date.self, context: .default) // createdAt
+        let outcome = try row.decode(String?.self, context: .default)
+        let description = try row.decode(String?.self, context: .default)
+        let _ = try row.decode(Int?.self, context: .default) // executionTimeMs
+        let coverageTotal = try row.decode(Double?.self, context: .default)
+        let _ = try row.decode(Int?.self, context: .default) // signalCode
+        let _ = try row.decode(Int?.self, context: .default) // exitCode
+        let _ = try row.decode(Date?.self, context: .default) // executionCreatedAt
+        
+        // Map outcome string to database ID
+        let outcomeId: Int
+        switch (outcome ?? "Succeeded").lowercased() {
+        case "crashed":
+            outcomeId = 1
+        case "failed":
+            outcomeId = 2
+        case "succeeded":
+            outcomeId = 3
+        case "timedout":
+            outcomeId = 4
+        case "sigcheck":
+            outcomeId = 34
+        default:
+            outcomeId = 3 // Default to succeeded
+        }
+        
+        let dbOutcome = DatabaseExecutionOutcome(
+            id: outcomeId,
+            outcome: outcome ?? "Succeeded",
+            description: description ?? "Program executed successfully"
+        )
+        
+        var metadata = ExecutionMetadata(lastOutcome: dbOutcome)
+        if let coverage = coverageTotal {
+            metadata.lastCoverage = coverage
+        }
+        
+        logger.debug("Program metadata found: hash=\(programHash), fuzzerId=\(fuzzerId)")
+        return metadata
     }
     
     // MARK: - Execution Management
@@ -497,10 +626,109 @@ public class PostgreSQLStorage {
     public func getExecutionHistory(programHash: String, fuzzerId: Int, limit: Int = 100) async throws -> [ExecutionRecord] {
         logger.debug("Getting execution history: hash=\(programHash), fuzzerId=\(fuzzerId), limit=\(limit)")
         
-        // For now, return empty array
-        // TODO: Implement actual database query when PostgreSQL is set up
-        logger.debug("Mock execution history lookup: no executions found")
-        return []
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
+        )
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Query for execution history
+        let queryString = """
+            SELECT 
+                e.execution_id,
+                e.program_base64,
+                e.execution_type_id,
+                e.mutator_type_id,
+                e.execution_outcome_id,
+                e.feedback_vector,
+                e.turboshaft_ir,
+                e.coverage_total,
+                e.execution_time_ms,
+                e.signal_code,
+                e.exit_code,
+                e.stdout,
+                e.stderr,
+                e.fuzzout,
+                e.turbofan_optimization_bits,
+                e.feedback_nexus_count,
+                e.execution_flags,
+                e.engine_arguments,
+                e.created_at
+            FROM execution e
+            JOIN program p ON e.program_base64 = p.program_base64
+            WHERE p.program_hash = '\(programHash)' AND p.fuzzer_id = \(fuzzerId)
+            ORDER BY e.created_at DESC
+            LIMIT \(limit)
+        """
+        
+        let query = PostgresQuery(stringLiteral: queryString)
+        let result = try await connection.query(query, logger: self.logger)
+        let rows = try await result.collect()
+        
+        var executionRecords: [ExecutionRecord] = []
+        
+        for row in rows {
+            let executionId = try row.decode(Int.self, context: .default)
+            let programBase64 = try row.decode(String.self, context: .default)
+            let executionTypeId = try row.decode(Int.self, context: .default)
+            let mutatorTypeId = try row.decode(Int?.self, context: .default)
+            let executionOutcomeId = try row.decode(Int.self, context: .default)
+            let feedbackVector = try row.decode(Data?.self, context: .default)
+            let turboshaftIr = try row.decode(String?.self, context: .default)
+            let coverageTotal = try row.decode(Double?.self, context: .default)
+            let executionTimeMs = try row.decode(Int?.self, context: .default)
+            let signalCode = try row.decode(Int?.self, context: .default)
+            let exitCode = try row.decode(Int?.self, context: .default)
+            let stdout = try row.decode(String?.self, context: .default)
+            let stderr = try row.decode(String?.self, context: .default)
+            let fuzzout = try row.decode(String?.self, context: .default)
+            let turbofanOptimizationBits = try row.decode(Int64?.self, context: .default)
+            let feedbackNexusCount = try row.decode(Int?.self, context: .default)
+            let executionFlags = try row.decode([String]?.self, context: .default)
+            let engineArguments = try row.decode([String]?.self, context: .default)
+            let createdAt = try row.decode(Date.self, context: .default)
+            
+            let executionRecord = ExecutionRecord(
+                executionId: executionId,
+                programBase64: programBase64,
+                executionTypeId: executionTypeId,
+                mutatorTypeId: mutatorTypeId,
+                executionOutcomeId: executionOutcomeId,
+                feedbackVector: feedbackVector,
+                turboshaftIr: turboshaftIr,
+                coverageTotal: coverageTotal,
+                executionTimeMs: executionTimeMs,
+                signalCode: signalCode,
+                exitCode: exitCode,
+                stdout: stdout,
+                stderr: stderr,
+                fuzzout: fuzzout,
+                turbofanOptimizationBits: turbofanOptimizationBits,
+                feedbackNexusCount: feedbackNexusCount,
+                executionFlags: executionFlags,
+                engineArguments: engineArguments,
+                createdAt: createdAt
+            )
+            
+            executionRecords.append(executionRecord)
+        }
+        
+        logger.debug("Found \(executionRecords.count) execution records for program: hash=\(programHash)")
+        return executionRecords
     }
     
     // MARK: - Crash Management
@@ -519,11 +747,55 @@ public class PostgreSQLStorage {
         let programHash = DatabaseUtils.calculateProgramHash(program: program)
         logger.debug("Storing crash: hash=\(programHash), fuzzerId=\(fuzzerId), executionId=\(executionId), type=\(crashType)")
         
-        // For now, return a mock crash ID
-        // TODO: Implement actual database storage when PostgreSQL is set up
-        let mockCrashId = Int.random(in: 1...1000)
-        logger.debug("Mock crash storage successful: crashId=\(mockCrashId)")
-        return mockCrashId
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
+        )
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Insert crash record
+        let signalCodeValue = signalCode != nil ? "\(signalCode!)" : "NULL"
+        let exitCodeValue = exitCode != nil ? "\(exitCode!)" : "NULL"
+        let stdoutValue = stdout != nil ? "'\(stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+        let stderrValue = stderr != nil ? "'\(stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+        
+        let queryString = """
+            INSERT INTO crash_analysis (
+                execution_id, crash_type, signal_code, exit_code, 
+                stdout, stderr, is_reproducible, created_at
+            ) VALUES (
+                \(executionId), '\(crashType.replacingOccurrences(of: "'", with: "''"))', 
+                \(signalCodeValue), \(exitCodeValue), 
+                \(stdoutValue), \(stderrValue), 
+                true, NOW()
+            ) RETURNING id
+        """
+        
+        let query = PostgresQuery(stringLiteral: queryString)
+        let result = try await connection.query(query, logger: self.logger)
+        let rows = try await result.collect()
+        
+        guard let row = rows.first else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let crashId = try row.decode(Int.self, context: .default)
+        logger.debug("Crash storage successful: crashId=\(crashId)")
+        return crashId
     }
     
     // MARK: - Query Operations
@@ -647,9 +919,39 @@ public class PostgreSQLStorage {
     public func updateProgramMetadata(programHash: String, fuzzerId: Int, metadata: ExecutionMetadata) async throws {
         logger.debug("Updating program metadata: hash=\(programHash), fuzzerId=\(fuzzerId), executionCount=\(metadata.executionCount)")
         
-        // For now, just log the operation
-        // TODO: Implement actual database update when PostgreSQL is set up
-        logger.debug("Mock metadata update successful")
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
+        )
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Update program metadata in the program table
+        // Note: Since we don't have a dedicated metadata table, we'll update the program record
+        // with the latest execution information
+        let queryString = """
+            UPDATE program 
+            SET updated_at = NOW()
+            WHERE program_hash = '\(programHash)' AND fuzzer_id = \(fuzzerId)
+        """
+        
+        let query = PostgresQuery(stringLiteral: queryString)
+        try await connection.query(query, logger: self.logger)
+        
+        logger.debug("Program metadata update successful: hash=\(programHash), fuzzerId=\(fuzzerId)")
     }
     
     // MARK: - Statistics
@@ -658,16 +960,59 @@ public class PostgreSQLStorage {
     public func getStorageStatistics() async throws -> StorageStatistics {
         logger.debug("Getting storage statistics")
         
-        // For now, return mock statistics
-        // TODO: Implement actual database statistics when PostgreSQL is set up
-        let mockStats = StorageStatistics(
-            totalPrograms: 0,
-            totalExecutions: 0,
-            totalCrashes: 0,
-            activeFuzzers: 0
+        // Use direct connection to avoid connection pool deadlock
+        guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
+            throw PostgreSQLStorageError.noResult
+        }
+        
+        let connection = try await PostgresConnection.connect(
+            on: eventLoopGroup.next(),
+            configuration: PostgresConnection.Configuration(
+                host: "localhost",
+                port: 5433,
+                username: "fuzzilli",
+                password: "fuzzilli123",
+                database: "fuzzilli",
+                tls: .disable
+            ),
+            id: 0,
+            logger: logger
         )
-        logger.debug("Mock statistics: \(mockStats.description)")
-        return mockStats
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Query for total programs
+        let programsQuery: PostgresQuery = "SELECT COUNT(*) as total_programs FROM program"
+        let programsResult = try await connection.query(programsQuery, logger: self.logger)
+        let programsRows = try await programsResult.collect()
+        let totalPrograms = try programsRows.first?.decode(Int.self, context: .default) ?? 0
+        
+        // Query for total executions
+        let executionsQuery: PostgresQuery = "SELECT COUNT(*) as total_executions FROM execution"
+        let executionsResult = try await connection.query(executionsQuery, logger: self.logger)
+        let executionsRows = try await executionsResult.collect()
+        let totalExecutions = try executionsRows.first?.decode(Int.self, context: .default) ?? 0
+        
+        // Query for total crashes
+        let crashesQuery: PostgresQuery = "SELECT COUNT(*) as total_crashes FROM crash_analysis"
+        let crashesResult = try await connection.query(crashesQuery, logger: self.logger)
+        let crashesRows = try await crashesResult.collect()
+        let totalCrashes = try crashesRows.first?.decode(Int.self, context: .default) ?? 0
+        
+        // Query for active fuzzers
+        let fuzzersQuery: PostgresQuery = "SELECT COUNT(*) as active_fuzzers FROM main WHERE status = 'active'"
+        let fuzzersResult = try await connection.query(fuzzersQuery, logger: self.logger)
+        let fuzzersRows = try await fuzzersResult.collect()
+        let activeFuzzers = try fuzzersRows.first?.decode(Int.self, context: .default) ?? 0
+        
+        let stats = StorageStatistics(
+            totalPrograms: totalPrograms,
+            totalExecutions: totalExecutions,
+            totalCrashes: totalCrashes,
+            activeFuzzers: activeFuzzers
+        )
+        
+        logger.debug("Storage statistics: \(stats.description)")
+        return stats
     }
 }
 

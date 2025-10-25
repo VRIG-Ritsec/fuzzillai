@@ -114,17 +114,28 @@ public class DatabasePool {
     
     /// Get connection pool statistics
     public func getPoolStats() async throws -> PoolStats {
-        guard isInitialized, let _ = connectionPool else {
+        guard isInitialized, let pool = connectionPool else {
             throw DatabasePoolError.notInitialized
         }
         
-        // For now, return basic stats
-        // TODO: Implement actual pool statistics when PostgresKit supports it
+        // Test connection health by executing a simple query
+        let isHealthy: Bool
+        do {
+            let _ = try await withConnection { connection in
+                connection.query("SELECT 1 as health_check", logger: self.logger)
+            }
+            isHealthy = true
+        } catch {
+            isHealthy = false
+        }
+        
+        // PostgresKit doesn't expose detailed pool statistics in the current version,
+        // but we can provide basic information and health status
         return PoolStats(
             totalConnections: maxConnections,
             activeConnections: 0, // Not available in current PostgresKit version
             idleConnections: 0,   // Not available in current PostgresKit version
-            isHealthy: true
+            isHealthy: isHealthy
         )
     }
     

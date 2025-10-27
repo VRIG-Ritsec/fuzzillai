@@ -58,17 +58,17 @@ final class DatabaseUtilsTests: XCTestCase {
     }
     
     func testExecutionOutcomeMapping() {
-        // Test mapping to database ID
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .succeeded), 1)
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .failed(1)), 2)
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .crashed(1)), 3)
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .timedOut), 4)
+        // Test mapping to database ID (based on postgres-init.sql schema)
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .succeeded), 3)  // ID 3 = Succeeded
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .failed(1)), 2)   // ID 2 = Failed
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .crashed(1)), 1)   // ID 1 = Crashed
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcome(outcome: .timedOut), 4)     // ID 4 = TimedOut
         
         // Test mapping from database ID
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 1), .succeeded)
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 2), .failed(1))
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 3), .crashed(1))
-        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 4), .timedOut)
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 1), .crashed(1))  // ID 1 = Crashed
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 2), .failed(1))   // ID 2 = Failed
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 3), .succeeded)   // ID 3 = Succeeded
+        XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 4), .timedOut)     // ID 4 = TimedOut
         XCTAssertEqual(DatabaseUtils.mapExecutionOutcomeFromId(id: 999), .succeeded) // Invalid ID fallback
     }
     

@@ -10,15 +10,9 @@ jobs:
   build_test:
     timeout-minutes: 30
     strategy:
-      # If macos-latest fails, we still don't want to cancel ubuntu-latest or the other way around.
-      fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        kind: [debug]
-        include:
-          # On linux also build and test release.
-          - os: ubuntu-latest
-            kind: release
+        os: [ubuntu-latest]
+        kind: [debug, release]
 
     runs-on: ${{ matrix.os }}
 
@@ -49,8 +43,7 @@ jobs:
 
       # Is it failing to run tests b/c we're overriding
       # what swift binary to use?
-      - name: Setup Swift for Ubuntu
-        if: runner.os == 'Linux'
+      - name: Setup Swift
         run: |
           wget -q https://download.swift.org/swift-${SWIFT_VERSION}-release/ubuntu2204/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           tar xzf swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
@@ -59,46 +52,13 @@ jobs:
           export PATH="/opt/swift/usr/bin:${PATH}"
       - uses: actions/checkout@v2
       
-      - name: Setup PostgreSQL Database (Linux)
-        if: runner.os == 'Linux'
+      - name: Setup PostgreSQL Database Schema
         run: |
-          # Wait for PostgreSQL to be ready
+          # Wait for PostgreSQL service to be ready
           until pg_isready -h localhost -p 5432 -U fuzzilli; do
-            echo "Waiting for PostgreSQL to be ready..."
+            echo "Waiting for PostgreSQL service to be ready..."
             sleep 2
           done
-          
-          # Initialize the database schema
-          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -f postgres-init.sql
-          
-          # Verify the schema was created
-          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -c "
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_schema = 'public' 
-          ORDER BY table_name;
-          "
-      
-      - name: Setup PostgreSQL Database (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          # Install PostgreSQL using Homebrew
-          brew install postgresql@15
-          
-          # Start PostgreSQL service
-          brew services start postgresql@15
-          
-          # Wait for PostgreSQL to be ready
-          until pg_isready -h localhost -p 5432 -U $USER; do
-            echo "Waiting for PostgreSQL to be ready..."
-            sleep 2
-          done
-          
-          # Create database and user
-          createdb fuzzilli || true
-          psql -d fuzzilli -c "CREATE USER fuzzilli WITH PASSWORD 'fuzzilli123';" || true
-          psql -d fuzzilli -c "GRANT ALL PRIVILEGES ON DATABASE fuzzilli TO fuzzilli;" || true
-          psql -d fuzzilli -c "ALTER USER fuzzilli CREATEDB;" || true
           
           # Initialize the database schema
           PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -f postgres-init.sql

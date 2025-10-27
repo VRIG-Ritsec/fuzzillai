@@ -12,13 +12,12 @@ public class PostgreSQLTestUtils {
     
     /// Check if PostgreSQL is available for testing
     public static func isPostgreSQLAvailable() -> Bool {
-        // In CI environments, we assume PostgreSQL is available if DATABASE_URL is set
+        // In CI environments, PostgreSQL is always available on Linux runners
         if ProcessInfo.processInfo.environment["DATABASE_URL"] != nil {
             return true
         }
         
-        // For local testing, we could add more sophisticated checks here
-        // For now, we'll assume it's available if we're running tests
+        // For local testing, assume it's available
         return true
     }
 }

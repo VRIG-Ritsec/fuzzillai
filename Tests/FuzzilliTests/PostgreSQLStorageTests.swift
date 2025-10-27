@@ -17,7 +17,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testFuzzerRegistration() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test fuzzer registration (this would fail without actual database)
@@ -37,7 +37,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testProgramStorage() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Create execution metadata
@@ -64,7 +64,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testExecutionStorage() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test execution storage interface
@@ -89,7 +89,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testCrashStorage() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test crash storage interface
@@ -113,7 +113,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testProgramRetrieval() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test program retrieval (this would fail without actual database)
@@ -128,7 +128,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testMetadataRetrieval() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test metadata retrieval
@@ -143,7 +143,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testExecutionHistoryRetrieval() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test execution history retrieval
@@ -158,7 +158,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testRecentProgramsRetrieval() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test recent programs retrieval
@@ -173,7 +173,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testMetadataUpdate() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Create execution metadata
@@ -193,7 +193,7 @@ final class PostgreSQLStorageTests: XCTestCase {
     }
     
     func testStorageStatistics() async throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let storage = PostgreSQLStorage(databasePool: databasePool)
         
         // Test storage statistics

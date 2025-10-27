@@ -12,12 +12,33 @@ public class PostgreSQLTestUtils {
     
     /// Check if PostgreSQL is available for testing
     public static func isPostgreSQLAvailable() -> Bool {
-        // In CI environments, PostgreSQL is always available on Linux runners
-        if ProcessInfo.processInfo.environment["DATABASE_URL"] != nil {
-            return true
+        // Try to create a database pool and test the connection
+        do {
+            let connectionString = getConnectionString()
+            let databasePool = DatabasePool(connectionString: connectionString)
+            
+            // Try to initialize the pool
+            let semaphore = DispatchSemaphore(value: 0)
+            var isAvailable = false
+            
+            Task {
+                do {
+                    try await databasePool.initialize()
+                    let connected = try await databasePool.testConnection()
+                    isAvailable = connected
+                    await databasePool.shutdown()
+                } catch {
+                    isAvailable = false
+                }
+                semaphore.signal()
+            }
+            
+            // Wait for the async operation to complete (with timeout)
+            let result = semaphore.wait(timeout: .now() + 5.0)
+            return result == .success && isAvailable
+            
+        } catch {
+            return false
         }
-        
-        // For local testing, assume it's available
-        return true
     }
 }

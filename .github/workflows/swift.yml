@@ -52,6 +52,11 @@ jobs:
           export PATH="/opt/swift/usr/bin:${PATH}"
       - uses: actions/checkout@v2
       
+      - name: Install PostgreSQL Client Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Setup PostgreSQL Database Schema
         run: |
           # Wait for PostgreSQL service to be ready
@@ -59,15 +64,15 @@ jobs:
             echo "Waiting for PostgreSQL service to be ready..."
             sleep 2
           done
-          
+
           # Initialize the database schema
           PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -f postgres-init.sql
-          
+
           # Verify the schema was created
           PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -c "
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_schema = 'public' 
+          SELECT table_name
+          FROM information_schema.tables
+          WHERE table_schema = 'public'
           ORDER BY table_name;
           "
         

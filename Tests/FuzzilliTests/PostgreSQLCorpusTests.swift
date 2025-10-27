@@ -5,7 +5,7 @@ import Foundation
 final class PostgreSQLCorpusTests: XCTestCase {
 
     func testPostgreSQLCorpusInitialization() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -20,7 +20,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusAddProgram() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         
         // Create corpus
         let corpus = PostgreSQLCorpus(
@@ -43,7 +43,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusRandomElementAccess() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -62,7 +62,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusAllPrograms() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -78,7 +78,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusStateExportImport() throws {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -106,7 +106,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusDuplicateProgramHandling() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -121,7 +121,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusStatistics() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -140,7 +140,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusWithDifferentAspects() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 10,
             maxSize: 100,
@@ -171,7 +171,7 @@ final class PostgreSQLCorpusTests: XCTestCase {
     }
     
     func testPostgreSQLCorpusInterestingProgramTracking() {
-        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
+        let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())
         let corpus = PostgreSQLCorpus(
             minSize: 1,
             maxSize: 10,

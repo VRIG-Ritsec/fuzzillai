@@ -1,4 +1,5 @@
 import Foundation
+@testable import Fuzzilli
 
 /// Utility functions for PostgreSQL tests
 public class PostgreSQLTestUtils {

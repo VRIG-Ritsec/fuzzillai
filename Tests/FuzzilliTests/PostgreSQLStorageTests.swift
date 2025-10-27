@@ -4,10 +4,9 @@ import Foundation
 
 final class PostgreSQLStorageTests: XCTestCase {
 
-    func testPostgreSQLStorageInitialization() {
+    func testPostgreSQLStorageInitialization() throws {
         guard PostgreSQLTestUtils.isPostgreSQLAvailable() else {
-            XCTSkip("PostgreSQL not available for testing")
-            return
+            throw XCTSkip("PostgreSQL not available for testing")
         }
         
         let databasePool = DatabasePool(connectionString: PostgreSQLTestUtils.getConnectionString())

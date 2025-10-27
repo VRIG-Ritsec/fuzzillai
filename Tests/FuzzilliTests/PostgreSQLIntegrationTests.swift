@@ -42,7 +42,7 @@ final class PostgreSQLIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(fuzzerId, 0, "Should return a valid fuzzer ID")
         
         // Verify the fuzzer was actually stored
-        let fuzzer = try await storage.getFuzzer(name: "test-fuzzer-\(UUID().uuidString.prefix(8))")
+        let _ = try await storage.getFuzzer(name: "test-fuzzer-\(UUID().uuidString.prefix(8))")
         // Note: This will be nil because we're using a different UUID, but the registration should work
     }
     

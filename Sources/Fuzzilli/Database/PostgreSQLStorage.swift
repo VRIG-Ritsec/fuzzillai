@@ -40,7 +40,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -51,43 +51,41 @@ public class PostgreSQLStorage {
         )
         defer { Task { _ = try? await connection.close() } }
         
-        // First, check if a fuzzer with this name already exists
-        let checkQuery: PostgresQuery = "SELECT fuzzer_id, status FROM main WHERE fuzzer_name = \(name)"
-        let checkResult = try await connection.query(checkQuery, logger: self.logger)
-        let checkRows = try await checkResult.collect()
-        
-        if let existingRow = checkRows.first {
-            let existingFuzzerId = try existingRow.decode(Int.self, context: .default)
-            let existingStatus = try existingRow.decode(String.self, context: .default)
+        // Try to insert directly - if it fails due to duplicate, we'll handle it
+        do {
+            let insertQuery: PostgresQuery = """
+                INSERT INTO main (fuzzer_name, engine_type, status) 
+                VALUES (\(name), \(engineType), 'active') 
+                RETURNING fuzzer_id
+            """
             
-            // Update status to active if it was inactive
-            if existingStatus != "active" {
-                let updateQuery: PostgresQuery = "UPDATE main SET status = 'active' WHERE fuzzer_id = \(existingFuzzerId)"
-                try await connection.query(updateQuery, logger: self.logger)
-                logger.debug("Reactivated existing fuzzer: fuzzerId=\(existingFuzzerId)")
-            } else {
-                logger.debug("Reusing existing active fuzzer: fuzzerId=\(existingFuzzerId)")
+            let result = try await connection.query(insertQuery, logger: self.logger)
+            let rows = try await result.collect()
+            guard let row = rows.first else {
+                throw PostgreSQLStorageError.noResult
             }
             
-            return existingFuzzerId
+            let fuzzerId = try row.decode(Int.self, context: .default)
+            self.logger.debug("Created new fuzzer: fuzzerId=\(fuzzerId)")
+            return fuzzerId
+            
+        } catch {
+            // If insert failed, try to find existing fuzzer
+            logger.debug("Insert failed, checking for existing fuzzer: \(error)")
+            
+            let checkQuery: PostgresQuery = "SELECT fuzzer_id FROM main WHERE fuzzer_name = \(name)"
+            let checkResult = try await connection.query(checkQuery, logger: self.logger)
+            let checkRows = try await checkResult.collect()
+            
+            if let existingRow = checkRows.first {
+                let existingFuzzerId = try existingRow.decode(Int.self, context: .default)
+                logger.debug("Reusing existing fuzzer: fuzzerId=\(existingFuzzerId)")
+                return existingFuzzerId
+            } else {
+                // Re-throw the original error if we can't find existing fuzzer
+                throw error
+            }
         }
-        
-        // If no existing fuzzer found, create a new one
-        let insertQuery: PostgresQuery = """
-            INSERT INTO main (fuzzer_name, engine_type, status) 
-            VALUES (\(name), \(engineType), 'active') 
-            RETURNING fuzzer_id
-        """
-        
-        let result = try await connection.query(insertQuery, logger: self.logger)
-        let rows = try await result.collect()
-        guard let row = rows.first else {
-            throw PostgreSQLStorageError.noResult
-        }
-        
-        let fuzzerId = try row.decode(Int.self, context: .default)
-        self.logger.debug("Created new fuzzer: fuzzerId=\(fuzzerId)")
-        return fuzzerId
     }
     
     /// Get fuzzer instance by name
@@ -103,7 +101,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -155,7 +153,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -223,7 +221,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -278,7 +276,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -332,7 +330,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -429,7 +427,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -526,7 +524,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -635,7 +633,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -756,7 +754,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -812,7 +810,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -928,7 +926,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -969,7 +967,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5432,
+                port: 5433,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",

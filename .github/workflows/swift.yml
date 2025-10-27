@@ -22,8 +22,25 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: fuzzilli
+          POSTGRES_USER: fuzzilli
+          POSTGRES_PASSWORD: fuzzilli123
+          POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fuzzilli -d fuzzilli"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       SWIFT_VERSION: 6.1
+      DATABASE_URL: postgresql://fuzzilli:fuzzilli123@localhost:5432/fuzzilli
 
     steps:
       - uses: actions/setup-node@v4
@@ -41,6 +58,59 @@ jobs:
           rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           export PATH="/opt/swift/usr/bin:${PATH}"
       - uses: actions/checkout@v2
+      
+      - name: Setup PostgreSQL Database (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Wait for PostgreSQL to be ready
+          until pg_isready -h localhost -p 5432 -U fuzzilli; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 2
+          done
+          
+          # Initialize the database schema
+          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -f postgres-init.sql
+          
+          # Verify the schema was created
+          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -c "
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          ORDER BY table_name;
+          "
+      
+      - name: Setup PostgreSQL Database (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Install PostgreSQL using Homebrew
+          brew install postgresql@15
+          
+          # Start PostgreSQL service
+          brew services start postgresql@15
+          
+          # Wait for PostgreSQL to be ready
+          until pg_isready -h localhost -p 5432 -U $USER; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 2
+          done
+          
+          # Create database and user
+          createdb fuzzilli || true
+          psql -d fuzzilli -c "CREATE USER fuzzilli WITH PASSWORD 'fuzzilli123';" || true
+          psql -d fuzzilli -c "GRANT ALL PRIVILEGES ON DATABASE fuzzilli TO fuzzilli;" || true
+          psql -d fuzzilli -c "ALTER USER fuzzilli CREATEDB;" || true
+          
+          # Initialize the database schema
+          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -f postgres-init.sql
+          
+          # Verify the schema was created
+          PGPASSWORD=fuzzilli123 psql -h localhost -p 5432 -U fuzzilli -d fuzzilli -c "
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          ORDER BY table_name;
+          "
+        
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v
       - name: Run tests with Node.js

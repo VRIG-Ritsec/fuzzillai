@@ -6,7 +6,7 @@ final class PostgreSQLCorpusIntegrationTests: XCTestCase {
 
     func testPostgreSQLCorpusCLIIntegration() {
         // Test that PostgreSQL corpus can be created with proper configuration
-        let databasePool = DatabasePool(connectionString: "postgresql://localhost:5432/fuzzilli")
+        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
         let fuzzerInstanceId = "test-fuzzer-123"
         
         let corpus = PostgreSQLCorpus(
@@ -24,7 +24,7 @@ final class PostgreSQLCorpusIntegrationTests: XCTestCase {
     
     func testPostgreSQLCorpusConfiguration() {
         // Test that PostgreSQL corpus accepts the same configuration as BasicCorpus
-        let databasePool = DatabasePool(connectionString: "postgresql://localhost:5432/fuzzilli")
+        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
         let fuzzerInstanceId = "test-fuzzer-456"
         
         let corpus = PostgreSQLCorpus(
@@ -49,7 +49,7 @@ final class PostgreSQLCorpusIntegrationTests: XCTestCase {
     
     func testPostgreSQLCorpusProtocolConformance() {
         // Test that PostgreSQLCorpus properly implements the Corpus protocol
-        let databasePool = DatabasePool(connectionString: "postgresql://localhost:5432/fuzzilli")
+        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
         let fuzzerInstanceId = "test-fuzzer-789"
         
         let corpus: Corpus = PostgreSQLCorpus(
@@ -85,7 +85,7 @@ final class PostgreSQLCorpusIntegrationTests: XCTestCase {
     
     func testPostgreSQLCorpusWithDifferentSizes() {
         // Test PostgreSQL corpus with different size configurations
-        let databasePool = DatabasePool(connectionString: "postgresql://localhost:5432/fuzzilli")
+        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
         let fuzzerInstanceId = "test-fuzzer-sizes"
         
         // Test with small sizes
@@ -115,7 +115,7 @@ final class PostgreSQLCorpusIntegrationTests: XCTestCase {
     
     func testPostgreSQLCorpusStatistics() {
         // Test that statistics are properly tracked
-        let databasePool = DatabasePool(connectionString: "postgresql://localhost:5432/fuzzilli")
+        let databasePool = DatabasePool(connectionString: "PostgreSQLTestUtils.getConnectionString()")
         let fuzzerInstanceId = "test-fuzzer-stats"
         
         let corpus = PostgreSQLCorpus(

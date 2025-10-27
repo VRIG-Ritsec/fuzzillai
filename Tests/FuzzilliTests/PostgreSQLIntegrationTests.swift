@@ -10,8 +10,12 @@ final class PostgreSQLIntegrationTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         
-        // Use the PostgreSQL container we set up
-        let connectionString = "postgresql://fuzzilli:fuzzilli123@localhost:5433/fuzzilli"
+        // Skip tests if PostgreSQL is not available
+        guard PostgreSQLTestUtils.isPostgreSQLAvailable() else {
+            throw XCTSkip("PostgreSQL not available for testing")
+        }
+        
+        let connectionString = PostgreSQLTestUtils.getConnectionString()
         databasePool = DatabasePool(connectionString: connectionString)
         
         try await databasePool.initialize()

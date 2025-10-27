@@ -341,7 +341,7 @@ public class PostgreSQLCorpus: ComponentBase, Corpus {
                     executionType: executionType,
                     mutatorType: nil,
                     outcome: aspects.outcome,
-                    coverage: aspects is CovEdgeSet ? Double((aspects as! CovEdgeSet).count) : 0.0,
+                    coverage: fuzzer.evaluator.currentScore,
                     coverageEdges: Set<Int>() // Empty for now
                 )
                 executionBatchData.append(executionData)
@@ -702,7 +702,7 @@ public class PostgreSQLCorpus: ComponentBase, Corpus {
                 fuzzerId: fuzzerId,
                 executionType: executionType,
                 outcome: executionData.outcome,
-                coverage: aspects is CovEdgeSet ? Double((aspects as! CovEdgeSet).count) : 0.0,
+                coverage: fuzzer.evaluator.currentScore,
                 executionTimeMs: Int(executionData.execTime * 1000), // Convert to milliseconds
                 stdout: executionData.stdout,
                 stderr: executionData.stderr,
@@ -742,7 +742,7 @@ public class PostgreSQLCorpus: ComponentBase, Corpus {
                 fuzzerId: fuzzerId,
                 execution: execution,
                 executionType: executionType,
-                coverage: aspects is CovEdgeSet ? Double((aspects as! CovEdgeSet).count) : 0.0
+                coverage: fuzzer.evaluator.currentScore
             )
             
             // logger.debug("Stored execution with metadata: programHash=\(programHash), executionId=\(executionId), execTime=\(execution.execTime), outcome=\(execution.outcome)")
@@ -779,7 +779,7 @@ public class PostgreSQLCorpus: ComponentBase, Corpus {
                 executionType: executionType,
                 mutatorType: mutatorType,
                 outcome: aspects.outcome,
-                coverage: aspects is CovEdgeSet ? Double((aspects as! CovEdgeSet).count) : 0.0
+                coverage: fuzzer.evaluator.currentScore
             )
             
             // logger.debug("Stored execution in database: programHash=\(programHash), executionId=\(executionId)")
@@ -821,17 +821,7 @@ public class PostgreSQLCorpus: ComponentBase, Corpus {
         
         // Update coverage if available
         if let edgeSet = aspects as? CovEdgeSet {
-            // Track the count of edges and store the actual edge indices
-            metadata.lastCoverage = Double(edgeSet.count) // Simple coverage metric
-            
-            // Store the actual edge indices for proper edge tracking
-            // Convert the CovEdgeSet to a Set<Int> of edge indices
-            var edgeIndices: Set<Int> = []
-            // CovEdgeSet doesn't conform to Sequence, so we'll use the count as a simple metric
-            // In a real implementation, we would need access to the actual edges
-            for i in 0..<Int(edgeSet.count) {
-                edgeIndices.insert(i)
-            }
+            edgeIndexCoverage = Double(context.found_edges) / Double(context.num_edges)
             metadata.coverageEdges = edgeIndices
         }
     }

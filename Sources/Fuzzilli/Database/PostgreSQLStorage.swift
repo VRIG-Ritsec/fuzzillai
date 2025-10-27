@@ -40,7 +40,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -103,7 +103,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -155,7 +155,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -223,7 +223,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -278,7 +278,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -332,7 +332,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -429,7 +429,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -526,7 +526,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -635,7 +635,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -756,7 +756,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -812,7 +812,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -928,7 +928,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",
@@ -969,7 +969,7 @@ public class PostgreSQLStorage {
             on: eventLoopGroup.next(),
             configuration: PostgresConnection.Configuration(
                 host: "localhost",
-                port: 5433,
+                port: 5432,
                 username: "fuzzilli",
                 password: "fuzzilli123",
                 database: "fuzzilli",

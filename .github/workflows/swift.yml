@@ -1,10 +1,3 @@
-name: build_test
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   build_test:
@@ -21,6 +14,28 @@ jobs:
             kind: release
 
     runs-on: ${{ matrix.os }}
+
+    # --- NEW SERVICE CONTAINER BLOCK ---
+    # Service containers are only supported on Linux
+    services:
+      # Label used to access the service container
+      postgres:
+        if: matrix.os == 'ubuntu-latest'
+        # Docker Hub image
+        image: postgres
+        # Use 'trust' auth to allow password-less connections,
+        # matching the test's connection string.
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
 
     env:
       SWIFT_VERSION: 6.1
@@ -40,23 +55,18 @@ jobs:
           mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
           rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           export PATH="/opt/swift/usr/bin:${PATH}"
+      - uses: actions/checkout@v2
 
-      - name: Start PostgreSQL and create database (Linux)
+      # --- MODIFIED STEP FOR LINUX ---
+      # This step just creates the DB in the service container.
+      - name: Create PostgreSQL database (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo systemctl start postgresql
-          # Find the active pg_hba.conf file
-          HBA_CONF=$(sudo -u postgres psql -t -P format=unaligned -c 'SHOW hba_file;')
-          # Add a line to allow all local users to connect without a password (trust auth)
-          # This is safe in a CI environment
-          echo "local   all             all                                     trust" | sudo tee -a $HBA_CONF
-          # Restart postgres to apply the new auth setting
-          sudo systemctl restart postgresql
-          # Wait for restart
-          sleep 2
-          # Create the 'fuzzilli' database. The 'runner' user can now connect.
-          createdb fuzzilli
+          # The service container is running on localhost:5432
+          # We just need to create the database. Auth is 'trust'.
+          createdb -h localhost -p 5432 fuzzilli
 
+      # --- UNCHANGED STEP FOR MACOS ---
       - name: Start PostgreSQL and create database (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -68,7 +78,8 @@ jobs:
           # On macOS/brew, this usually works without password auth by default for the current user.
           createdb fuzzilli
       
-      - uses: actions/checkout@v2
+      # --- END OF NEW STEPS ---
+
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v
       - name: Run tests with Node.js

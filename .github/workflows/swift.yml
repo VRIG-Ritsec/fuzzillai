@@ -40,6 +40,34 @@ jobs:
           mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
           rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           export PATH="/opt/swift/usr/bin:${PATH}"
+
+      - name: Start PostgreSQL and create database (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql
+          # Find the active pg_hba.conf file
+          HBA_CONF=$(sudo -u postgres psql -t -P format=unaligned -c 'SHOW hba_file;')
+          # Add a line to allow all local users to connect without a password (trust auth)
+          # This is safe in a CI environment
+          echo "local   all             all                                     trust" | sudo tee -a $HBA_CONF
+          # Restart postgres to apply the new auth setting
+          sudo systemctl restart postgresql
+          # Wait for restart
+          sleep 2
+          # Create the 'fuzzilli' database. The 'runner' user can now connect.
+          createdb fuzzilli
+
+      - name: Start PostgreSQL and create database (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Start the pre-installed postgresql service
+          brew services start postgresql
+          # Wait for it to be ready
+          sleep 5 
+          # Create the 'fuzzilli' database.
+          # On macOS/brew, this usually works without password auth by default for the current user.
+          createdb fuzzilli
+      
       - uses: actions/checkout@v2
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v

@@ -1,26 +1,18 @@
-
 jobs:
-  build_test:
+  build_test_linux:
     timeout-minutes: 30
     strategy:
-      # If macos-latest fails, we still don't want to cancel ubuntu-latest or the other way around.
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        kind: [debug]
-        include:
-          # On linux also build and test release.
-          - os: ubuntu-latest
-            kind: release
+        # Linux runs both debug and release
+        kind: [debug, release]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
-    # --- NEW SERVICE CONTAINER BLOCK ---
     # Service containers are only supported on Linux
     services:
       # Label used to access the service container
       postgres:
-        if: matrix.os == 'ubuntu-latest'
         # Docker Hub image
         image: postgres
         # Use 'trust' auth to allow password-less connections,
@@ -45,10 +37,7 @@ jobs:
         with:
           node-version: 25-nightly
 
-      # Is it failing to run tests b/c we're overriding
-      # what swift binary to use?
       - name: Setup Swift for Ubuntu
-        if: runner.os == 'Linux'
         run: |
           wget -q https://download.swift.org/swift-${SWIFT_VERSION}-release/ubuntu2204/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           tar xzf swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
@@ -57,28 +46,13 @@ jobs:
           export PATH="/opt/swift/usr/bin:${PATH}"
       - uses: actions/checkout@v2
 
-      # --- MODIFIED STEP FOR LINUX ---
-      # This step just creates the DB in the service container.
       - name: Create PostgreSQL database (Linux)
-        if: runner.os == 'Linux'
         run: |
           # The service container is running on localhost:5432
           # We just need to create the database. Auth is 'trust'.
+          # Wait a few seconds for the service to be fully ready after health check
+          sleep 5
           createdb -h localhost -p 5432 fuzzilli
-
-      # --- UNCHANGED STEP FOR MACOS ---
-      - name: Start PostgreSQL and create database (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          # Start the pre-installed postgresql service
-          brew services start postgresql
-          # Wait for it to be ready
-          sleep 5 
-          # Create the 'fuzzilli' database.
-          # On macOS/brew, this usually works without password auth by default for the current user.
-          createdb fuzzilli
-      
-      # --- END OF NEW STEPS ---
 
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v
@@ -90,3 +64,49 @@ jobs:
         run: jsvu --os=default --engines=v8
       - name: Run tests with d8
         run: FUZZILLI_TEST_SHELL=~/.jsvu/engines/v8/v8 swift test -c ${{ matrix.kind }} -v
+
+  build_test_macos:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS only runs debug
+        kind: [debug]
+
+    runs-on: macos-latest
+
+    # No 'services' block here, as it's not supported on macOS
+
+    env:
+      SWIFT_VERSION: 6.1
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25-nightly
+
+      # No Swift setup needed for macOS, it uses the pre-installed one
+      
+      - uses: actions/checkout@v2
+
+      - name: Start PostgreSQL and create database (macOS)
+        run: |
+          # Start the pre-installed postgresql service
+          brew services start postgresql
+          # Wait for it to be ready
+          sleep 5 
+          # Create the 'fuzzilli' database.
+          # On macOS/brew, this usually works without password auth by default for the current user.
+          createdb fuzzilli
+      
+      - name: Build
+        run: swift build -c ${{ matrix.kind }} -v
+      - name: Run tests with Node.js
+        run: swift test -c ${{ matrix.kind }} -v
+      - name: Install jsvu
+        run: npm install jsvu -g
+      - name: Install d8
+        run: jsvu --os=default --engines=v8
+      - name: Run tests with d8
+        run: FUZZILLI_TEST_SHELL=~/.jsvu/engines/v8/v8 swift test -c ${{ matrix.kind }} -v
+

@@ -6,7 +6,7 @@ set -e
 echo "=== Fuzzilli PostgreSQL Setup ==="
 
 # Detect container runtime
-if command -v docker &> /dev/null && command -v docker-compose &> /dev/null; then
+if command -v docker &> /dev/null; then
     CONTAINER_RUNTIME="docker"
     echo "Using Docker"
 elif command -v podman &> /dev/null; then
@@ -19,8 +19,8 @@ else
 fi
 
 # Detect compose command
-if command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
+if command -v docker &> /dev/null; then
+    COMPOSE_CMD="docker compose"
 elif command -v podman-compose &> /dev/null; then
     COMPOSE_CMD="podman-compose"
 else

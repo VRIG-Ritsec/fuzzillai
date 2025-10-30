@@ -10,13 +10,11 @@ jobs:
   build_test:
     timeout-minutes: 30
     strategy:
-      # If macos-latest fails, we still don't want to cancel ubuntu-latest or the other way around.
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
         kind: [debug]
         include:
-          # On linux also build and test release.
           - os: ubuntu-latest
             kind: release
 
@@ -24,30 +22,66 @@ jobs:
 
     env:
       SWIFT_VERSION: 6.1
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fuzzilli
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fuzzilli
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 25-nightly
+          node-version: 20
 
-      # Is it failing to run tests b/c we're overriding
-      # what swift binary to use?
-      - name: Setup Swift for Ubuntu
+      - name: Setup Swift (Linux only)
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libicu-dev libxml2 libsqlite3-dev libblocksruntime-dev tzdata
           wget -q https://download.swift.org/swift-${SWIFT_VERSION}-release/ubuntu2204/swift-${SWIFT_VERSION}-RELEASE/swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           tar xzf swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
-          mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
-          rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
-          export PATH="/opt/swift/usr/bin:${PATH}"
-      - uses: actions/checkout@v2
+          sudo mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
+          echo "/opt/swift/usr/bin" | sudo tee -a /etc/environment
+          echo "/opt/swift/usr/bin" >> $GITHUB_PATH
+
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL to become ready..."
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 2
+          done
+          psql $DATABASE_URL -c 'SELECT version();'
+
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v
-      - name: Run tests with Node.js
+
+      - name: Run tests
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
         run: swift test -c ${{ matrix.kind }} -v
+
       - name: Install jsvu
         run: npm install jsvu -g
+
       - name: Install d8
         run: jsvu --os=default --engines=v8
+
       - name: Run tests with d8
-        run: FUZZILLI_TEST_SHELL=~/.jsvu/engines/v8/v8 swift test -c ${{ matrix.kind }} -v
+        env:
+          FUZZILLI_TEST_SHELL: ~/.jsvu/engines/v8/v8
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: swift test -c ${{ matrix.kind }} -v

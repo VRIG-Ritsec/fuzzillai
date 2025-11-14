@@ -13,7 +13,7 @@ import config_loader as config_loader
 from agents.FoG import Father
 from agents.EBG import EBG
 from smolagents import LiteLLMModel
-from config_loader import get_openai_api_key, get_anthropic_api_key
+from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 logger = logging.getLogger("rises_the_fog")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
@@ -41,12 +41,17 @@ class FatherOfGod:
         logger.info("Initializing FatherOfGod")
         self.openai_api_key = get_openai_api_key()
         self.anthropic_api_key = get_anthropic_api_key()
+        self.deepseek_api_key = get_deepseek_api_key()
+        
+        if self.deepseek_api_key:
+            os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+        
         self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
-        self.system = Father(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
+        self.system = Father(self.model, api_key=self.deepseek_api_key, anthropic_api_key=self.anthropic_api_key)
         # self.ebg = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
         
 
-def run(force_logging: bool = False):
+def run(force_logging: bool = True):
 
     site.addsitedir(Path(__file__).parent.parent)
     #smolagent-fork

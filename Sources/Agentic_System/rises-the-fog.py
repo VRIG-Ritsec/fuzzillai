@@ -75,7 +75,6 @@ def run(force_logging: bool = False):
 
         if os.path.exists(log_path):
             print(f"Log file already exists: {log_path}")
-            sys.exit(0)
 
                         
         # Configure logger to write messages as-is (no prefixes) for 1:1 capture

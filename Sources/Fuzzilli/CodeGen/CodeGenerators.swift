@@ -178,6 +178,16 @@ public let CodeGenerators: [CodeGenerator] = [
         }
     },
 
+    CodeGenerator("setPrototypeRelationGenerator") { b in
+        // Modify and Test state of sets with relations 
+        // only used on sets
+        let relationName = chooseUniform(from: [
+            "union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf", "isDisjointWith"])
+        let set1 = b.randomVariable(ofType: .set())
+        let set2 = b.randomVariable(ofType: .set())
+        relation = b.callMethod(relationName, on: set1, withArgs: [set2])
+    },
+
     CodeGenerator("BuiltinTemporalGenerator") { b in
         let _ = chooseUniform(from: [b.constructTemporalInstant, b.constructTemporalDuration,
                              b.constructTemporalTime, b.constructTemporalYearMonth, b.constructTemporalMonthDay,

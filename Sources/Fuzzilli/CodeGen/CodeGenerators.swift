@@ -180,12 +180,14 @@ public let CodeGenerators: [CodeGenerator] = [
 
     CodeGenerator("setPrototypeRelationGenerator") { b in
         // Modify and Test state of sets with relations 
-        // only used on sets
+        // checks if atleast 2 Set variables exist (could be the same)
+        // returns early if there are no sets
+        guard let set1 = b.randomVariable(ofType: .set()) else { return }
+        guard let set2 = b.randomVariable(ofType: .set()) else { return }
+        
         let relationName = chooseUniform(from: [
             "union", "intersection", "difference", "symmetricDifference", "isSubsetOf", "isSupersetOf", "isDisjointWith"])
-        let set1 = b.randomVariable(ofType: .set())
-        let set2 = b.randomVariable(ofType: .set())
-        relation = b.callMethod(relationName, on: set1, withArgs: [set2])
+        b.callMethod(relationName, on: set1, withArgs: [set2])
     },
 
     CodeGenerator("BuiltinTemporalGenerator") { b in
@@ -193,6 +195,7 @@ public let CodeGenerators: [CodeGenerator] = [
                              b.constructTemporalTime, b.constructTemporalYearMonth, b.constructTemporalMonthDay,
                              b.constructTemporalDate, b.constructTemporalDateTime, b.constructTemporalZonedDateTime])()
     },
+    
     CodeGenerator("TypedArrayGenerator", produces: [.object()]) { b in
         let size = b.loadInt(b.randomSize(upTo: 0x1000))
         let constructor = b.createNamedVariable(

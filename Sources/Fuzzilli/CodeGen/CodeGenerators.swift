@@ -2545,6 +2545,23 @@ public let CodeGenerators: [CodeGenerator] = [
         },
     ]),
 
+    // Creates a .then() chain on an existing promise
+    CodeGenerator("PromiseThenChainGenerator", inputs: .preferred(.object())) { b, promise in
+        let handler = b.buildPlainFunction(with: b.randomParameters()) { args in
+            // inside the handler use the resolved value (first param)
+            if !args.isEmpty && probability(0.7) {
+                b.reassign(args[0], to: b.randomJsVariable())
+            }
+            // maybe return a value (for chaining further .then() calls)
+            if probability(0.8) {
+                b.doReturn(b.randomJsVariable())
+            }
+        }
+        
+        // this produces a new promise that can be used by subsequent generators
+        b.callMethod("then", on: promise, withArgs: [handler])
+    },
+
     // Tries to change the length property of some object
     CodeGenerator("LengthChangeGenerator", inputs: .preferred(.object())) {
         b, obj in

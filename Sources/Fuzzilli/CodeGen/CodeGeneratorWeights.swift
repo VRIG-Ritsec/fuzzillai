@@ -196,6 +196,7 @@ public let codeGeneratorWeights = [
     "LengthChangeGenerator":                    5,
     "ElementKindChangeGenerator":               5,
     "PromiseGenerator":                         3,
+    "setPrototypeRelationGenerator":            4,
     "EvalGenerator":                            3,
     "NumberComputationGenerator":               40,
     "ImitationGenerator":                       30,

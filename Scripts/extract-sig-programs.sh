@@ -47,6 +47,47 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Find FuzzILTool - try multiple locations
+FUZZILTOOL=""
+USE_SWIFT_RUN=false
+if command -v FuzzILTool &> /dev/null; then
+    FUZZILTOOL="FuzzILTool"
+elif [ -f "${PROJECT_ROOT}/.build/x86_64-unknown-linux-gnu/debug/FuzzILTool" ]; then
+    FUZZILTOOL="${PROJECT_ROOT}/.build/x86_64-unknown-linux-gnu/debug/FuzzILTool"
+elif [ -f "${PROJECT_ROOT}/.build/release/FuzzILTool" ]; then
+    FUZZILTOOL="${PROJECT_ROOT}/.build/release/FuzzILTool"
+elif command -v swift &> /dev/null; then
+    # Try using swift run as fallback
+    USE_SWIFT_RUN=true
+    FUZZILTOOL="FuzzILTool"
+fi
+
+# Function to convert .fzil to .js
+convert_to_js() {
+    local fzil_file="$1"
+    local js_file="${fzil_file%.fzil}.js"
+    
+    if [ -z "$FUZZILTOOL" ] && [ "$USE_SWIFT_RUN" = false ]; then
+        return 1
+    fi
+    
+    # Run FuzzILTool to convert
+    if [ "$USE_SWIFT_RUN" = true ]; then
+        # Use swift run
+        cd "${PROJECT_ROOT}"
+        swift run "$FUZZILTOOL" --liftToJS "$fzil_file" > "$js_file" 2>/dev/null
+    else
+        # Use direct binary
+        "$FUZZILTOOL" --liftToJS "$fzil_file" > "$js_file" 2>/dev/null
+    fi
+    
+    if [ $? -eq 0 ] && [ -f "$js_file" ] && [ -s "$js_file" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to run a query
 run_query() {
     local query="$1"
@@ -138,13 +179,23 @@ while IFS='|' read -r execution_id signal_code program_base64 outcome fuzzer_nam
     
     # Create filename: program-{execution_id}-signal-{signal_code}
     filename="program-${execution_id}-signal-${signal_code}"
-    filepath="${OUTPUT_DIR}/${filename}"
+    fzil_filepath="${OUTPUT_DIR}/${filename}.fzil"
+    js_filepath="${OUTPUT_DIR}/${filename}.js"
     
-    # Decode base64 program and write to file
+    # Decode base64 program and write to .fzil file
     if [ -n "$program_base64" ]; then
-        echo "$program_base64" | base64 -d > "$filepath" 2>/dev/null
+        echo "$program_base64" | base64 -d > "$fzil_filepath" 2>/dev/null
         if [ $? -eq 0 ]; then
-            echo -e "${GREEN}[${count}/${total_count}]${NC} Extracted: ${CYAN}${filename}${NC} (${outcome}, signal ${signal_code}, fuzzer: ${fuzzer_name})"
+            # Convert to JavaScript
+            if convert_to_js "$fzil_filepath"; then
+                # Remove .fzil file after successful conversion (keep only .js)
+                rm -f "$fzil_filepath"
+                echo -e "${GREEN}[${count}/${total_count}]${NC} Extracted: ${CYAN}${filename}.js${NC} (${outcome}, signal ${signal_code}, fuzzer: ${fuzzer_name})"
+            else
+                # Keep .fzil if conversion failed
+                echo -e "${YELLOW}[${count}/${total_count}]${NC} Extracted (FuzzIL only): ${CYAN}${filename}.fzil${NC} (${outcome}, signal ${signal_code}, fuzzer: ${fuzzer_name})"
+                echo -e "${YELLOW}  JavaScript conversion failed - FuzzILTool may not be available${NC}"
+            fi
         else
             echo -e "${RED}[${count}/${total_count}]${NC} Failed to decode: ${filename}"
         fi
@@ -158,5 +209,11 @@ echo -e "${CYAN}========================================${NC}"
 echo -e "${GREEN}Extraction complete!${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo -e "Extracted ${count} programs to: ${OUTPUT_DIR}"
+if [ -n "$FUZZILTOOL" ] || [ "$USE_SWIFT_RUN" = true ]; then
+    echo -e "Programs converted to JavaScript (.js files)"
+else
+    echo -e "${YELLOW}Note: FuzzILTool not found - only .fzil files were saved${NC}"
+    echo -e "${YELLOW}  To convert to JavaScript, install FuzzILTool or build with: swift build${NC}"
+fi
 echo ""
 

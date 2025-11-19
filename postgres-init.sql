@@ -237,6 +237,64 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- View for per-fuzzer performance summary
+CREATE OR REPLACE VIEW fuzzer_performance_summary AS
+SELECT 
+    m.fuzzer_id,
+    m.fuzzer_name,
+    m.status,
+    m.created_at,
+    -- Calculate execs/s from last hour of executions
+    COALESCE(
+        (SELECT COUNT(*)::NUMERIC / 3600.0 
+         FROM execution e
+         JOIN program p ON e.program_hash = p.program_hash
+         WHERE p.fuzzer_id = m.fuzzer_id
+         AND e.created_at > NOW() - INTERVAL '1 hour'), 0
+    ) as execs_per_second,
+    (SELECT COUNT(*) FROM program WHERE fuzzer_id = m.fuzzer_id) as programs_count,
+    (SELECT COUNT(*) FROM execution e JOIN program p ON e.program_hash = p.program_hash WHERE p.fuzzer_id = m.fuzzer_id) as executions_count,
+    (SELECT COUNT(*) FROM execution e JOIN program p ON e.program_hash = p.program_hash JOIN execution_outcome eo ON e.execution_outcome_id = eo.id WHERE p.fuzzer_id = m.fuzzer_id AND eo.outcome IN ('Crashed', 'SigCheck')) as crash_count,
+    (SELECT MAX(coverage_total) FROM execution e JOIN program p ON e.program_hash = p.program_hash WHERE p.fuzzer_id = m.fuzzer_id AND e.coverage_total IS NOT NULL) as highest_coverage_pct
+FROM main m;
+
+-- View for crash breakdown by signal per fuzzer
+-- Includes both 'Crashed' and 'SigCheck' outcomes (SIGABRT/DCHECKs are in SigCheck)
+CREATE OR REPLACE VIEW crash_by_signal AS
+SELECT 
+    p.fuzzer_id,
+    m.fuzzer_name,
+    e.signal_code,
+    CASE 
+        WHEN e.signal_code = 11 THEN 'SIGSEGV'
+        WHEN e.signal_code = 6 THEN 'SIGABRT'
+        WHEN e.signal_code = 4 THEN 'SIGILL'
+        WHEN e.signal_code = 8 THEN 'SIGFPE'
+        WHEN e.signal_code = 3 THEN 'SIGQUIT'
+        WHEN e.signal_code = 5 THEN 'SIGTRAP'
+        WHEN e.signal_code = 7 THEN 'SIGBUS'
+        WHEN e.signal_code IS NULL THEN 'NO_SIGNAL'
+        ELSE 'SIG' || e.signal_code::TEXT
+    END as signal_name,
+    COUNT(*) as crash_count
+FROM execution e
+JOIN program p ON e.program_hash = p.program_hash
+JOIN main m ON p.fuzzer_id = m.fuzzer_id
+JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
+WHERE eo.outcome IN ('Crashed', 'SigCheck') AND e.signal_code IS NOT NULL
+GROUP BY p.fuzzer_id, m.fuzzer_name, e.signal_code
+ORDER BY p.fuzzer_id, crash_count DESC;
+
+-- View for global statistics
+-- Includes both 'Crashed' and 'SigCheck' outcomes in crash count (SIGABRT/DCHECKs are in SigCheck)
+CREATE OR REPLACE VIEW global_statistics AS
+SELECT 
+    (SELECT MAX(coverage_total) FROM execution WHERE coverage_total IS NOT NULL) as highest_coverage_pct,
+    (SELECT COUNT(*) FROM fuzzer) as total_programs,
+    (SELECT COUNT(*) FROM execution) as total_executions,
+    (SELECT COUNT(*) FROM execution e JOIN execution_outcome eo ON e.execution_outcome_id = eo.id WHERE eo.outcome IN ('Crashed', 'SigCheck')) as total_crashes,
+    (SELECT COUNT(*) FROM main WHERE status = 'active') as active_fuzzers;
+
 -- Grant permissions
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO fuzzilli;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO fuzzilli;

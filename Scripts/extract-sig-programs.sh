@@ -4,22 +4,33 @@
 # Extracts programs to Scripts/sig_programs/ with naming: program-{execution_id}-signal-{signal_code}
 #
 # Usage:
-#   Local: FUZZILTOOL=/path/to/FuzzILTool ./Scripts/extract-sig-programs.sh
-#   Remote: FUZZILTOOL=/path/to/FuzzILTool POSTGRES_HOST=your-prod-server.com ./Scripts/extract-sig-programs.sh
+#   Local: ./Scripts/extract-sig-programs.sh --fuzziltool /path/to/FuzzILTool
+#   Remote: ./Scripts/extract-sig-programs.sh --fuzziltool /path/to/FuzzILTool --postgres-host your-prod-server.com
 #
-# Required environment variables:
-#   FUZZILTOOL - Path to FuzzILTool binary (required)
+# Required arguments:
+#   --fuzziltool <path> - Path to FuzzILTool binary (required)
 #
-# Optional environment variables (same as start-distributed.sh):
-#   POSTGRES_HOST - Remote PostgreSQL host/IP (required for remote)
-#   POSTGRES_PORT - PostgreSQL port (default: 5432)
-#   POSTGRES_DB - Database name (default: fuzzilli_master)
-#   POSTGRES_USER - Database user (default: fuzzilli)
-#   POSTGRES_PASSWORD - PostgreSQL password (default: fuzzilli123)
+# Optional arguments:
+#   --postgres-host <host> - Remote PostgreSQL host/IP (required for remote mode)
+#   --postgres-port <port> - PostgreSQL port (default: 5432)
+#   --postgres-db <db> - Database name (default: fuzzilli_master)
+#   --postgres-user <user> - Database user (default: fuzzilli)
+#   --postgres-password <password> - PostgreSQL password (default: fuzzilli123)
+#
+# Optional environment variables (can override arguments):
+#   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_DIR="${SCRIPT_DIR}/sig_programs"
+
+# Colors (define early for error messages)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
 # Load environment variables
 if [ -f "${PROJECT_ROOT}/.env" ]; then
@@ -28,7 +39,84 @@ elif [ -f "${PROJECT_ROOT}/env.distributed" ]; then
     source "${PROJECT_ROOT}/env.distributed"
 fi
 
-# Database connection parameters
+# Parse command-line arguments
+FUZZILTOOL=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --fuzziltool)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --fuzziltool requires a path argument${NC}"
+                exit 1
+            fi
+            FUZZILTOOL="$2"
+            shift 2
+            ;;
+        --postgres-host)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --postgres-host requires a host argument${NC}"
+                exit 1
+            fi
+            POSTGRES_HOST="$2"
+            shift 2
+            ;;
+        --postgres-port)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --postgres-port requires a port argument${NC}"
+                exit 1
+            fi
+            POSTGRES_PORT="$2"
+            shift 2
+            ;;
+        --postgres-db)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --postgres-db requires a database name argument${NC}"
+                exit 1
+            fi
+            POSTGRES_DB="$2"
+            shift 2
+            ;;
+        --postgres-user)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --postgres-user requires a user argument${NC}"
+                exit 1
+            fi
+            POSTGRES_USER="$2"
+            shift 2
+            ;;
+        --postgres-password)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --postgres-password requires a password argument${NC}"
+                exit 1
+            fi
+            POSTGRES_PASSWORD="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 --fuzziltool <path> [options]"
+            echo ""
+            echo "Required arguments:"
+            echo "  --fuzziltool <path>     Path to FuzzILTool binary"
+            echo ""
+            echo "Optional arguments:"
+            echo "  --postgres-host <host>  Remote PostgreSQL host/IP (required for remote mode)"
+            echo "  --postgres-port <port>  PostgreSQL port (default: 5432)"
+            echo "  --postgres-db <db>      Database name (default: fuzzilli_master)"
+            echo "  --postgres-user <user>  Database user (default: fuzzilli)"
+            echo "  --postgres-password <p> PostgreSQL password (default: fuzzilli123)"
+            echo ""
+            echo "Environment variables (can override arguments):"
+            echo "  POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error: Unknown option: $1${NC}"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Database connection parameters (command-line args override env vars)
 DB_CONTAINER=${DB_CONTAINER:-"fuzzilli-postgres-master"}
 DB_NAME=${POSTGRES_DB:-"fuzzilli_master"}
 DB_USER=${POSTGRES_USER:-"fuzzilli"}
@@ -42,31 +130,22 @@ if [ -n "$POSTGRES_HOST" ]; then
     USE_REMOTE_DB=true
 fi
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# Check if FUZZILTOOL is set and valid
-if [ -z "${FUZZILTOOL:-}" ]; then
-    echo -e "${RED}Error: FUZZILTOOL environment variable is required${NC}"
+# Check if FUZZILTOOL is provided
+if [ -z "$FUZZILTOOL" ]; then
+    echo -e "${RED}Error: --fuzziltool argument is required${NC}"
     echo ""
-    echo "Please set FUZZILTOOL to the path of the FuzzILTool binary:"
-    echo "  export FUZZILTOOL=/path/to/FuzzILTool"
-    echo "  ./Scripts/extract-sig-programs.sh"
+    echo "Usage: $0 --fuzziltool <path> [options]"
+    echo "  Use --help for more information"
     echo ""
     exit 1
 fi
 
 # Verify FUZZILTOOL exists and is executable
 if [ ! -f "$FUZZILTOOL" ] && ! command -v "$FUZZILTOOL" &> /dev/null; then
-    echo -e "${RED}Error: FUZZILTOOL not found at '$FUZZILTOOL'${NC}"
+    echo -e "${RED}Error: FuzzILTool not found at '$FUZZILTOOL'${NC}"
     echo ""
     echo "Please verify the path is correct:"
-    echo "  export FUZZILTOOL=/path/to/FuzzILTool"
+    echo "  $0 --fuzziltool /path/to/FuzzILTool"
     echo ""
     exit 1
 fi

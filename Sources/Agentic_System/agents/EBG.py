@@ -17,39 +17,41 @@ from tools.rag_tools import (
     search_v8_source_rag,
     get_v8_source_rag_doc,
 )
+from config_loader import get_openai_api_key, get_anthropic_api_key
+from tools.FoG_tools import get_v8_path
+
 import sys
 import yaml 
 import importlib.resources
-sys.path.append(str(Path(__file__).parent.parent))
-from config_loader import get_openai_api_key, get_anthropic_api_key
 
+sys.path.append(str(Path(__file__).parent.parent))
 
 class EBG(Agent): 
     """Verify and test seeds."""
     
     def setup_agents(self):
-        # L3 Worker: Code Analyzer (under RuntimeAnalyzer)
-        system_prompt = self.get_prompt("code_analyzer.txt")
-        self.agents['code_analyzer'] = ToolCallingAgent(
-            name="CodeAnalyzer",
-            description="L3 Worker responsible for analyzing code patterns, vulnerabilities, and specific components for runtime analysis",
+
+        # L2 Worker: V8 Search (under RuntimeAnalyzer and CorpusGenerator)
+        self.agents['v8_search'] = ToolCallingAgent(
+            name="V8Search",
+            description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
             tools=[
-                search_rag_db,
-                list_rag_db,
-                get_rag_doc,
-                search_knowledge_base,
-                get_knowledge_doc,
-                search_v8_source_rag,
-                get_v8_source_rag_doc,
+                fuzzy_finder,
+                ripgrep,
+                tree,
+                read_rag_db_id,
+                write_rag_db_id,
+                read_file,
+                get_realpath,
+                get_runtime_db_ids,
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
-            max_steps=8,  # Fewer steps than L1 CodeAnalyzer
-            planning_interval=None,
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
+            max_steps=50,
+            planning_interval=20,
         )
-        self.agents['code_analyzer'].prompt_templates["system_prompt"] = system_prompt
+        self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
         # L2 Worker: Corpus Validator (under RuntimeAnalyzer)
-        system_prompt = self.get_prompt("corpus_validator.txt")
         self.agents['corpus_validator'] = ToolCallingAgent(
             name="CorpusValidator",
             description="L2 Worker responsible for validating corpus integrity and quality",
@@ -60,10 +62,22 @@ class EBG(Agent):
             max_steps=8,
             planning_interval=None,
         )
-        self.agents['corpus_validator'].prompt_templates["system_prompt"] = system_prompt
+        self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
+        
+        # L2 Worker: DB Analyzer  
+        self.agents['db_analyzer'] = ToolCallingAgent(
+            name="DBAnalyzer",
+            description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
+            tools=[
+
+            ],
+            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            max_steps=8,
+            planning_interval=None,
+        )
+        self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
 
         # L1 Manager: Corpus Generator
-        system_prompt = self.get_prompt("corpus_generator.txt")
         self.agents['corpus_generator'] = ToolCallingAgent(
             name="CorpusGenerator",
             description="L1 Manager responsible for generating program seeds from corpus",
@@ -71,13 +85,16 @@ class EBG(Agent):
                 # Add corpus generation tools here
             ],
             model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            managed_agents=[
+                self.agents['v8_search'],
+                self.agents['corpus_validator']
+            ],
             max_steps=8,
             planning_interval=None,
         )
-        self.agents['corpus_generator'].prompt_templates["system_prompt"] = system_prompt
+        self.agents['corpus_generator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_generator.txt")
 
-        # L2 Manager: Runtime Analyzer  
-        system_prompt = self.get_prompt("runtime_analyzer.txt")
+        # L1 Manager: Runtime Analyzer  
         self.agents['runtime_analyzer'] = ToolCallingAgent(
             name="RuntimeAnalyzer",
             description="L2 Manager responsible for analyzing program runtime, coverage, and execution state",
@@ -86,33 +103,31 @@ class EBG(Agent):
             ],
             model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
             managed_agents=[
-                self.agents['code_analyzer'],
-                self.agents['corpus_validator']
+                self.agents['v8_search'],
+                self.agents['db_analyzer']
             ],
             max_steps=10,
             planning_interval=None,
         )
-        self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = system_prompt
-        
-        # L2 Worker: DB Analyzer  
-        system_prompt = self.get_prompt("db_analyzer.txt")
-        self.agents['db_analyzer'] = ToolCallingAgent(
-            name="DBAnalyzer",
-            description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
+        self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
+
+        # L0 Root Manager
+        self.agents['root_manager'] = ToolCallingAgent(
+            name="RootManager",
+            description="L0 Root Manager", 
             tools=[
-                search_rag_db,
-                list_rag_db,
-                get_rag_doc,
-                search_knowledge_base,
-                get_knowledge_doc,
+
             ],
             model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
-            max_steps=8,
+            managed_agents=[
+                self.agents['runtime_analyzer'],
+                self.agents['corpus_generator']
+            ],
+            max_steps=10,
             planning_interval=None,
         )
-        self.agents['db_analyzer'].prompt_templates["system_prompt"] = system_prompt
-        
-        # L2 Worker: George Foreman
+        self.agents['root_manager'].prompt_templates["system_prompt"] = self.get_prompt("root_manager.txt")
+
         try:
             default_templates = yaml.safe_load(
                 importlib.resources.files("smolagents.prompts").joinpath("toolcalling_agent.yaml").read_text()
@@ -125,27 +140,6 @@ class EBG(Agent):
             else:
                 raise FileNotFoundError(f"Could not find toolcalling_agent.yaml template at {template_path}")
         
-        system_prompt = self.get_prompt("george_foreman.txt")
-        self.agents['george_foreman'] = ToolCallingAgent(
-            name="GeorgeForeman",
-            description="L2 Worker responsible for verifying JavaScript programs for correctness and testing them to evaluate interestingness",
-            tools=[
-                search_rag_db,
-                list_rag_db,
-                get_rag_doc,
-                search_knowledge_base,
-                get_knowledge_doc,
-                search_v8_source_rag,
-                get_v8_source_rag_doc,
-                web_search,
-            ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
-            max_steps=20,
-            planning_interval=None,
-            prompt_templates=default_templates,
-        )
-        self.agents['george_foreman'].prompt_templates["system_prompt"] = system_prompt
-
     def get_prompt(self, prompt_name: str) -> str:
         f = open(Path(__file__).parent.parent / "prompts" / "EBG-prompts" / prompt_name, 'r')
         prompt = f.read()
@@ -156,7 +150,6 @@ class EBG(Agent):
         result = self.run_task(
             task_description="Initialize EBG orchestration for runtime analysis and seed verification",
             context={
-                "GeorgeForeman": "Primary orchestrator responsible for verifying and testing JavaScript programs",
                 "RuntimeAnalyzer": "Analyze program runtime, coverage, and execution state",
                 "CorpusValidator": "Validate corpus quality and integrity",
                 "DBAnalyzer": "Analyze PostgreSQL database for execution information"

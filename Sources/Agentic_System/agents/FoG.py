@@ -20,11 +20,13 @@ from tools.rag_tools import (
     FAISSKnowledgeBase,
 )
 from tools.FoG_tools import get_v8_path
+from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+
 import sys
 import yaml
 import importlib.resources
+
 sys.path.append(str(Path(__file__).parent.parent))
-from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 
 
 class Father(Agent):

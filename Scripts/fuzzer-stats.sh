@@ -73,7 +73,9 @@ check_psql() {
 check_database() {
     if [ "$USE_REMOTE_DB" = true ]; then
         # Check remote postgres connection
-        if ! PGPASSWORD="${DB_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" > /dev/null 2>&1; then
+        export PGPASSWORD="${DB_PASSWORD}"
+        if ! psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1" > /dev/null 2>&1; then
+            unset PGPASSWORD
             echo -e "${RED}Error: Cannot connect to remote PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT}${NC}"
             echo "  Please verify:"
             echo "    - PostgreSQL is running and accessible"
@@ -81,6 +83,7 @@ check_database() {
             echo "    - Network connectivity and firewall rules allow connection"
             exit 1
         fi
+        unset PGPASSWORD
     else
         # Check local container
         if ! docker ps --format "table {{.Names}}" | grep -q "$DB_CONTAINER"; then
@@ -95,11 +98,36 @@ check_database() {
 # Function to run a query and return results
 run_query() {
     local query="$1"
+    local result
+    local exit_code
+    
     if [ "$USE_REMOTE_DB" = true ]; then
-        PGPASSWORD="${DB_PASSWORD}" psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -t -A -F'|' -c "$query" 2>/dev/null
+        # Export PGPASSWORD for psql to use
+        export PGPASSWORD="${DB_PASSWORD}"
+        result=$(psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -t -A -F'|' -c "$query" 2>&1)
+        exit_code=$?
+        unset PGPASSWORD
     else
-        docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -F'|' -c "$query" 2>/dev/null
+        result=$(docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -F'|' -c "$query" 2>&1)
+        exit_code=$?
     fi
+    
+    # If there was an error, check what kind of error it is
+    if [ $exit_code -ne 0 ]; then
+        # Check if it's a real error (not just empty results)
+        if echo "$result" | grep -qiE "(error|does not exist|relation|syntax|permission denied|connection|authentication|could not connect)"; then
+            # Only show actual errors, not warnings or empty results
+            if ! echo "$result" | grep -qiE "(warning|notice|no rows)"; then
+                echo "Query error: $result" >&2
+            fi
+        fi
+        echo ""
+        return 1
+    fi
+    
+    # Return the result (may be empty if no rows)
+    echo "$result"
+    return 0
 }
 
 # Function to format number with commas

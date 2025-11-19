@@ -4,10 +4,13 @@
 # Extracts programs to Scripts/sig_programs/ with naming: program-{execution_id}-signal-{signal_code}
 #
 # Usage:
-#   Local: ./Scripts/extract-sig-programs.sh
-#   Remote: POSTGRES_HOST=your-prod-server.com ./Scripts/extract-sig-programs.sh
+#   Local: FUZZILTOOL=/path/to/FuzzILTool ./Scripts/extract-sig-programs.sh
+#   Remote: FUZZILTOOL=/path/to/FuzzILTool POSTGRES_HOST=your-prod-server.com ./Scripts/extract-sig-programs.sh
 #
-# Environment variables (same as start-distributed.sh):
+# Required environment variables:
+#   FUZZILTOOL - Path to FuzzILTool binary (required)
+#
+# Optional environment variables (same as start-distributed.sh):
 #   POSTGRES_HOST - Remote PostgreSQL host/IP (required for remote)
 #   POSTGRES_PORT - PostgreSQL port (default: 5432)
 #   POSTGRES_DB - Database name (default: fuzzilli_master)
@@ -47,19 +50,25 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Find FuzzILTool - try multiple locations
-FUZZILTOOL=""
-USE_SWIFT_RUN=false
-if command -v FuzzILTool &> /dev/null; then
-    FUZZILTOOL="FuzzILTool"
-elif [ -f "${PROJECT_ROOT}/.build/x86_64-unknown-linux-gnu/debug/FuzzILTool" ]; then
-    FUZZILTOOL="${PROJECT_ROOT}/.build/x86_64-unknown-linux-gnu/debug/FuzzILTool"
-elif [ -f "${PROJECT_ROOT}/.build/release/FuzzILTool" ]; then
-    FUZZILTOOL="${PROJECT_ROOT}/.build/release/FuzzILTool"
-elif command -v swift &> /dev/null; then
-    # Try using swift run as fallback
-    USE_SWIFT_RUN=true
-    FUZZILTOOL="FuzzILTool"
+# Check if FUZZILTOOL is set and valid
+if [ -z "${FUZZILTOOL:-}" ]; then
+    echo -e "${RED}Error: FUZZILTOOL environment variable is required${NC}"
+    echo ""
+    echo "Please set FUZZILTOOL to the path of the FuzzILTool binary:"
+    echo "  export FUZZILTOOL=/path/to/FuzzILTool"
+    echo "  ./Scripts/extract-sig-programs.sh"
+    echo ""
+    exit 1
+fi
+
+# Verify FUZZILTOOL exists and is executable
+if [ ! -f "$FUZZILTOOL" ] && ! command -v "$FUZZILTOOL" &> /dev/null; then
+    echo -e "${RED}Error: FUZZILTOOL not found at '$FUZZILTOOL'${NC}"
+    echo ""
+    echo "Please verify the path is correct:"
+    echo "  export FUZZILTOOL=/path/to/FuzzILTool"
+    echo ""
+    exit 1
 fi
 
 # Function to convert .fzil to .js
@@ -67,19 +76,8 @@ convert_to_js() {
     local fzil_file="$1"
     local js_file="${fzil_file%.fzil}.js"
     
-    if [ -z "$FUZZILTOOL" ] && [ "$USE_SWIFT_RUN" = false ]; then
-        return 1
-    fi
-    
     # Run FuzzILTool to convert
-    if [ "$USE_SWIFT_RUN" = true ]; then
-        # Use swift run
-        cd "${PROJECT_ROOT}"
-        swift run "$FUZZILTOOL" --liftToJS "$fzil_file" > "$js_file" 2>/dev/null
-    else
-        # Use direct binary
-        "$FUZZILTOOL" --liftToJS "$fzil_file" > "$js_file" 2>/dev/null
-    fi
+    "$FUZZILTOOL" --liftToJS "$fzil_file" > "$js_file" 2>/dev/null
     
     if [ $? -eq 0 ] && [ -f "$js_file" ] && [ -s "$js_file" ]; then
         return 0
@@ -209,11 +207,6 @@ echo -e "${CYAN}========================================${NC}"
 echo -e "${GREEN}Extraction complete!${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo -e "Extracted ${count} programs to: ${OUTPUT_DIR}"
-if [ -n "$FUZZILTOOL" ] || [ "$USE_SWIFT_RUN" = true ]; then
-    echo -e "Programs converted to JavaScript (.js files)"
-else
-    echo -e "${YELLOW}Note: FuzzILTool not found - only .fzil files were saved${NC}"
-    echo -e "${YELLOW}  To convert to JavaScript, install FuzzILTool or build with: swift build${NC}"
-fi
+echo -e "Programs converted to JavaScript (.js files)"
 echo ""
 

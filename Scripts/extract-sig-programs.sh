@@ -226,6 +226,7 @@ JOIN main m ON p.fuzzer_id = m.fuzzer_id
 JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
 WHERE eo.outcome IN ('Crashed', 'SigCheck') 
   AND e.signal_code IS NOT NULL
+  AND e.signal_code != 9
 ORDER BY e.execution_id;
 "
 

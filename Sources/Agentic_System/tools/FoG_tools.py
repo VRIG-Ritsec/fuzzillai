@@ -316,15 +316,13 @@ def lift_fuzzil_to_js(target: str) -> str:
     """
     Use FuzzILTool to lift a FuzzIL protobuf to a JavaScript program
 
-    MAX OUTPUT 1000 lines, if output getting cut out please use a more specific search
-
     Args:
         target (str): The path to the target FuzzIL program identified by .fzil to be lifted to JS
 
     Returns:
         str: The lifted JS program from the given FuzzIL
     """
-    return get_output(run_command(f"{FUZZILLI_TOOL_BIN} --liftToFuzzIL {target} | head -n 1000"))
+    return get_output(run_command(f"{FUZZILLI_TOOL_BIN} --liftToJS {target}"))
 
 
 @tool
@@ -332,15 +330,13 @@ def compile_js_to_fuzzil(target: str) -> str:
     """
     Use FuzzILTool to compile a JavaScript program to a FuzzIl program (requires Node.js)
 
-    MAX OUTPUT 1000 lines, if output getting cut out please use a more specific search
-
     Args:
         target (str): The path to the the JavaScript program to compile to FuzzIL
 
     Returns:
         str: The compiled FuzzIL program the given JS program
     """
-    return get_output(run_command(f"{FUZZILLI_TOOL_BIN} --compile {target} | head -n 1000"))
+    return get_output(run_command(f"{FUZZILLI_TOOL_BIN} --compile {target}"))
 
 
 @tool 

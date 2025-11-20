@@ -58,7 +58,7 @@ class EBG(Agent):
             tools=[
                 # Add corpus validation tools here
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             max_steps=8,
             planning_interval=None,
         )
@@ -71,7 +71,7 @@ class EBG(Agent):
             tools=[
 
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             max_steps=8,
             planning_interval=None,
         )
@@ -84,7 +84,7 @@ class EBG(Agent):
             tools=[
                 # Add corpus generation tools here
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['v8_search'],
                 self.agents['corpus_validator']
@@ -101,7 +101,7 @@ class EBG(Agent):
             tools=[
 
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['v8_search'],
                 self.agents['db_analyzer']
@@ -118,7 +118,7 @@ class EBG(Agent):
             tools=[
 
             ],
-            model=LiteLLMModel(model_id="gpt-5-mini", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['runtime_analyzer'],
                 self.agents['corpus_generator']
@@ -169,7 +169,7 @@ def main():
     anthropic_key = get_anthropic_api_key()
     
     model = LiteLLMModel(
-        model_id="gpt-5-mini",
+        model_id="deepseek",
         #model_id="gpt-5",
         api_key=openai_key
     )

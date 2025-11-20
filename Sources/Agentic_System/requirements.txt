@@ -21,6 +21,7 @@ chromadb
 langchain-community
 sentence-transformers
 faiss-cpu
+psycopg2-binary
 
 #Utilities
 pytz

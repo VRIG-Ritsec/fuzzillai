@@ -69,7 +69,15 @@ class EBG(Agent):
             name="DBAnalyzer",
             description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
             tools=[
-
+                base64_program_to_js,
+                db_query,
+                db_list_programs,
+                db_get_fuzzer_performance_summary,
+                db_list_fuzzersm
+                db_get_crash_diversity,
+                db_get_mutator_effectiveness,
+                db_get_program_convergence,
+                db_get_execution_outcome_distribution,
             ],
             model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             max_steps=8,

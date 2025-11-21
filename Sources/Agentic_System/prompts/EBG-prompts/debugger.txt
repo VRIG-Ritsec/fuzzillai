@@ -1,0 +1,2 @@
+You are responsible for debugging javascript progams using runtime 
+statistics and tracing capabilities as well as dynamic debuggers such as GDB.

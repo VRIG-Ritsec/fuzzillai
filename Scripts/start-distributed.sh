@@ -241,6 +241,7 @@ version: '3.8'
 services:
   postgres-master:
     image: postgres:15-alpine
+    shm_size: '2gb'
     container_name: fuzzilli-postgres-master
     environment:
       POSTGRES_DB: ${POSTGRES_DB}

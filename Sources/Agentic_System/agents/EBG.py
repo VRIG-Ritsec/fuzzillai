@@ -77,19 +77,6 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-            # L2 Worker: Corpus Validator 
-            self.agents['corpus_validator'] = ToolCallingAgent(
-                name="CorpusValidator",
-                description="L2 Worker responsible for validating corpus integrity and quality",
-                tools=[
-                    # Add corpus validation tools here
-                ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-                max_steps=8,
-                planning_interval=None,
-            )
-            self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
-            
             # L2 Worker: DB Analyzer  
             self.agents['db_analyzer'] = ToolCallingAgent(
                 name="DBAnalyzer",
@@ -134,7 +121,7 @@ class EBG(Agent):
             )
             self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
             self.agents['JS_Generator'].managed_agents = [
-                self.agents['corpus_validator']
+
             ]
 
             # L1 Manager: Runtime Analyzer  
@@ -195,19 +182,6 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-            # L2 Worker: Corpus Validator 
-            self.agents['corpus_validator'] = ToolCallingAgent(
-                name="CorpusValidator",
-                description="L2 Worker responsible for validating corpus integrity and quality",
-                tools=[
-                    # Add corpus validation tools here
-                ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-                max_steps=8,
-                planning_interval=None,
-            )
-            self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
-            
             # L2 Worker: DB Analyzer  
             self.agents['db_analyzer'] = ToolCallingAgent(
                 name="DBAnalyzer",
@@ -353,7 +327,7 @@ def main():
         model_id="deepseek",
         api_key=deepseek_key
     )
-    
+
     system = EBG(model, api_key=deepseek_key, anthropic_api_key=anthropic_key)
     
     # run task

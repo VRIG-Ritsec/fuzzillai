@@ -297,3 +297,31 @@ def read_file(file_path: str, section: int = None) -> str:
         f"Showing section {section}/{num_sections} (lines {start_line}-{end_line}) of '{file_path}':\n"
         f"{content}"
     )
+
+@tool
+def inspect_git_commit(commit_hash: str) -> str:
+    """
+    Inspect a git commit using git show to display commit details including
+    the commit message, author, date, and the changes (diff) introduced by
+    the commit.
+    
+    Args:
+        commit_hash (str): The SHA-1 commit hash to inspect. Must be a valid
+                          40-character hexadecimal string or a shortened hash
+                          (minimum 7 characters).
+    
+    Returns:
+        str: The full git commit output from the specified commit hash,
+             including commit metadata and the diff. Returns an error message
+             if the commit hash is invalid or the commit cannot be found.
+    
+    Raises:
+        ValueError: If the commit hash format is invalid
+        RuntimeError: If the commit does not exist or git command fails
+    """
+    # Validate commit hash format (SHA-1: 40 hex chars, or shortened: 7+ hex chars)
+    if not re.match(r'^[0-9a-f]{7,40}$', commit_hash, re.IGNORECASE):
+        return f"Invalid commit hash format: '{commit_hash}'. Must be a valid SHA-1 hash (7-40 hexadecimal characters)"
+
+    cmd =  f'cd {V8_PATH} && git show {commit_hash}'
+    return get_output(run_command(cmd))

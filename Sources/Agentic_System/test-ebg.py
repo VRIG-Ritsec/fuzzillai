@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 from agents.EBG import *
 
-from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
-logger = logging.getLogger("boiling_eggs")
-if not logger.handlers:
-    logger.addHandler(logging.NullHandler())
-logger.propagate = False
-logger.disabled = True
-est_timezone = pytz.timezone('US/Eastern')
+#from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+#logger = logging.getLogger("boiling_eggs")
+#if not logger.handlers:
+#    logger.addHandler(logging.NullHandler())
+#logger.propagate = False
+#logger.disabled = True
+#est_timezone = pytz.timezone('US/Eastern')
 
 if __name__ == '__main__':
     #print(db_get_execution_outcome_distribution(fuzzer_id=7))
@@ -16,4 +16,10 @@ if __name__ == '__main__':
     #print(db_query("SELECT source_mutator, COUNT(*) FROM program WHERE fuzzer_id = %s GROUP BY source_mutator LIMIT %s;", [1, 10]))
     #print(db_get_program_convergence(fuzzer_id=7))
     #print(db_get_mutator_effectiveness(fuzzer_id=7))
-    #print(db_get_crash_diversity(fuzzer_id=7))
+    #for i in range(8):
+    #    print(db_get_crash_diversity(fuzzer_id=i))
+    #print(list_chromium_issues())
+    #print(get_chromium_issue(433533359))
+    #print(get_chromium_issue(425271170))
+    rand_issue = get_random_chromium_issue()
+    print(find_similar_chromium_issues(rand_issue))

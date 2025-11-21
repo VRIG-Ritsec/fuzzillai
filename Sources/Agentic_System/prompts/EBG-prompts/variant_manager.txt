@@ -18,13 +18,13 @@ Select the crash you deem most interesting and use the `read_file` tool call for
 Call `RuntimeAnalyzer` in the following format:
 {
     crash: [ENTER SELECTED CRASH NAME],
-    task: "YOUR GOAL IS TO ANALYZE THIS V8 CRASH AND DETERMINE HOW AND WHY IT CAUSES A CRASH IN THE V8 COMPILER.
+    task: "YOUR GOAL IS TO ANALYZE THIS D8 CRASH AND DETERMINE HOW AND WHY IT CAUSES A CRASH IN THE V8 COMPILER.
             PLEASE PROVIDE A REASON AND PROOF REGARDING YOUR REASONING."
 }
 
 
 ## STAGE 2 Call "VariantAnalysis"
-After you have received the reasoning behind the crash/bug, your goal is to now call variant analysis: 
+After you have received the reasoning behind the crash/bug, your goal is to call variant analysis: 
 
 in the following format: 
 

@@ -706,11 +706,14 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
         if conn:
             conn.close()
 
+
 @tool
 def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverage: float = None, sort_by: str = "coverage_total") -> str:
     """
     Maps programs to their coverage metrics and coverage increases.
     Shows the relationship between generated programs and their code coverage impact.
+    Calculates coverage increase by comparing each program's max execution coverage to 
+    prior executions on the same program and parent program lineage.
     
     Args:
         fuzzer_id (int): The ID of the fuzzer instance to analyze.
@@ -737,7 +740,7 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
             return f"Invalid sort_by parameter. Must be one of: {', '.join(valid_sort_fields)}"
         
         query = """
-        WITH program_coverage_stats AS (
+        WITH program_execution_stats AS (
             SELECT 
                 p.program_hash,
                 p.fuzzer_id,
@@ -746,46 +749,50 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
                 p.source_mutator,
                 p.parent_program_hash,
                 COUNT(DISTINCT e.execution_id) as execution_count,
-                MAX(e.coverage_total) as coverage_total,
-                AVG(e.coverage_total) as avg_coverage,
-                SUM(CASE WHEN cd.is_new_edge = TRUE THEN 1 ELSE 0 END) as new_edges_discovered,
-                COUNT(DISTINCT cd.edge_index) as unique_edges_covered
+                MAX(e.coverage_total) as coverage_max,
+                MIN(e.coverage_total) as coverage_min,
+                AVG(e.coverage_total) as coverage_avg,
+                MAX(e.created_at) as last_execution_at,
+                ROW_NUMBER() OVER (PARTITION BY p.fuzzer_id ORDER BY p.created_at ASC) as program_sequence
             FROM program p
             LEFT JOIN execution e ON p.program_hash = e.program_hash
-            LEFT JOIN coverage_detail cd ON e.execution_id = cd.execution_id
             WHERE p.fuzzer_id = %s
             GROUP BY p.program_hash, p.fuzzer_id, p.created_at, p.program_size, p.source_mutator, p.parent_program_hash
         ),
-        parent_coverage AS (
+        program_with_prior_max AS (
             SELECT 
-                pcs.program_hash,
-                COALESCE(parent_pcs.coverage_total, 0) as parent_coverage,
-                COALESCE(pcs.coverage_total - parent_pcs.coverage_total, pcs.coverage_total) as coverage_increase
-            FROM program_coverage_stats pcs
-            LEFT JOIN program_coverage_stats parent_pcs ON pcs.parent_program_hash = parent_pcs.program_hash
+                pes.*,
+                MAX(pes.coverage_max) FILTER (WHERE pes.program_sequence < p1.program_sequence) 
+                    OVER (PARTITION BY pes.fuzzer_id) as prior_max_coverage
+            FROM program_execution_stats pes
+            JOIN program_execution_stats p1 ON pes.fuzzer_id = p1.fuzzer_id
+            WHERE pes.fuzzer_id = %s
+            GROUP BY pes.program_hash, pes.fuzzer_id, pes.program_created_at, pes.program_size, 
+                     pes.source_mutator, pes.parent_program_hash, pes.execution_count, pes.coverage_max, 
+                     pes.coverage_min, pes.coverage_avg, pes.last_execution_at, pes.program_sequence, p1.program_sequence
         )
         SELECT 
-            pcs.program_hash,
-            pcs.program_created_at,
-            pcs.program_size,
-            pcs.source_mutator,
-            pcs.parent_program_hash,
-            pcs.execution_count,
-            ROUND(pcs.coverage_total::NUMERIC, 2) as coverage_total,
-            ROUND(pcs.avg_coverage::NUMERIC, 2) as avg_coverage,
-            ROUND(pc.coverage_increase::NUMERIC, 2) as coverage_increase,
-            ROUND(pc.parent_coverage::NUMERIC, 2) as parent_coverage,
-            pcs.new_edges_discovered,
-            pcs.unique_edges_covered
-        FROM program_coverage_stats pcs
-        LEFT JOIN parent_coverage pc ON pcs.program_hash = pc.program_hash
-        WHERE pcs.fuzzer_id = %s
+            program_hash,
+            program_created_at,
+            program_size,
+            source_mutator,
+            parent_program_hash,
+            execution_count,
+            ROUND(coverage_max::NUMERIC, 2) as coverage_total,
+            ROUND(coverage_avg::NUMERIC, 2) as avg_coverage,
+            ROUND(coverage_min::NUMERIC, 2) as min_coverage,
+            ROUND(COALESCE(coverage_max - prior_max_coverage, coverage_max)::NUMERIC, 2) as coverage_increase,
+            ROUND(COALESCE(prior_max_coverage, 0)::NUMERIC, 2) as prior_max_coverage,
+            last_execution_at,
+            program_sequence
+        FROM program_with_prior_max
+        WHERE fuzzer_id = %s
         """ 
         
-        params = [fuzzer_id, fuzzer_id]
+        params = [fuzzer_id, fuzzer_id, fuzzer_id]
         
         if min_coverage is not None:
-            query += " AND pcs.coverage_total >= %s"
+            query += " AND coverage_max >= %s"
             params.append(min_coverage)
         
         # Determine order based on sort_by
@@ -794,7 +801,7 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         elif sort_by == "execution_count":
             query += " ORDER BY execution_count DESC"
         else:  # coverage_total (default)
-            query += " ORDER BY coverage_total DESC NULLS LAST"
+            query += " ORDER BY coverage_max DESC NULLS LAST"
         
         query += " LIMIT %s"
         params.append(limit)

@@ -32,6 +32,16 @@ def enable_base_agent_logging():
                 format='%(asctime)s - %(levelname)s - %(message)s'
             )
             logger.disabled = False
+        elif os.getenv("EBG_DEBUG") == "1":
+            logs_dir = Path(__file__).parent / "ebg_logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            log_path = logs_dir / "base_agent.log"
+            logging.basicConfig(
+                filename=str(log_path),
+                level=logging.INFO,
+                format='%(asctime)s - %(levelname)s - %(message)s'
+            )
+            logger.disabled = False
     except Exception:
         # Fail closed: keep logging disabled
         logger.disabled = True
@@ -80,12 +90,15 @@ class Agent(ABC):
         # Try to find father_of_george first
         if 'father_of_george' in self.agents:
             return self.agents['father_of_george']
-        
+
+        if 'root_manager' in self.agents:
+            return self.agents['root_manager']
+
         # Look for agents with 'Manager' in their description or name
         for key, agent in self.agents.items():
-            if hasattr(agent, 'description') and 'Manager' in agent.description:
+            if hasattr(agent, 'description') and 'manager' in agent.description.lower():
                 return agent
-            if hasattr(agent, 'name') and 'Manager' in agent.name:
+            if hasattr(agent, 'name') and 'manager' in agent.name.lower():
                 return agent
         
         # Fallback: return the first agent if no manager found

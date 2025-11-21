@@ -10,18 +10,18 @@ import logging
 from datetime import datetime
 import pytz
 import config_loader as config_loader 
-from agents.FoG import Father
-#from agents.EBG import EBG
+#from agents.FoG import Father
+from agents.EBG import EBG
 from smolagents import LiteLLMModel
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
-logger = logging.getLogger("rises_the_fog")
+logger = logging.getLogger("boiled_eggs")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = False
 logger.disabled = True
 est_timezone = pytz.timezone('US/Eastern')
 
-BASE_MODEL_ID = "gpt-5-mini"
+BASE_MODEL_ID = "deepseek"
 
 import site
 from pathlib import Path
@@ -36,9 +36,9 @@ except Exception:
     pass
 
 
-class FatherOfGod:
+class EthiopianBoiledEgg:
     def __init__(self):
-        logger.info("Initializing FatherOfGod")
+        logger.info("Initializing EthiopianBoiledEgg")
         self.openai_api_key = get_openai_api_key()
         self.anthropic_api_key = get_anthropic_api_key()
         self.deepseek_api_key = get_deepseek_api_key()
@@ -47,8 +47,7 @@ class FatherOfGod:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
         
         self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
-        self.system = Father(self.model, api_key=self.deepseek_api_key, anthropic_api_key=self.anthropic_api_key)
-        # self.ebg = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
+        self.system = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
         
 
 def run(force_logging: bool = True):
@@ -56,27 +55,27 @@ def run(force_logging: bool = True):
     site.addsitedir(Path(__file__).parent.parent)
     #smolagent-fork
 
-    parser = argparse.ArgumentParser(description="Rise the FoG agentic system")
+    parser = argparse.ArgumentParser(description="Ethiopian Boiled Eggs agentic system")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging to fog logs")
     args = parser.parse_args()
     #force logging 
     args.debug = force_logging
 
     if args.debug:
-        log_dir = Path(__file__).parent / 'agents' / 'fog_logs'
+        log_dir = Path(__file__).parent / 'agents' / 'ebg_logs'
         log_dir.mkdir(parents=True, exist_ok=True)
         latest_num = 0
-        if os.path.exists(log_dir / 'rises_the_fog.log'):
+        if os.path.exists(log_dir / 'ethiopian_boiled_egg.log'):
             for root, dirs, files in os.walk(log_dir, topdown=False):
                 for name in files:
                     if name.endswith('.log'):
-                        if "rises_the_fog.log" not in name:
-                            num = int(name[len('rises_the_fog'):-len('.log')])
+                        if "ethiopian_boiled_egg.log" not in name:
+                            num = int(name[len('ethiopian_boiled_egg'):-len('.log')])
                             if num > latest_num:
                                 latest_num = num
-            log_path = str(log_dir / f'rises_the_fog{latest_num + 1}.log')
+            log_path = str(log_dir / f'ethiopian_boiled_egg{latest_num + 1}.log')
         else: 
-            log_path = str(log_dir / f'rises_the_fog.log')
+            log_path = str(log_dir / f'ethiopian_boiled_egg.log')
 
         if os.path.exists(log_path):
             print(f"Log file already exists: {log_path}")
@@ -113,11 +112,11 @@ def run(force_logging: bool = True):
         sys.stderr = _StreamToLogger(logger.error)
 
         # Signal BaseAgent to enable its own logging lazily and ensure directory exists
-        os.environ["FOG_DEBUG"] = "1"
+        os.environ["EBG_DEBUG"] = "1"
 
-    logger.info("I must go in; the fog is rising")
+    logger.info("something funny")
     logger.info(f"time: {datetime.now(est_timezone)}")
-    a = FatherOfGod()
+    a = EthiopianBoiledEgg()
     path = os.path.join(os.getenv('FUZZILLI_PATH', ''), "Sources", "Agentic_System")
     if (not os.path.exists(os.path.join(path, "regressions.json"))):
         try:
@@ -129,7 +128,6 @@ def run(force_logging: bool = True):
         else:
             logger.info("Regressions.json decompressed successfully")
     a.system.start_system()
-
 
 if __name__ == "__main__":
     sys.exit(run())

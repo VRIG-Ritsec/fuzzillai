@@ -9,13 +9,18 @@ from agents.BaseAgent import Agent
 from pathlib import Path
 from tools.EBG_tools import *
 from tools.rag_tools import (
-    search_rag_db, 
+    set_rag_collection,
+    get_rag_collection,
+    search_rag_db,
+    update_rag_db,
+    delete_rag_db,
     list_rag_db,
     get_rag_doc,
     search_knowledge_base,
     get_knowledge_doc,
     search_v8_source_rag,
-    get_v8_source_rag_doc,
+    get_v8_source_rag_doc, 
+    FAISSKnowledgeBase,
 )
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 from tools.FoG_tools import get_v8_path

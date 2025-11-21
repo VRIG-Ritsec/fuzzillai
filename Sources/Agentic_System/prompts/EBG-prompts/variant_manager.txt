@@ -9,7 +9,7 @@ responsible for performing variant analysis on the crash to hopefully trigger mo
 ## CRITICAL RULES:
 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
-NEVER RUN MORE THAN ONE SUB AGENT AT A TIME ! 
+NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME ! 
 
 ## STAGE 0
 Select the crash you deem most interesting and use the `read_file` tool call for analysis in stage 1.
@@ -36,7 +36,4 @@ in the following format:
 
 ## STAGE 3
 Provide a detailed summary of your code execution and what you have done! 
-
-
-
 

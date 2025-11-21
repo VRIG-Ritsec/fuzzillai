@@ -26,6 +26,7 @@ from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepsee
 from tools.FoG_tools import get_v8_path
 
 import sys
+import os
 import yaml 
 import importlib.resources
 
@@ -57,7 +58,7 @@ class EBG(Agent):
         if root_manager_version == 1:
             root_manager_prompt = self.get_prompt("plateau_manager.txt")
 
-            # L2 Worker: V8 Search (under RuntimeAnalyzer and CorpusGenerator)
+            # L2 Worker: V8 Search (under RuntimeAnalyzer)
             self.agents['v8_search'] = ToolCallingAgent(
                 name="V8Search",
                 description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
@@ -77,39 +78,39 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-        # L2 Worker: Corpus Validator (under RuntimeAnalyzer)
-        self.agents['corpus_validator'] = ToolCallingAgent(
-            name="CorpusValidator",
-            description="L2 Worker responsible for validating corpus integrity and quality",
-            tools=[
-                # Add corpus validation tools here
-            ],
-            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-            max_steps=8,
-            planning_interval=None,
-        )
-        self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
-        
-        # L2 Worker: DB Analyzer  
-        self.agents['db_analyzer'] = ToolCallingAgent(
-            name="DBAnalyzer",
-            description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
-            tools=[
-                base64_program_to_js,
-                db_query,
-                db_list_programs,
-                db_get_fuzzer_performance_summary,
-                db_list_fuzzers,
-                db_get_crash_diversity,
-                db_get_mutator_effectiveness,
-                db_get_program_convergence,
-                db_get_execution_outcome_distribution,
-            ],
-            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-            max_steps=8,
-            planning_interval=None,
-        )
-        self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
+            # L2 Worker: Corpus Validator (under JS Generator)
+            self.agents['corpus_validator'] = ToolCallingAgent(
+                name="CorpusValidator",
+                description="L2 Worker responsible for validating corpus integrity and quality",
+                tools=[
+                    # Add corpus validation tools here
+                ],
+                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                max_steps=8,
+                planning_interval=None,
+            )
+            self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
+            
+            # L2 Worker: DB Analyzer  
+            self.agents['db_analyzer'] = ToolCallingAgent(
+                name="DBAnalyzer",
+                description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
+                tools=[
+                    base64_program_to_js,
+                    db_query,
+                    db_list_programs,
+                    db_get_fuzzer_performance_summary,
+                    db_list_fuzzers,
+                    db_get_crash_diversity,
+                    db_get_mutator_effectiveness,
+                    db_get_program_convergence,
+                    db_get_execution_outcome_distribution,
+                ],
+                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                max_steps=8,
+                planning_interval=None,
+            )
+            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
 
             self.agents['debugger'] = ToolCallingAgent(
                 name="Debugger",
@@ -121,8 +122,7 @@ class EBG(Agent):
             )
             self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
 
-            
-            # L1 Manager: Corpus Generator
+            # L1 Manager: JS Generator
             self.agents['JS_Generator'] = ToolCallingAgent(
                 name="JSGenerator",
                 description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
@@ -131,7 +131,7 @@ class EBG(Agent):
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JSGenerator.txt")
+            self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
             self.agents['JS_Generator'].managed_agents = [
                 self.agents['corpus_validator']
             ]
@@ -239,17 +239,16 @@ class EBG(Agent):
             )
             self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
 
-            
-            # L1 Manager: Corpus Generator
+            # L2 Worker: JS Generator (under Variant Analysis)
             self.agents['JS_Generator'] = ToolCallingAgent(
                 name="JSGenerator",
-                description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
+                description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
                 model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JSGenerator.txt")
+            self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
 
             # L1 Manager: Runtime Analyzer  
             self.agents['runtime_analyzer'] = ToolCallingAgent(

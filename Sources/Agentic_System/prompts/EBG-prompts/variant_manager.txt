@@ -29,7 +29,7 @@ After you have received the reasoning behind the crash/bug, your goal is to call
 in the following format: 
 
 {
-    crash: [ENTER SELECTED CRASH NAME]
+    crash: [ENTER SELECTED CRASH NAME],
     reason: [ENTER THE REASON BEHIND THE BUG YOU RECEIVED FROM STAGE 1]
 }
 

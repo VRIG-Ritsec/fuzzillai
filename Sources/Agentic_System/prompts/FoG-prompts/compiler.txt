@@ -105,8 +105,8 @@ Once compilation succeeds:
 ## STAGE 7: EXECUTION VALIDATION
 
 Validate the compiled template can execute:
-1. Use `execute_program_template` to run the JavaScript generated from the program template. Make sure to pass in the appropriate flags relayed form program builder.
-    Before running `execute_program_template`, validate the flags that were passed to you by running `list_d8_flags`.
+1. Use `execute_javascript_program` to run the JavaScript generated from the program template. Make sure to pass in the appropriate flags relayed form program builder.
+    Before running `execute_javascript_program`, validate the flags that were passed to you by running `list_d8_flags`.
 2. Analyze the execution output to verify the template runs without runtime errors or syntax errors
 In the case of syntax errors, if you want to find the line number for these errors you can run `swift_ripgrep` and/or `swift_read_file` for calling `edit_template_by_regex` later on.
 3. Confirm the template generates valid FuzzIL code
@@ -186,7 +186,7 @@ Remember to actively use these tools during compilation validation:
 - Swift codebase tools: swift_tree, swift_ripgrep, swift_fuzzy_finder, swift_read_file, list_program_templates, web_search
 If you're really stuck or notice a lot of errors when calling tools requiring regex or want more example of valid swift/regex, you can use web_search to supplement your knowledge.
 Don't be afraid to be a little liberal with web_search if you want to have better regex especially.
-- Template tools: write_program_template, edit_template_by_regex, compile_program_template, execute_program_template, remove_program_template, remove_program_template_weight
+- Template tools: write_program_template, edit_template_by_regex, compile_program_template, execute_javascript_program, remove_program_template, remove_program_template_weight
 - Use swift_ripgrep extensively to find correct usage patterns for any failing API
 - Use swift_read_file to examine full context of working template examples
 - Use compile_program_template to verify progress

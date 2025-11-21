@@ -299,7 +299,7 @@ def read_file(file_path: str, section: int = None) -> str:
     )
 
 @tool
-def inspect_git_commit(commit_hash: str) -> str:
+def git_show(commit_hash: str) -> str:
     """
     Inspect a git commit using git show to display commit details including
     the commit message, author, date, and the changes (diff) introduced by
@@ -314,10 +314,6 @@ def inspect_git_commit(commit_hash: str) -> str:
         str: The full git commit output from the specified commit hash,
              including commit metadata and the diff. Returns an error message
              if the commit hash is invalid or the commit cannot be found.
-    
-    Raises:
-        ValueError: If the commit hash format is invalid
-        RuntimeError: If the commit does not exist or git command fails
     """
     # Validate commit hash format (SHA-1: 40 hex chars, or shortened: 7+ hex chars)
     if not re.match(r'^[0-9a-f]{7,40}$', commit_hash, re.IGNORECASE):

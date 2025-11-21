@@ -81,7 +81,7 @@ class Father(Agent):
                 remove_program_template,
                 remove_program_template_weight,
                 compile_program_template,
-                execute_program_template,
+                execute_javascript_program,
                 list_program_templates,
                 web_search,
                 remove_old_javascript_programs,

@@ -11,10 +11,6 @@ the root cause of the plateaus so that you can increase coverage and escape the 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
 - NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME! 
 
-
-## STAGE 0
-Select a random program from the plateauing corpus and use the `read_file` tool call for analysis in stage 1.
-
 ## STAGE 1
 Call `RuntimeAnalyzer` in the following format:
 {

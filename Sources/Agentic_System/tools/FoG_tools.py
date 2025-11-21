@@ -1297,7 +1297,7 @@ def compile_program_template(template: str) -> str:
 
 
 @tool 
-def execute_program_template(template_js_path: str, d8_flags: str) -> str:
+def execute_javascript_program(template_js_path: str, d8_flags: str) -> str:
     """
     Execute a JavaScript program generated from a program template
 

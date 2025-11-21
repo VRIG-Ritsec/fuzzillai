@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 from agents.EBG import *
 
+from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+logger = logging.getLogger("boiling_eggs")
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
+logger.propagate = False
+logger.disabled = True
+est_timezone = pytz.timezone('US/Eastern')
+
 if __name__ == '__main__':
     #print(db_get_execution_outcome_distribution(fuzzer_id=7))
     #db_list_programs(limit=2, fuzzer_id=7)

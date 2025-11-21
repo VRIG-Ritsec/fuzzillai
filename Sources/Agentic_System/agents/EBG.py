@@ -37,6 +37,22 @@ class EBG(Agent):
     """Verify and test seeds."""
     
     def setup_agents(self,root_manager_version: int=1):
+        """
+        Version 1: Plateau Manager
+
+        This is the verison of ebg that gets called after a fuzzing instance has hit a plateau in coverage
+        its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
+
+
+        Agent Hierarchy:
+        - Root Manager: Plateau Manager
+        - L1 Manager: Runtime Analyzer
+            - L2 Worker: V8 Search
+            - L2 Worker: DB Analyzer
+            - L2 Worker: Debugger
+        - L1 Manager: JS Generator
+            - L2 Worker: Corpus Validator
+        """
         global root_manager_prompt
         if root_manager_version == 1:
             root_manager_prompt = self.get_prompt("plateau_manager.txt")
@@ -61,41 +77,6 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-<<<<<<< Updated upstream
-            # L2 Worker: Corpus Validator (under RuntimeAnalyzer)
-            self.agents['corpus_validator'] = ToolCallingAgent(
-                name="CorpusValidator",
-                description="L2 Worker responsible for validating corpus integrity and quality",
-                tools=[
-                    # Add corpus validation tools here
-                ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-                max_steps=8,
-                planning_interval=None,
-            )
-            self.agents['corpus_validator'].prompt_templates["system_prompt"] = self.get_prompt("corpus_validator.txt")
-            
-            # L2 Worker: DB Analyzer  
-            self.agents['db_analyzer'] = ToolCallingAgent(
-                name="DBAnalyzer",
-                description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
-                tools=[
-                    base64_program_to_js,
-                    db_query,
-                    db_list_programs,
-                    db_get_fuzzer_performance_summary,
-                    db_list_fuzzers,
-                    db_get_crash_diversity,
-                    db_get_mutator_effectiveness,
-                    db_get_program_convergence,
-                    db_get_execution_outcome_distribution,
-                ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-                max_steps=8,
-                planning_interval=None,
-            )
-            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
-=======
         # L2 Worker: Corpus Validator (under RuntimeAnalyzer)
         self.agents['corpus_validator'] = ToolCallingAgent(
             name="CorpusValidator",
@@ -129,7 +110,6 @@ class EBG(Agent):
             planning_interval=None,
         )
         self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
->>>>>>> Stashed changes
 
             self.agents['debugger'] = ToolCallingAgent(
                 name="Debugger",
@@ -152,18 +132,22 @@ class EBG(Agent):
                 planning_interval=None,
             )
             self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JSGenerator.txt")
+            self.agents['JS_Generator'].managed_agents = [
+                self.agents['corpus_validator']
+            ]
 
             # L1 Manager: Runtime Analyzer  
             self.agents['runtime_analyzer'] = ToolCallingAgent(
                 name="RuntimeAnalyzer",
-                description="L2 Manager responsible for analyzing program runtime, coverage, and execution state",
+                description="L1 Manager responsible for analyzing program runtime, coverage, and execution state",
                 tools=[
 
                 ],
                 model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
-                    self.agents['db_analyzer']
+                    self.agents['db_analyzer'],
+                    self.agents['debugger']
                 ],
                 max_steps=10,
                 planning_interval=None,
@@ -171,6 +155,24 @@ class EBG(Agent):
             self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
 
         elif root_manager_version == 2:
+            """
+            Version 2: Variant Manager
+
+            This is the verison of ebg that gets called after a fuzzing instance has hit a plateau in coverage
+            its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
+
+
+            Agent Hierarchy:
+            - Root Manager: Variant Manager
+            - L1 Manager: Runtime Analyzer
+                - L2 Worker: V8 Search
+                - L2 Worker: DB Analyzer
+                - L2 Worker: Debugger 
+            - L1 Manager: Variant Analysis
+                - L2 Worker: v8 search
+                - L2 Worker: debugger
+                - L2 Worker: JS Generator
+            """
             root_manager_prompt = self.get_prompt("variant_manager.txt")
 
             # L2 Worker: V8 Search (under RuntimeAnalyzer and CorpusGenerator)
@@ -252,24 +254,56 @@ class EBG(Agent):
             # L1 Manager: Runtime Analyzer  
             self.agents['runtime_analyzer'] = ToolCallingAgent(
                 name="RuntimeAnalyzer",
-                description="L2 Manager responsible for analyzing program runtime, coverage, and execution state",
+                description="L1 Manager responsible for analyzing program runtime, coverage, and execution state",
                 tools=[
 
                 ],
                 model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
-                    self.agents['db_analyzer']
+                    self.agents['db_analyzer'],
+                    self.agents['debugger']
                 ],
                 max_steps=10,
                 planning_interval=None,
             )
             self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
 
+            # L1 Manager: Variant Analysis
+            self.agents['variant_analysis'] = ToolCallingAgent(
+                name="VariantAnalysis",
+                description="L1 Manager responsible for performing variant analysis on crashes",
+                tools=[
+
+                ],
+                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                managed_agents=[
+                    self.agents['v8_search'],
+                    self.agents['debugger'],
+                    self.agents['JS_Generator']
+                ],
+                max_steps=10,
+                planning_interval=None,
+            )
+            self.agents['variant_analysis'].prompt_templates["system_prompt"] = self.get_prompt("variant_analysis.txt")
+
         else:
             raise ValueError(f"Invalid root manager version: {root_manager_version}")
 
         # L0 Root Manager
+        if root_manager_version == 1:
+            root_managed_agents = [
+                self.agents['runtime_analyzer'],
+                self.agents['JS_Generator']
+            ]
+        elif root_manager_version == 2:
+            root_managed_agents = [
+                self.agents['runtime_analyzer'],
+                self.agents['variant_analysis']
+            ]
+        else:
+            root_managed_agents = []
+
         self.agents['root_manager'] = ToolCallingAgent(
             name="RootManager",
             description="L0 Root Manager", 
@@ -277,10 +311,7 @@ class EBG(Agent):
 
             ],
             model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
-            managed_agents=[
-                self.agents['runtime_analyzer'],
-                self.agents['JS_Generator']
-            ],
+            managed_agents=root_managed_agents,
             max_steps=10,
             planning_interval=None,
         )

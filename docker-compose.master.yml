@@ -3,17 +3,18 @@ version: '3.8'
 services:
   postgres-master:
     image: postgres:15-alpine
+    shm_size: '2gb'
     container_name: fuzzilli-postgres-master
     environment:
       POSTGRES_DB: fuzzilli_master
       POSTGRES_USER: fuzzilli
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fuzzilli123}
+      POSTGRES_PASSWORD: fuzzilli123
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
       - "5432:5432"
     volumes:
-      - postgres_master_data:/var/lib/postgresql/data
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /mnt/vdc/postgres-data/:/var/lib/postgresql/data
+      - /mnt/vdb/fuzzillai/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fuzzilli -d fuzzilli_master"]
       interval: 10s
@@ -21,12 +22,9 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - fuzzilli-network
-
-volumes:
-  postgres_master_data:
+      - fuzzing-network
 
 networks:
-  fuzzilli-network:
+  fuzzing-network:
     driver: bridge
 

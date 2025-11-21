@@ -5,7 +5,7 @@ services:
   # Worker 1 - Fuzzilli Container
   fuzzer-worker-1:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-1
     environment:
@@ -19,7 +19,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_1:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -40,7 +40,7 @@ services:
   # Worker 2 - Fuzzilli Container
   fuzzer-worker-2:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-2
     environment:
@@ -54,7 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_2:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -75,7 +75,7 @@ services:
   # Worker 3 - Fuzzilli Container
   fuzzer-worker-3:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-3
     environment:
@@ -89,7 +89,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_3:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -110,7 +110,7 @@ services:
   # Worker 4 - Fuzzilli Container
   fuzzer-worker-4:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-4
     environment:
@@ -124,7 +124,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_4:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -145,7 +145,7 @@ services:
   # Worker 5 - Fuzzilli Container
   fuzzer-worker-5:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-5
     environment:
@@ -159,7 +159,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_5:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -180,7 +180,7 @@ services:
   # Worker 6 - Fuzzilli Container
   fuzzer-worker-6:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-6
     environment:
@@ -194,7 +194,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_6:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -215,7 +215,7 @@ services:
   # Worker 7 - Fuzzilli Container
   fuzzer-worker-7:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-7
     environment:
@@ -229,7 +229,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_7:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -250,7 +250,7 @@ services:
   # Worker 8 - Fuzzilli Container
   fuzzer-worker-8:
     build:
-      context: /home/aleksi/fuzzillai
+      context: /mnt/vdb/fuzzillai
       dockerfile: Cloud/VRIG/Dockerfile.distributed
     container_name: fuzzer-worker-8
     environment:
@@ -264,7 +264,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_8:/home/app/Corpus
-      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild:/home/app/fuzzbuild:ro
+      - /usr/share/vrigatoni/v8_2/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]

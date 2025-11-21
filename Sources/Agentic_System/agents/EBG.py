@@ -45,20 +45,19 @@ class EBG(Agent):
         its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
 
 
-        Agent Hierarchy:
-        - Root Manager: Plateau Manager
-        - L1 Manager: Runtime Analyzer
-            - L2 Worker: V8 Search
-            - L2 Worker: DB Analyzer
-            - L2 Worker: Debugger
-        - L1 Manager: JS Generator
-            - L2 Worker: Corpus Validator
+        Root Manager (L0)
+        ├── Runtime Analyzer (L1)
+        │   ├── V8 Search (L2)
+        │   ├── DB Analyzer (L2)
+        │   └── Debugger (L2)
+        └── JS Generator (L1)
+            └── Corpus Validator (L2)
         """
         global root_manager_prompt
         if root_manager_version == 1:
             root_manager_prompt = self.get_prompt("plateau_manager.txt")
 
-            # L2 Worker: V8 Search (under RuntimeAnalyzer)
+            # L2 Worker: V8 Search 
             self.agents['v8_search'] = ToolCallingAgent(
                 name="V8Search",
                 description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
@@ -78,7 +77,7 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-            # L2 Worker: Corpus Validator (under JS Generator)
+            # L2 Worker: Corpus Validator 
             self.agents['corpus_validator'] = ToolCallingAgent(
                 name="CorpusValidator",
                 description="L2 Worker responsible for validating corpus integrity and quality",
@@ -112,6 +111,8 @@ class EBG(Agent):
             )
             self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
 
+
+            # L2 Worker: Debugger 
             self.agents['debugger'] = ToolCallingAgent(
                 name="Debugger",
                 description="L2 Worker responsible for debugging a crash",
@@ -162,20 +163,19 @@ class EBG(Agent):
             its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
 
 
-            Agent Hierarchy:
-            - Root Manager: Variant Manager
-            - L1 Manager: Runtime Analyzer
-                - L2 Worker: V8 Search
-                - L2 Worker: DB Analyzer
-                - L2 Worker: Debugger 
-            - L1 Manager: Variant Analysis
-                - L2 Worker: v8 search
-                - L2 Worker: debugger
-                - L2 Worker: JS Generator
+            Root Manager (L0)
+            ├── Runtime Analyzer (L1)
+            │   ├── V8 Search (L2)
+            │   ├── DB Analyzer (L2)
+            │   └── Debugger (L2)
+            └── Variant Analysis (L1)
+                ├── V8 Search (L2)
+                ├── Debugger (L2)
+                └── JS Generator (L2)
             """
             root_manager_prompt = self.get_prompt("variant_manager.txt")
 
-            # L2 Worker: V8 Search (under RuntimeAnalyzer and CorpusGenerator)
+            # L2 Worker: V8 Search 
             self.agents['v8_search'] = ToolCallingAgent(
                 name="V8Search",
                 description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
@@ -195,7 +195,7 @@ class EBG(Agent):
             )
             self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
-            # L2 Worker: Corpus Validator (under RuntimeAnalyzer)
+            # L2 Worker: Corpus Validator 
             self.agents['corpus_validator'] = ToolCallingAgent(
                 name="CorpusValidator",
                 description="L2 Worker responsible for validating corpus integrity and quality",
@@ -239,7 +239,7 @@ class EBG(Agent):
             )
             self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
 
-            # L2 Worker: JS Generator (under Variant Analysis)
+            # L2 Worker: JS Generator 
             self.agents['JS_Generator'] = ToolCallingAgent(
                 name="JSGenerator",
                 description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",

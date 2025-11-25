@@ -55,7 +55,6 @@ public class PostgreSQLSync: Module {
             self.executionMapLock.unlock()
         }
         
-        // Listen for new interesting programs found by this fuzzer
         fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
             let program = ev.program
             let aspects = ev.aspects
@@ -72,20 +71,15 @@ public class PostgreSQLSync: Module {
                     if let fuzzerId = self.cachedFuzzerId {
                         let programHash = DatabaseUtils.calculateProgramHash(program: program)
                         
-                        // Add program to batch
                         self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
                         
-                        // Retrieve execution data
                         self.executionMapLock.lock()
                         let execution = self.programExecutionMap[programHash]
                         self.executionMapLock.unlock()
 
-                        // Add execution data to batch
                         if let execution = execution {
                             let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
                             
-                            // Extract mutator information from program contributors
-                            // Contributors is a Set<Contributor>, we look for Mutator instances
                             let mutatorName = program.contributors.first(where: { contributor in
                                 // Check if this contributor's name matches known mutator patterns
                                 contributor.name.contains("Mutator")
@@ -101,10 +95,9 @@ public class PostgreSQLSync: Module {
                             if let covEdgeSet = aspects as? CovEdgeSet {
                                 isNewEdge = covEdgeSet.count > 0
                             } else {
-                                // ProgramAspects but not CovEdgeSet = feedback/optimization delta only
                                 isNewEdge = false
                             }
-                            // Extract coverage metrics from evaluator (Phase 2)
+
                             var coverageTotal: Double? = nil
                             var edgesFound: Int? = nil
                             var totalEdges: Int? = nil
@@ -122,15 +115,12 @@ public class PostgreSQLSync: Module {
                                     coverageTotal = Double(foundEdgesCount) / Double(totalEdgesCount)
                                 }
                                 
-                                // Extract number of NEW edges found by this program
                                 if let covEdgeSet = aspects as? CovEdgeSet {
                                     edgesFound = Int(covEdgeSet.count)
                                 } else {
-                                    // No new edges, just feedback/optimization delta
                                     edgesFound = 0
                                 }
                                 
-                                // Extract optimization metrics (Phase 3)
                                 turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
                                 feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                             }

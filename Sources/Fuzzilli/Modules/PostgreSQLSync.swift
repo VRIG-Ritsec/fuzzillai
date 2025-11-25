@@ -6,12 +6,12 @@ public class PostgreSQLSync: Module {
     private let enableLogging: Bool
     private var lastSyncTime: Date
     
-    // Logger
     private let logger = Logger(withLabel: "PostgreSQLSync")
     
     private var cachedFuzzerId: Int?
     private var programExecutionMap: [String: Execution] = [:]  // Track executions by program hash
     private let executionMapLock = NSLock()
+    private var covEvaluator: ProgramCoverageEvaluator?  // Cache coverage evaluator for metrics
     
     public init(storage: PostgreSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
         self.storage = storage
@@ -21,6 +21,18 @@ public class PostgreSQLSync: Module {
     }
     
     public func initialize(with fuzzer: Fuzzer) {
+        // Try to downcast evaluator to ProgramCoverageEvaluator for coverage metrics
+        if let coverageEvaluator = fuzzer.evaluator as? ProgramCoverageEvaluator {
+            self.covEvaluator = coverageEvaluator
+            if enableLogging {
+                logger.info("Coverage evaluator detected - will track coverage metrics")
+            }
+        } else {
+            if enableLogging {
+                logger.warning("Evaluator is not ProgramCoverageEvaluator - coverage metrics will not be available")
+            }
+        }
+        
         // Register fuzzer
         Task {
             do {
@@ -46,7 +58,7 @@ public class PostgreSQLSync: Module {
         // Listen for new interesting programs found by this fuzzer
         fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
             let program = ev.program
-            let aspects = ev.aspects  // Now available directly from the event!
+            let aspects = ev.aspects
             // Only sync programs found locally to avoid cycles
             guard ev.origin == .local else { return }
             
@@ -92,20 +104,50 @@ public class PostgreSQLSync: Module {
                                 // ProgramAspects but not CovEdgeSet = feedback/optimization delta only
                                 isNewEdge = false
                             }
+                            // Extract coverage metrics from evaluator (Phase 2)
+                            var coverageTotal: Double? = nil
+                            var edgesFound: Int? = nil
+                            var totalEdges: Int? = nil
+                            var turbofanOptimizationBits: Int64? = nil
+                            var feedbackNexusCount: Int? = nil
+                            
+                            if let evaluator = self.covEvaluator {
+                                let totalEdgesCount = evaluator.getTotalEdgesCount()
+                                totalEdges = Int(totalEdgesCount)
+                                
+                                let foundEdgesCount = evaluator.getFoundEdgesCount()
+                                
+                                // Calculate coverage percentage
+                                if totalEdgesCount > 0 {
+                                    coverageTotal = Double(foundEdgesCount) / Double(totalEdgesCount)
+                                }
+                                
+                                // Extract number of NEW edges found by this program
+                                if let covEdgeSet = aspects as? CovEdgeSet {
+                                    edgesFound = Int(covEdgeSet.count)
+                                } else {
+                                    // No new edges, just feedback/optimization delta
+                                    edgesFound = 0
+                                }
+                                
+                                // Extract optimization metrics (Phase 3)
+                                turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
+                                feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
+                            }
                             
                             let executionInput = PostgreSQLStorage.ExecutionInput(
                                 programHash: programHash,
                                 mutatorTypeId: mutatorTypeId,
                                 executionOutcomeId: outcomeId,
-                                coverageTotal: nil,  // TODO: Phase 2 - Extract from evaluator
-                                edgesFound: nil,     // TODO: Phase 2 - Extract from evaluator
-                                totalEdges: nil,     // TODO: Phase 2 - Extract from evaluator
+                                coverageTotal: coverageTotal,
+                                edgesFound: edgesFound,
+                                totalEdges: totalEdges,
                                 isNewEdge: isNewEdge,
                                 stdout: execution.stdout,
                                 stderr: execution.stderr,
                                 fuzzout: execution.fuzzout,
-                                turbofanOptimizationBits: nil,  // TODO: Phase 3 - Parse from fuzzout
-                                feedbackNexusCount: nil,        // TODO: Phase 3 - Parse from fuzzout
+                                turbofanOptimizationBits: turbofanOptimizationBits,
+                                feedbackNexusCount: feedbackNexusCount,
                                 createdAt: Date()
                             )
                             self.storage.addExecutionToBatch(executionInput)
@@ -164,10 +206,9 @@ public class PostgreSQLSync: Module {
                     logger.info("Fetched \(newPrograms.count) new programs from database")
                 }
                 
-                lastSyncTime = Date() // Update timestamp
+                lastSyncTime = Date()
                 
                 for (program, _) in newPrograms {
-                    // Import into fuzzer
                     fuzzer.async {
                         // Use .corpusImport origin to indicate it came from the database
                         fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: false)))

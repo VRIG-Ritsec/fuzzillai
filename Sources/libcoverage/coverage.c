@@ -336,6 +336,11 @@ int cov_evaluate_feedback_nexus(struct cov_context* context) {
     return 0;
 }
 
+uint32_t cov_get_feedback_nexus_count(struct cov_context* context) {
+    if (!context->shmem) return 0;
+    return context->shmem->feedback_nexus_count;
+}
+
 void cov_update_feedback_nexus(struct cov_context* context) {
     if (!context->shmem) return;
     
@@ -379,4 +384,8 @@ void cov_update_optimization_bits(struct cov_context* context) {
 void clear_optimization_bits(struct cov_context* context) {
     context->turbofan_optimization_bits_previous = context->turbofan_optimization_bits_current;
     context->shmem->turbofan_optimization_bits = 0;
+}
+
+uint64_t cov_get_optimization_bits_current(struct cov_context* context) {
+    return context->turbofan_optimization_bits_current;
 }

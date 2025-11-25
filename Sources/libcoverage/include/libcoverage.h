@@ -158,11 +158,13 @@ void cov_reset_state(struct cov_context* context);
 int cov_evaluate_feedback_nexus(struct cov_context* context);
 void cov_update_feedback_nexus(struct cov_context* context);
 void clear_feedback_nexus(struct cov_context* context);
+uint32_t cov_get_feedback_nexus_count(struct cov_context* context);
 
 
 // Turbofan and Maglev optimization bits functions
 int cov_evaluate_optimization_bits(struct cov_context* context);
 void cov_update_optimization_bits(struct cov_context* context);
 void clear_optimization_bits(struct cov_context* context);
+uint64_t cov_get_optimization_bits_current(struct cov_context* context);
 
 #endif

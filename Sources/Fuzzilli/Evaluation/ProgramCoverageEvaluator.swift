@@ -154,6 +154,16 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
     public func getTotalEdgesCount() -> UInt32 {
         return context.num_edges
     }
+    
+    /// Get the current turbofan optimization bits bitmap
+    public func getTurbofanOptimizationBits() -> UInt64 {
+        return libcoverage.cov_get_optimization_bits_current(&context)
+    }
+    
+    /// Get the current feedback nexus count
+    public func getFeedbackNexusCount() -> UInt32 {
+        return libcoverage.cov_get_feedback_nexus_count(&context)
+    }
 
     override func initialize() {
         // Must clear the shared memory bitmap before every execution

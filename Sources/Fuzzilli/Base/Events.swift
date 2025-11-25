@@ -63,7 +63,7 @@ public class Events {
     public let TimeOutFound = Event<Program>()
 
     /// Signals that a new interesting program has been found, after the program has been minimized.
-    public let InterestingProgramFound = Event<(program: Program, origin: ProgramOrigin)>()
+    public let InterestingProgramFound = Event<(program: Program, aspects: ProgramAspects, origin: ProgramOrigin)>()
 
     /// Signals a diagnostics event
     public let DiagnosticsEvent = Event<(name: String, content: Data)>()

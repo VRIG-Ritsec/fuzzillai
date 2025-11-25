@@ -19,6 +19,45 @@ public class PostgreSQLStorage {
     private let logger: Logging.Logger
     private let enableLogging: Bool
     
+    // Batching
+    private var pendingPrograms: [(Program, Int)] = []
+    private var pendingExecutions: [ExecutionInput] = []
+    private let batchLock = NSLock()
+    
+    /// Input data for creating an execution record (before database insert assigns executionId)
+    /// This mirrors ExecutionRecord from Models.swift but without the executionId field
+    public struct ExecutionInput {
+        public let programHash: String
+        public let mutatorTypeId: Int?
+        public let executionOutcomeId: Int
+        public let coverageTotal: Double?
+        public let edgesFound: Int?
+        public let totalEdges: Int?
+        public let isNewEdge: Bool
+        public let stdout: String?
+        public let stderr: String?
+        public let fuzzout: String?
+        public let turbofanOptimizationBits: Int64?
+        public let feedbackNexusCount: Int?
+        public let createdAt: Date
+        
+        public init(programHash: String, mutatorTypeId: Int?, executionOutcomeId: Int, coverageTotal: Double?, edgesFound: Int?, totalEdges: Int?, isNewEdge: Bool, stdout: String?, stderr: String?, fuzzout: String?, turbofanOptimizationBits: Int64?, feedbackNexusCount: Int?, createdAt: Date) {
+            self.programHash = programHash
+            self.mutatorTypeId = mutatorTypeId
+            self.executionOutcomeId = executionOutcomeId
+            self.coverageTotal = coverageTotal
+            self.edgesFound = edgesFound
+            self.totalEdges = totalEdges
+            self.isNewEdge = isNewEdge
+            self.stdout = stdout
+            self.stderr = stderr
+            self.fuzzout = fuzzout
+            self.turbofanOptimizationBits = turbofanOptimizationBits
+            self.feedbackNexusCount = feedbackNexusCount
+            self.createdAt = createdAt
+        }
+    }
+    
     // MARK: - Initialization
     
     public init(databasePool: DatabasePool, enableLogging: Bool = false) {
@@ -212,62 +251,47 @@ public class PostgreSQLStorage {
         return fuzzer
     }
     
-    /// Get database statistics for a specific fuzzer
-    public func getDatabaseStatistics(fuzzerId: Int) async throws -> DatabaseStatistics {
-        if enableLogging {
-            logger.info("Getting database statistics for fuzzer: \(fuzzerId)")
-        }
-        
-        // Use direct connection to avoid connection pool deadlock
-        let connection = try await createDirectConnection()
-        defer { Task { _ = try? await connection.close() } }
-        
-        // Get program count for this fuzzer
-        let programQuery: PostgresQuery = "SELECT COUNT(*) FROM fuzzer WHERE fuzzer_id = \(fuzzerId)"
-        let programResult = try await connection.query(programQuery, logger: self.logger)
-        let programRows = try await programResult.collect()
-        let totalPrograms = try programRows.first?.decode(Int.self, context: PostgresDecodingContext.default) ?? 0
-        
-        // Get execution count for this fuzzer
-        let executionQuery: PostgresQuery = "SELECT COUNT(*) FROM execution e JOIN program p ON e.program_hash = p.program_hash WHERE p.fuzzer_id = \(fuzzerId)"
-        let executionResult = try await connection.query(executionQuery, logger: self.logger)
-        let executionRows = try await executionResult.collect()
-        let totalExecutions = try executionRows.first?.decode(Int.self, context: PostgresDecodingContext.default) ?? 0
-        
-        // Get crash count for this fuzzer
-        let crashQuery: PostgresQuery = """
-            SELECT COUNT(*) FROM execution e 
-            JOIN program p ON e.program_hash = p.program_hash 
-            JOIN execution_outcome eo ON e.execution_outcome_id = eo.id 
-            WHERE p.fuzzer_id = \(fuzzerId) AND eo.outcome = 'Crashed'
-        """
-        let crashResult = try await connection.query(crashQuery, logger: self.logger)
-        let crashRows = try await crashResult.collect()
-        let totalCrashes = try crashRows.first?.decode(Int.self, context: PostgresDecodingContext.default) ?? 0
-        
-        // Get active fuzzers count
-        let activeQuery: PostgresQuery = "SELECT COUNT(*) FROM main WHERE status = 'active'"
-        let activeResult = try await connection.query(activeQuery, logger: self.logger)
-        let activeRows = try await activeResult.collect()
-        let activeFuzzers = try activeRows.first?.decode(Int.self, context: PostgresDecodingContext.default) ?? 0
-        
-        let stats = DatabaseStatistics(
-            totalPrograms: totalPrograms,
-            totalExecutions: totalExecutions,
-            totalCrashes: totalCrashes,
-            activeFuzzers: activeFuzzers
-        )
-        
-        if enableLogging {
-            self.logger.info("Database statistics: Programs: \(stats.totalPrograms), Executions: \(stats.totalExecutions), Crashes: \(stats.totalCrashes), Active Fuzzers: \(stats.activeFuzzers)")
-        }
-        return stats
+    // MARK: - Batching Methods
+    
+    public func addProgramToBatch(_ program: Program, fuzzerId: Int) {
+        batchLock.lock()
+        defer { batchLock.unlock() }
+        pendingPrograms.append((program, fuzzerId))
     }
     
-    // MARK: - Program Management
+    public func addExecutionToBatch(_ execution: ExecutionInput) {
+        batchLock.lock()
+        defer { batchLock.unlock() }
+        pendingExecutions.append(execution)
+    }
     
+    public func flushBatches() async throws {
+        let programsToStore: [(Program, Int)]
+        let executionsToStore: [ExecutionRecord]
+        
+        batchLock.lock()
+        programsToStore = pendingPrograms
+        executionsToStore = pendingExecutions
+        pendingPrograms = []
+        pendingExecutions = []
+        batchLock.unlock()
+        
+        if !programsToStore.isEmpty {
+            // Group by fuzzerId to use storeProgramsBatch
+            let groupedPrograms = Dictionary(grouping: programsToStore, by: { $0.1 })
+            for (fuzzerId, items) in groupedPrograms {
+                let programs = items.map { $0.0 }
+                _ = try await storeProgramsBatch(programs: programs, fuzzerId: fuzzerId)
+            }
+        }
+        
+        if !executionsToStore.isEmpty {
+            _ = try await storeExecutionsBatch(executions: executionsToStore)
+        }
+    }
+
     /// Store multiple programs in batch for better performance
-    public func storeProgramsBatch(programs: [(Program, ExecutionMetadata)], fuzzerId: Int) async throws -> [String] {
+    public func storeProgramsBatch(programs: [Program], fuzzerId: Int) async throws -> [String] {
         guard !programs.isEmpty else { return [] }
         
         // Use direct connection to avoid connection pool deadlock
@@ -277,8 +301,8 @@ public class PostgreSQLStorage {
         var programHashes: [String] = []
         var fuzzerBatchData: [(String, Int, Int, String)] = []
         
-        // Prepare batch data - store tuples instead of strings to avoid SQL injection
-        for (program, _) in programs {
+        // Prepare batch data
+        for program in programs {
             let programHash = DatabaseUtils.calculateProgramHash(program: program)
             let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
             programHashes.append(programHash)
@@ -307,23 +331,6 @@ public class PostgreSQLStorage {
                     try await connection.query(fuzzerQuery, logger: self.logger)
                 }
                 
-                // Batch insert/update into program table
-                for (programHash, fuzzerId, programSize, programBase64) in fuzzerBatchData {
-                    // Escape single quotes in base64 string
-                    let escapedProgramBase64 = programBase64.replacingOccurrences(of: "'", with: "''")
-                    
-                    // Use INSERT ... ON CONFLICT for atomic upsert
-                    let programQuery = PostgresQuery(stringLiteral: """
-                        INSERT INTO program (program_hash, fuzzer_id, program_size, program_base64) 
-                        VALUES ('\(programHash)', \(fuzzerId), \(programSize), '\(escapedProgramBase64)') 
-                        ON CONFLICT (program_hash) DO UPDATE SET
-                            fuzzer_id = EXCLUDED.fuzzer_id,
-                            program_size = EXCLUDED.program_size,
-                            program_base64 = EXCLUDED.program_base64
-                    """)
-                    try await connection.query(programQuery, logger: self.logger)
-                }
-                
                 // Commit transaction
                 try await connection.query("COMMIT", logger: self.logger)
                 
@@ -340,122 +347,14 @@ public class PostgreSQLStorage {
         return programHashes
     }
     
-    /// Store both program and execution in a single transaction to avoid foreign key issues
-    public func storeProgramAndExecution(
-        program: Program,
-        fuzzerId: Int,
-        executionType: DatabaseExecutionPurpose,
-        outcome: ExecutionOutcome,
-        coverage: Double,
-        executionTimeMs: Int,
-        stdout: String?,
-        stderr: String?,
-        fuzzout: String?,
-        metadata: ExecutionMetadata
-    ) async throws -> (programHash: String, executionId: Int) {
-        let programHash = DatabaseUtils.calculateProgramHash(program: program)
-        let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
-        if enableLogging {
-            logger.info("Storing program and execution: hash=\(programHash), fuzzerId=\(fuzzerId), executionCount=\(metadata.executionCount)")
-        }
-        
-        // Use direct connection to avoid connection pool deadlock
-        let connection = try await createDirectConnection()
-        defer { Task { _ = try? await connection.close() } }
-        
-        // Start transaction
-        try await connection.query("BEGIN", logger: self.logger)
-        
-        do {
-            // Insert into fuzzer table (corpus)
-            let fuzzerQuery = PostgresQuery(stringLiteral: """
-                INSERT INTO fuzzer (program_hash, fuzzer_id, program_size, program_base64) 
-                VALUES ('\(programHash)', \(fuzzerId), \(program.size), '\(programBase64)') 
-                ON CONFLICT DO NOTHING
-            """)
-            try await connection.query(fuzzerQuery, logger: self.logger)
-            
-            // Insert into program table (executed programs) - use two-step upsert
-            let updateQuery = PostgresQuery(stringLiteral: """
-                UPDATE program SET 
-                    fuzzer_id = \(fuzzerId),
-                    program_size = \(program.size),
-                    program_base64 = '\(programBase64)'
-                WHERE program_hash = '\(programHash)'
-            """)
-            let updateResult = try await connection.query(updateQuery, logger: self.logger)
-            let updateRows = try await updateResult.collect()
-            
-            // If no rows were updated, insert the new program
-            if updateRows.isEmpty {
-                let insertQuery = PostgresQuery(stringLiteral: """
-                    INSERT INTO program (program_hash, fuzzer_id, program_size, program_base64) 
-                    VALUES ('\(programHash)', \(fuzzerId), \(program.size), '\(programBase64)') 
-                    ON CONFLICT DO NOTHING
-                """)
-                try await connection.query(insertQuery, logger: self.logger)
-            }
-            
-            // Now store the execution
-            let executionTypeId = DatabaseUtils.mapExecutionType(purpose: executionType)
-            
-            // Extract execution metadata from ExecutionOutcome
-            let (signalCode, exitCode) = extractExecutionMetadata(from: outcome)
-            
-            // Use signal-aware mapping for execution outcomes
-            let outcomeId = DatabaseUtils.mapExecutionOutcomeWithSignal(outcome: outcome, signalCode: signalCode)
-            
-            // Prepare parameters for NULL handling
-            let signalCodeValue = signalCode != nil ? "\(signalCode!)" : "NULL"
-            let exitCodeValue = exitCode != nil ? "\(exitCode!)" : "NULL"
-            let stdoutValue = stdout != nil ? "'\(stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let stderrValue = stderr != nil ? "'\(stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let fuzzoutValue = fuzzout != nil ? "'\(fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            
-            let executionQuery = PostgresQuery(stringLiteral: """
-                INSERT INTO execution (
-                    program_hash, execution_type_id, mutator_type_id, 
-                    execution_outcome_id, coverage_total, execution_time_ms, 
-                    signal_code, exit_code, stdout, stderr, fuzzout, 
-                    feedback_vector, created_at
-                ) VALUES (
-                    '\(programHash)', \(executionTypeId), 
-                    NULL, \(outcomeId), \(coverage), 
-                    \(executionTimeMs), \(signalCodeValue), \(exitCodeValue), 
-                    \(stdoutValue), \(stderrValue), \(fuzzoutValue), 
-                    NULL, NOW()
-                ) RETURNING execution_id
-            """)
-            
-            let result = try await connection.query(executionQuery, logger: self.logger)
-            let rows = try await result.collect()
-            guard let row = rows.first else {
-                throw PostgreSQLStorageError.noResult
-            }
-            
-            let executionId = try row.decode(Int.self, context: PostgresDecodingContext.default)
-            
-            // Commit transaction
-            try await connection.query("COMMIT", logger: self.logger)
-            
-            if enableLogging {
-                self.logger.info("Program and execution storage successful: hash=\(programHash), executionId=\(executionId)")
-            }
-            return (programHash, executionId)
-            
-        } catch {
-            // Rollback transaction on error
-            try await connection.query("ROLLBACK", logger: self.logger)
-            throw error
-        }
-    }
+
     
-    /// Store a program in the database with execution metadata
-    public func storeProgram(program: Program, fuzzerId: Int, metadata: ExecutionMetadata) async throws -> String {
+    /// Store a program in the database
+    public func storeProgram(program: Program, fuzzerId: Int) async throws -> String {
         let programHash = DatabaseUtils.calculateProgramHash(program: program)
         let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
         if enableLogging {
-            logger.info("Storing program: hash=\(programHash), fuzzerId=\(fuzzerId), executionCount=\(metadata.executionCount)")
+            logger.info("Storing program: hash=\(programHash), fuzzerId=\(fuzzerId)")
         }
         
         // Use direct connection to avoid connection pool deadlock
@@ -504,7 +403,7 @@ public class PostgreSQLStorage {
     // MARK: - Execution Management
     
     /// Store multiple executions in batch for better performance
-    public func storeExecutionsBatch(executions: [ExecutionBatchData], fuzzerId: Int) async throws -> [Int] {
+    public func storeExecutionsBatch(executions: [ExecutionInput]) async throws -> [Int] {
         guard !executions.isEmpty else { return [] }
         
         // Use direct connection to avoid connection pool deadlock
@@ -515,33 +414,24 @@ public class PostgreSQLStorage {
         var executionValues: [String] = []
         
         // Prepare batch data
-        for executionData in executions {
-            let programHash = DatabaseUtils.calculateProgramHash(program: executionData.program)
-            let _ = DatabaseUtils.encodeProgramToBase64(program: executionData.program)
-            
-            let executionTypeId = DatabaseUtils.mapExecutionType(purpose: executionData.executionType)
-            
-            // Extract execution metadata from ExecutionOutcome
-            let (signalCode, exitCode) = extractExecutionMetadata(from: executionData.outcome)
-            
-            // Use signal-aware mapping for execution outcomes
-            let outcomeId = DatabaseUtils.mapExecutionOutcomeWithSignal(outcome: executionData.outcome, signalCode: signalCode)
-            
-            // Store mutator name as text instead of ID
-            let mutatorTypeValue = executionData.mutatorType != nil ? "'\(executionData.mutatorType!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let feedbackVectorValue = executionData.feedbackVector != nil ? "'\(executionData.feedbackVector!.base64EncodedString())'" : "NULL"
-            let signalCodeValue = signalCode != nil ? "\(signalCode!)" : "NULL"
-            let exitCodeValue = exitCode != nil ? "\(exitCode!)" : "NULL"
-            let stdoutValue = executionData.stdout != nil ? "'\(executionData.stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let stderrValue = executionData.stderr != nil ? "'\(executionData.stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let fuzzoutValue = executionData.fuzzout != nil ? "'\(executionData.fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+        for execution in executions {
+            // Map IDs to values for SQL
+            let mutatorTypeValue = execution.mutatorTypeId != nil ? "\(execution.mutatorTypeId!)" : "NULL"
+            let coverageTotalValue = execution.coverageTotal != nil ? "\(execution.coverageTotal!)" : "NULL"
+            let edgesFoundValue = execution.edgesFound != nil ? "\(execution.edgesFound!)" : "NULL"
+            let totalEdgesValue = execution.totalEdges != nil ? "\(execution.totalEdges!)" : "NULL"
+            let isNewEdgeValue = execution.isNewEdge ? "TRUE" : "FALSE"
+            let stdoutValue = execution.stdout != nil ? "'\(execution.stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+            let stderrValue = execution.stderr != nil ? "'\(execution.stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+            let fuzzoutValue = execution.fuzzout != nil ? "'\(execution.fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+            let turbofanBitsValue = execution.turbofanOptimizationBits != nil ? "\(execution.turbofanOptimizationBits!)" : "NULL"
+            let nexusCountValue = execution.feedbackNexusCount != nil ? "\(execution.feedbackNexusCount!)" : "NULL"
             
             executionValues.append("""
-                ('\(programHash)', \(executionTypeId), 
-                \(mutatorTypeValue), \(outcomeId), \(executionData.coverage), 
-                \(executionData.executionTimeMs), \(signalCodeValue), \(exitCodeValue), 
+                ('\(execution.programHash)', \(mutatorTypeValue), \(execution.executionOutcomeId), \(coverageTotalValue), 
+                \(edgesFoundValue), \(totalEdgesValue), \(isNewEdgeValue),
                 \(stdoutValue), \(stderrValue), \(fuzzoutValue), 
-                \(feedbackVectorValue), NOW())
+                \(turbofanBitsValue), \(nexusCountValue), NOW())
             """)
         }
         
@@ -549,10 +439,10 @@ public class PostgreSQLStorage {
         if !executionValues.isEmpty {
             let queryString = """
                 INSERT INTO execution (
-                    program_hash, execution_type_id, mutator_type_id, 
-                    execution_outcome_id, coverage_total, execution_time_ms, 
-                    signal_code, exit_code, stdout, stderr, fuzzout, 
-                    feedback_vector, created_at
+                    program_hash, mutator_type_id, execution_outcome_id, coverage_total,
+                    edges_found, total_edges, is_new_edge,
+                    stdout, stderr, fuzzout,
+                    turbofan_optimization_bits, feedback_nexus_count, created_at
                 ) VALUES \(executionValues.joined(separator: ", ")) RETURNING execution_id
             """
             
@@ -563,21 +453,6 @@ public class PostgreSQLStorage {
             for row in rows {
                 let executionId = try row.decode(Int.self, context: PostgresDecodingContext.default)
                 executionIds.append(executionId)
-            }
-
-            // Insert coverage detail rows for executions that have edge data
-            var coverageValues: [String] = []
-            for (idx, execId) in executionIds.enumerated() {
-                let edges = executions[idx].coverageEdges
-                if !edges.isEmpty {
-                    for edge in edges {
-                        coverageValues.append("(\(execId), \(edge), 1, TRUE)")
-                    }
-                }
-            }
-            if !coverageValues.isEmpty {
-                let coverageInsert = "INSERT INTO coverage_detail (execution_id, edge_index, edge_hit_count, is_new_edge) VALUES " + coverageValues.joined(separator: ", ")
-                try await connection.query(PostgresQuery(stringLiteral: coverageInsert), logger: self.logger)
             }
         }
         
@@ -593,16 +468,14 @@ public class PostgreSQLStorage {
         outcome: ExecutionOutcome,
         coverage: Double = 0.0,
         executionTimeMs: Int = 0,
-        feedbackVector: Data? = nil,
         coverageEdges: Set<Int> = [],
         stdout: String? = nil,
         stderr: String? = nil,
         fuzzout: String? = nil
     ) async throws -> Int {
         let programHash = DatabaseUtils.calculateProgramHash(program: program)
-        let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
         if enableLogging {
-            logger.info("Storing execution: hash=\(programHash), fuzzerId=\(fuzzerId), type=\(executionType), outcome=\(outcome), programBase64=\(programBase64)")
+            logger.info("Storing execution: hash=\(programHash), fuzzerId=\(fuzzerId), type=\(executionType), outcome=\(outcome)")
         }
         
         // Use direct connection to avoid connection pool deadlock
@@ -619,25 +492,28 @@ public class PostgreSQLStorage {
         
         // Prepare parameters for NULL handling - store mutator name as text instead of ID
         let mutatorTypeValue = mutatorType != nil ? "'\(mutatorType!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-        let feedbackVectorValue = feedbackVector != nil ? "'\(feedbackVector!.base64EncodedString())'" : "NULL"
         let signalCodeValue = signalCode != nil ? "\(signalCode!)" : "NULL"
         let exitCodeValue = exitCode != nil ? "\(exitCode!)" : "NULL"
         let stdoutValue = stdout != nil ? "'\(stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
         let stderrValue = stderr != nil ? "'\(stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
         let fuzzoutValue = fuzzout != nil ? "'\(fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
+        // These are not passed in storeExecution arguments currently, so we default to NULL for now
+        // or we should update the signature. Since storeExecution is likely legacy/single-use, NULL is fine.
+        let turbofanBitsValue = "NULL"
+        let nexusCountValue = "NULL"
         
         let query = PostgresQuery(stringLiteral: """
             INSERT INTO execution (
                 program_hash, execution_type_id, mutator_type_id, 
                 execution_outcome_id, coverage_total, execution_time_ms, 
                 signal_code, exit_code, stdout, stderr, fuzzout, 
-                feedback_vector, created_at
+                turbofan_optimization_bits, feedback_nexus_count, created_at
             ) VALUES (
                 '\(programHash)', \(executionTypeId), 
                 \(mutatorTypeValue), \(outcomeId), \(coverage), 
                 \(executionTimeMs), \(signalCodeValue), \(exitCodeValue), 
                 \(stdoutValue), \(stderrValue), \(fuzzoutValue), 
-                \(feedbackVectorValue), NOW()
+                \(turbofanBitsValue), \(nexusCountValue), NOW()
             ) RETURNING execution_id
         """)
         
@@ -668,50 +544,55 @@ public class PostgreSQLStorage {
     
     // MARK: - Query Operations
     
-}
-
-// MARK: - Supporting Types
-
-/// Batch data for execution storage
-public struct ExecutionBatchData {
-    public let program: Program
-    public let executionType: DatabaseExecutionPurpose
-    public let mutatorType: String?
-    public let outcome: ExecutionOutcome
-    public let coverage: Double
-    public let executionTimeMs: Int
-    public let feedbackVector: Data?
-    public let coverageEdges: Set<Int>
-    public let stdout: String?
-    public let stderr: String?
-    public let fuzzout: String?
-    
-    public init(
-        program: Program,
-        executionType: DatabaseExecutionPurpose,
-        mutatorType: String? = nil,
-        outcome: ExecutionOutcome,
-        coverage: Double = 0.0,
-        executionTimeMs: Int = 0,
-        feedbackVector: Data? = nil,
-        coverageEdges: Set<Int> = [],
-        stdout: String? = nil,
-        stderr: String? = nil,
-        fuzzout: String? = nil
-    ) {
-        self.program = program
-        self.executionType = executionType
-        self.mutatorType = mutatorType
-        self.outcome = outcome
-        self.coverage = coverage
-        self.executionTimeMs = executionTimeMs
-        self.feedbackVector = feedbackVector
-        self.coverageEdges = coverageEdges
-        self.stdout = stdout
-        self.stderr = stderr
-        self.fuzzout = fuzzout
+    /// Fetch new programs from the database that were added after a certain time
+    /// - Parameters:
+    ///   - since: The timestamp to fetch programs from
+    ///   - limit: Maximum number of programs to fetch
+    /// - Returns: A list of (Program, ProgramHash) tuples
+    public func fetchNewPrograms(since: Date, limit: Int = 100) async throws -> [(Program, String)] {
+        if enableLogging {
+            logger.info("Fetching new programs since: \(since)")
+        }
+        
+        // Use direct connection to avoid connection pool deadlock
+        let connection = try await createDirectConnection()
+        defer { Task { _ = try? await connection.close() } }
+        
+        // Query for programs added after the specified time
+        let query = PostgresQuery(stringLiteral: """
+            SELECT program_hash, program_base64 
+            FROM fuzzer 
+            WHERE inserted_at > $1
+            ORDER BY inserted_at ASC
+            LIMIT \(limit)
+        """)
+        
+        let result = try await connection.query(query, [since], logger: self.logger)
+        let rows = try await result.collect()
+        
+        var programs: [(Program, String)] = []
+        
+        for row in rows {
+            do {
+                let hash = try row.decode(String.self, context: PostgresDecodingContext.default)
+                let base64 = try row.decode(String.self, context: PostgresDecodingContext.default)
+                
+                if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: base64) {
+                    programs.append((program, hash))
+                }
+            } catch {
+                if enableLogging {
+                    logger.warning("Failed to decode program from database: \(error)")
+                }
+            }
+        }
+        
+        if enableLogging {
+            logger.info("Fetched \(programs.count) new programs")
+        }
+        
+        return programs
     }
-}
 
 /// PostgreSQL storage errors
 public enum PostgreSQLStorageError: Error, LocalizedError {

@@ -480,7 +480,7 @@ public class Fuzzer {
                 // We're performing a full corpus import, so the sample still needs to be added to our corpus even though it doesn't trigger any new behaviour.
                 corpus.add(program, ProgramAspects(outcome: .succeeded))
                 // We also dispatch the InterestingProgramFound event here since we technically found an interesting program, but also so that the program is forwarded to child nodes.
-                dispatchEvent(events.InterestingProgramFound, data: (program, origin))
+                dispatchEvent(events.InterestingProgramFound, data: (program, ProgramAspects(outcome: .succeeded), origin))
                 wasImported = true
             }
 
@@ -760,7 +760,7 @@ public class Fuzzer {
                 }
             }
             assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
-            dispatchEvent(events.InterestingProgramFound, data: (program, origin))
+            dispatchEvent(events.InterestingProgramFound, data: (program, aspects, origin))
 
             // If we're running in static corpus mode, we only add programs to our corpus during corpus import.
             if !config.staticCorpus || origin.isFromCorpusImport() {

@@ -9,21 +9,8 @@ public class DatabaseUtils {
     /// Encode a Program to base64 string for database storage
     public static func encodeProgramToBase64(program: Program) -> String {
         do {
-            // Check if program contains print operations that can't be serialized
-            var hasPrintOperations = false
-            for instruction in program.code {
-                if case .print = instruction.op.opcode {
-                    hasPrintOperations = true
-                    break
-                }
-            }
-            
-            if hasPrintOperations {
-                // For programs with print operations, create a minimal representation
-                // This is a workaround since print operations can't be serialized
-                let minimalData = "PRINT_PROGRAM_NOT_SERIALIZABLE".data(using: .utf8) ?? Data()
-                return minimalData.base64EncodedString()
-            }
+            // Make sure the program does not contain internal operations
+            assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
             
             let proto = program.asProtobuf()
             let data = try proto.serializedData()
@@ -48,21 +35,8 @@ public class DatabaseUtils {
     /// Calculate SHA256 hash of a Program for deduplication
     public static func calculateProgramHash(program: Program) -> String {
         do {
-            // Check if program contains print operations that can't be serialized
-            var hasPrintOperations = false
-            for instruction in program.code {
-                if case .print = instruction.op.opcode {
-                    hasPrintOperations = true
-                    break
-                }
-            }
-            
-            if hasPrintOperations {
-                // Use a simple hash based on program size and instruction count for programs with print operations
-                let simpleHash = program.size.hashValue ^ program.code.count.hashValue
-                return String(format: "%016x", UInt64(bitPattern: Int64(simpleHash)))
-            }
-            
+            assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
+
             let proto = program.asProtobuf()
             let data = try proto.serializedData()
             
@@ -92,46 +66,6 @@ public class DatabaseUtils {
     /// Deserialize ExecutionMetadata from Data from database
     public static func deserializeExecutionMetadata(data: Data) throws -> ExecutionMetadata {
         return try JSONDecoder().decode(ExecutionMetadata.self, from: data)
-    }
-    
-    // MARK: - Program Filtering
-    
-    /// Check if a program contains FUZZILLI_CRASH test calls (false positive crashes)
-    public static func containsFuzzilliCrash(program: Program) -> Bool {
-        // Lift program to JavaScript and check for FUZZILLI_CRASH pattern
-        let jsLifter = JavaScriptLifter(prefix: "", suffix: "", ecmaVersion: .es6)
-        let jsCode = jsLifter.lift(program, withOptions: [])
-        
-        // Check for patterns like fuzzilli('FUZZILLI_CRASH', ...) or fuzzilli("FUZZILLI_CRASH", ...)
-        // Specifically check for fuzzilli('FUZZILLI_CRASH', 3) which is a test case
-        let patterns = [
-            "fuzzilli('FUZZILLI_CRASH'",
-            "fuzzilli(\"FUZZILLI_CRASH\"",
-            "fuzzilli(`FUZZILLI_CRASH`",
-            "fuzzilli('FUZZILLI_CRASH', 3)",
-            "fuzzilli(\"FUZZILLI_CRASH\", 3)",
-            "fuzzilli(`FUZZILLI_CRASH`, 3)"
-        ]
-        
-        for pattern in patterns {
-            if jsCode.contains(pattern) {
-                return true
-            }
-        }
-        
-        // Also check for the pattern with any whitespace variations
-        let regexPatterns = [
-            "fuzzilli\\s*\\(\\s*['\"`]FUZZILLI_CRASH['\"`]\\s*,\\s*3\\s*\\)",
-            "fuzzilli\\s*\\(\\s*['\"`]FUZZILLI_CRASH['\"`]"
-        ]
-        
-        for pattern in regexPatterns {
-            if jsCode.range(of: pattern, options: .regularExpression) != nil {
-                return true
-            }
-        }
-        
-        return false
     }
     
     // MARK: - Execution Outcome Mapping
@@ -237,51 +171,79 @@ public class DatabaseUtils {
         }
     }
     
-    /// Map database ID to mutator name
-    public static func mapMutatorTypeFromId(id: Int) -> String? {
-        switch id {
-        case 1:
-            return "Splice"
-        case 2:
-            return "InputMutation"
-        case 3:
-            return "OperationMutation"
-        case 4:
-            return "CodeMutation"
-        case 5:
-            return "Exploration"
-        case 6:
-            return "Fixup"
-        case 7:
-            return "RuntimeAssisted"
-        case 8:
-            return "Probing"
-        case 9:
-            return "Combine"
-        case 10:
-            return "Concat"
-        case 11:
-            return "Block"
-        case 12:
-            return "DataFlow"
-        case 13:
-            return "Inlining"
-        case 14:
-            return "Instruction"
-        case 15:
-            return "Loop"
-        case 16:
-            return "Generic"
-        case 17:
-            return "Reassign"
-        case 18:
-            return "Variadic"
-        case 19:
-            return "WasmType"
+    /// Map mutator name to database ID
+    public static func mapMutatorNameToId(_ name: String) -> Int? {
+        switch name {
+        case "ExplorationMutator":
+            return 1
+        case "CodeGenMutator":
+            return 2
+        case "SpliceMutator":
+            return 3
+        case "ProbingMutator":
+            return 4
+        case "InputMutator":
+            return 5
+        case "OperationMutator":
+            return 6
+        case "CombineMutator":
+            return 7
+        case "ConcatMutator":
+            return 8
+        case "FixupMutator":
+            return 9
+        case "RuntimeAssistedMutator":
+            return 10
         default:
             return nil
         }
     }
+    
+    /// Map database ID to mutator name
+    //public static func mapMutatorTypeFromId(id: Int) -> String? {
+    //    switch id {
+    //    case 1:
+    //        return "Splice"
+    //    case 2:
+    //        return "InputMutation"
+    //    case 3:
+    //        return "OperationMutation"
+    //    case 4:
+    //        return "CodeMutation"
+    //    case 5:
+    //        return "Exploration"
+    //    case 6:
+    //        return "Fixup"
+    //    case 7:
+    //        return "RuntimeAssisted"
+    //    case 8:
+    //        return "Probing"
+    //    case 9:
+    //        return "Combine"
+    //    case 10:
+    //        return "Concat"
+    //    case 11:
+    //        return "Block"
+    //    case 12:
+    //        return "DataFlow"
+    //    case 13:
+    //        return "Inlining"
+    //    case 14:
+    //        return "Instruction"
+    //    case 15:
+    //        return "Loop"
+    //    case 16:
+    //        return "Generic"
+    //    case 17:
+    //        return "Reassign"
+    //    case 18:
+    //        return "Variadic"
+    //    case 19:
+    //        return "WasmType"
+    //    default:
+    //        return nil
+    //    }
+    //}
     
     // MARK: - Execution Type Mapping
     
@@ -430,8 +392,6 @@ public enum DatabaseUtilsError: Error, LocalizedError {
             return 3
         case "timedout":
             return 4
-        case "sigcheck":
-            return 34
         default:
             return 3 // Default to succeeded
         }

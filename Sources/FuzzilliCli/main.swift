@@ -559,42 +559,11 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     case "markov":
         corpus = MarkovCorpus(covEvaluator: evaluator as ProgramCoverageEvaluator, dropoutRate: markovDropoutRate)
     case "postgresql":
-        // Create PostgreSQL corpus with master database connection
-        let fuzzerInstanceId: String
+        // Use BasicCorpus with PostgreSQL sync module for database persistence
+        corpus = BasicCorpus(minSize: minCorpusSize, maxSize: maxCorpusSize, minMutationsPerSample: minMutationsPerSample)
         
-        // Check for explicit fuzzer instance name from environment or CLI args
-        if let explicitName = args["--fuzzer-instance-name"] ?? ProcessInfo.processInfo.environment["FUZZER_INSTANCE_NAME"], !explicitName.isEmpty {
-            fuzzerInstanceId = explicitName
-            logger.info("Using explicit fuzzer instance ID: \(fuzzerInstanceId)")
-        } else if resume {
-            // Use fixed fuzzer instance ID for resume
-            fuzzerInstanceId = "fuzzer-main"
-        } else {
-            // Generate dynamic fuzzer instance ID with 8-char hash
-            let randomHash = String(UUID().uuidString.prefix(8))
-            fuzzerInstanceId = "fuzzer-\(randomHash)"
-        }
-        
-        guard let url = postgresUrl else {
-            logger.fatal("PostgreSQL URL is required for PostgreSQL corpus")
-        }
-        
-        let databasePool = DatabasePool(connectionString: url, enableLogging: postgresLogging)
-        logger.info("Connecting to master PostgreSQL database")
-        logger.info("PostgreSQL URL: \(url)")
-        
-        corpus = PostgreSQLCorpus(
-            minSize: minCorpusSize,
-            maxSize: maxCorpusSize,
-            minMutationsPerSample: minMutationsPerSample,
-            databasePool: databasePool,
-            fuzzerInstanceId: fuzzerInstanceId,
-            resume: resume,
-            enableLogging: postgresLogging
-        )
-        
-        logger.info("Created PostgreSQL corpus with instance ID: \(fuzzerInstanceId)")
-        logger.info("Resume mode: \(resume)")
+        // Note: PostgreSQLSync module will be added after fuzzer initialization to handle database operations
+        logger.info("Using BasicCorpus with PostgreSQL synchronization")
     default:
         logger.fatal("Invalid corpus name provided")
     }
@@ -713,6 +682,34 @@ fuzzer.sync {
     // Synchronize with thread workers if requested.
     if numJobs > 1 {
         fuzzer.addModule(ThreadParent(for: fuzzer))
+    }
+    
+    // Add PostgreSQL sync module if using postgresql corpus
+    if corpusName == "postgresql" {
+        guard let url = postgresUrl else {
+            logger.fatal("PostgreSQL URL is required for PostgreSQL corpus")
+        }
+        
+        let fuzzerInstanceId: String
+        // Check for explicit fuzzer instance name from environment or CLI args
+        if let explicitName = args["--fuzzer-instance-name"] ?? ProcessInfo.processInfo.environment["FUZZER_INSTANCE_NAME"], !explicitName.isEmpty {
+            fuzzerInstanceId = explicitName
+            logger.info("Using explicit fuzzer instance ID: \(fuzzerInstanceId)")
+        } else if resume {
+            // Use fixed fuzzer instance ID for resume
+            fuzzerInstanceId = "fuzzer-main"
+        } else {
+            // Generate dynamic fuzzer instance ID with 8-char hash
+            let randomHash = String(UUID().uuidString.prefix(8))
+            fuzzerInstanceId = "fuzzer-\(randomHash)"
+        }
+        
+        let databasePool = DatabasePool(connectionString: url, enableLogging: postgresLogging)
+        let storage = PostgreSQLStorage(databasePool: databasePool, enableLogging: postgresLogging)
+        let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging)
+        fuzzer.addModule(postgresSync)
+        
+        logger.info("Added PostgreSQL synchronization module with instance ID: \(fuzzerInstanceId)")
     }
 
     // Check for potential misconfiguration.

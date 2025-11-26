@@ -46,8 +46,23 @@ public class PostgreSQLSync: Module {
         }
         
         // Listen for executions to track them
+        // We need to use PreExecute to get the program, then store it for later association with the execution result
+        var programBeingExecuted: Program? = nil
+        var programBeingExecutedLock = NSLock()
+        
+        fuzzer.registerEventListener(for: fuzzer.events.PreExecute) { ev in
+            programBeingExecutedLock.lock()
+            programBeingExecuted = ev.program
+            programBeingExecutedLock.unlock()
+        }
+        
         fuzzer.registerEventListener(for: fuzzer.events.PostExecute) { execution in
-            let program = execution.program
+            programBeingExecutedLock.lock()
+            let program = programBeingExecuted
+            programBeingExecutedLock.unlock()
+            
+            guard let program = program else { return }
+            
             let programHash = DatabaseUtils.calculateProgramHash(program: program)
             
             self.executionMapLock.lock()

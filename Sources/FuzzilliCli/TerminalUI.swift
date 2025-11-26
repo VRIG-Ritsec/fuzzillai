@@ -67,11 +67,11 @@ class TerminalUI {
             }
         }
 
-        fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { program, origin in
+        fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
             self.lastInterestingProgramFound = Date()
             if self.printNextInterestingProgram {
                 print("--------- Randomly Sampled Interesting Program -----------")
-                print(fuzzer.lifter.lift(program, withOptions: .includeComments))
+                print(fuzzer.lifter.lift(ev.program, withOptions: .includeComments))
                 self.printNextInterestingProgram = false
             }
         }
@@ -126,26 +126,9 @@ class TerminalUI {
             print("Fuzzer Statistics")
         }
         
-        // Check if we're using PostgreSQL corpus and get additional stats
-        let isPostgreSQLCorpus = fuzzer.corpus is PostgreSQLCorpus
-        var postgresStats = ""
-        
-        if isPostgreSQLCorpus {
-            if let postgresCorpus = fuzzer.corpus as? PostgreSQLCorpus {
-                let corpusStats = postgresCorpus.getStatistics()
-                
-                postgresStats = """
-        -----------------
-        PostgreSQL Database Stats:
-        Database Programs:            \(corpusStats.totalPrograms)
-        Database Executions:          \(corpusStats.totalExecutions)
-        Avg Coverage (DB):            \(String(format: "%.2f%%", corpusStats.averageCoverage))
-        Current Coverage (Live):      \(String(format: "%.2f%%", corpusStats.currentCoverage * 100))
-        Pending Sync Operations:      \(corpusStats.pendingSyncOperations)
-        Fuzzer Instance ID:           \(corpusStats.fuzzerInstanceId)
-        """
-            }
-        }
+        // PostgreSQL corpus stats are no longer available since PostgreSQLCorpus was removed
+        // The functionality is now handled by PostgreSQLSync module
+        let postgresStats = ""
         
         print("""
         \(postgresStats)\

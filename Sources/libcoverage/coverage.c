@@ -387,6 +387,6 @@ void clear_optimization_bits(struct cov_context* context) {
 }
 
 uint64_t cov_get_optimization_bits_current(struct cov_context* context) {
-    if (!context->shmem) return 0;
+    if (!context) return 0;
     return context->turbofan_optimization_bits_current;
 }

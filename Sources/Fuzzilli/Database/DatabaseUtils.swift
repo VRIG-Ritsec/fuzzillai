@@ -246,7 +246,17 @@ public class DatabaseUtils {
     //}
     
     // MARK: - Execution Type Mapping
-    
+
+    public enum DatabaseExecutionPurpose: Int, CaseIterable {
+        case fuzzing = 1
+        case programImport = 2
+        case minimization = 3
+        case deterministicCheck = 4
+        case startup = 5
+        case runtimeAssistedMutation = 6
+        case other = 7
+    }
+
     /// Map execution purpose to database ID
     public static func mapExecutionType(purpose: DatabaseExecutionPurpose) -> Int {
         switch purpose {

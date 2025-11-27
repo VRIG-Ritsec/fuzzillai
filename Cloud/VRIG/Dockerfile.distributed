@@ -14,9 +14,7 @@ ADD .. fuzzillai
 
 # build Fuzzilli
 RUN cd fuzzillai && \
-    # Temporarily remove test target to avoid build issues
-    sed -i '/\.testTarget(name: "FuzzilliTests"/,/),$/d' Package.swift && \
-    swift build -c release --product FuzzilliCli && \
+    swift build -c release && \
     # Verify the executable was created
     ls -la .build/release/ && \
     find .build -name "FuzzilliCli" -type f -executable
@@ -51,7 +49,7 @@ ENV DEBUG_LOGGING=false
 
 # Default command for distributed fuzzing
 # Single master database mode - all workers connect directly to master
-CMD ./FuzzilliCli --profile=v8debug --engine=multi --resume --corpus=postgresql \
+CMD ./FuzzilliCli --profile=v8 --engine=multi --resume --corpus=postgresql \
       --postgres-url="${POSTGRES_URL}" \
       --timeout="${TIMEOUT}" \
       --minMutationsPerSample="${MIN_MUTATIONS_PER_SAMPLE}" \

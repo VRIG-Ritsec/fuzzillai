@@ -31,12 +31,31 @@ public class PostgreSQLSync: Module {
             }
         }
         
-        // Register fuzzer
+        // Register fuzzer and sync corpus
         Task {
             do {
-                self.cachedFuzzerId = try await storage.registerFuzzer(name: fuzzerInstanceId, engineType: "v8")
+                // Step 1: Register this worker with the database
+                self.cachedFuzzerId = try await storage.registerFuzzer()
                 if enableLogging {
                     logger.info("Fuzzer registered with PostgreSQL database: ID \(self.cachedFuzzerId ?? -1)")
+                }
+                
+                // Step 2: Sync corpus from database to in-memory basicCorpus
+                let programs = try await storage.syncCorpusFromDatabase()
+                if enableLogging {
+                    logger.info("Syncing \(programs.count) programs from database to corpus")
+                }
+                
+                // Import each program into the fuzzer's corpus
+                for program in programs {
+                    fuzzer.async {
+                        // Use .corpusImport origin to indicate it came from the database
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: false)))
+                    }
+                }
+                
+                if enableLogging {
+                    logger.info("Corpus synchronization complete: imported \(programs.count) programs")
                 }
             } catch {
                 logger.error("Failed to register fuzzer with PostgreSQL database: \(error)")
@@ -52,99 +71,100 @@ public class PostgreSQLSync: Module {
             // Only sync programs found locally to avoid cycles
             guard ev.origin == .local else { return }
             
+            // Capture execution outputs synchronously to avoid race conditions and thread safety issues
+            // Accessing these properties triggers event dispatching which must happen on the Fuzzer queue
+            let stdout = execution?.stdout ?? ""
+            let stderr = execution?.stderr ?? ""
+            let fuzzout = execution?.fuzzout ?? ""
+            
             Task {
-                do {
-                    // Ensure we have a fuzzer ID
-                    if self.cachedFuzzerId == nil {
-                        self.cachedFuzzerId = try await self.storage.registerFuzzer(name: self.fuzzerInstanceId, engineType: "v8")
+                // Ensure we have a fuzzer ID (should already be set from initialization)
+                guard let fuzzerId = self.cachedFuzzerId else {
+                    self.logger.error("Fuzzer ID not set - registration may have failed")
+                    return
+                }
+                
+                // Store program and execution data
+                await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
+                    
+                // Only store execution if we have execution data
+                if let execution = execution {
+                    let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
+                    
+                    let mutatorName = program.contributors.first(where: { contributor in
+                        // Check if this contributor's name matches known mutator patterns
+                        contributor.name.contains("Mutator")
+                    })?.name
+                    
+                    let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
+                    
+                    // Determine if new edges were found
+                    // Check if aspects is a CovEdgeSet to distinguish between:
+                    // - New coverage edges (CovEdgeSet with count > 0)
+                    // - Feedback/optimization delta only (basic ProgramAspects)
+                    let isNewEdge: Bool
+                    if let covEdgeSet = aspects as? CovEdgeSet {
+                        isNewEdge = covEdgeSet.count > 0
+                    } else {
+                        isNewEdge = false
+                    }
+
+                    var coverageTotal: Double? = nil
+                    var edgesFound: Int? = nil
+                    var totalEdges: Int? = nil
+                    var turbofanOptimizationBits: Int64? = nil
+                    var feedbackNexusCount: Int? = nil
+                    
+                    if let evaluator = self.covEvaluator {
+                        let totalEdgesCount = evaluator.getTotalEdgesCount()
+                        totalEdges = Int(totalEdgesCount)
+                        
+                        let foundEdgesCount = evaluator.getFoundEdgesCount()
+                        
+                        // Calculate coverage percentage
+                        if totalEdgesCount > 0 {
+                            coverageTotal = Double(foundEdgesCount) / Double(totalEdgesCount)
+                        }
+                        
+                        if let covEdgeSet = aspects as? CovEdgeSet {
+                            edgesFound = Int(covEdgeSet.count)
+                        } else {
+                            edgesFound = 0
+                        }
+                        
+                        turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
+                        feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                     }
                     
-                    if let fuzzerId = self.cachedFuzzerId {
-                        await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
-                        
-                        // Only store execution if we have execution data
-                        if let execution = execution {
-                            let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
-                            
-                            let mutatorName = program.contributors.first(where: { contributor in
-                                // Check if this contributor's name matches known mutator patterns
-                                contributor.name.contains("Mutator")
-                            })?.name
-                            
-                            let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
-                            
-                            // Determine if new edges were found
-                            // Check if aspects is a CovEdgeSet to distinguish between:
-                            // - New coverage edges (CovEdgeSet with count > 0)
-                            // - Feedback/optimization delta only (basic ProgramAspects)
-                            let isNewEdge: Bool
-                            if let covEdgeSet = aspects as? CovEdgeSet {
-                                isNewEdge = covEdgeSet.count > 0
-                            } else {
-                                isNewEdge = false
-                            }
-
-                            var coverageTotal: Double? = nil
-                            var edgesFound: Int? = nil
-                            var totalEdges: Int? = nil
-                            var turbofanOptimizationBits: Int64? = nil
-                            var feedbackNexusCount: Int? = nil
-                            
-                            if let evaluator = self.covEvaluator {
-                                let totalEdgesCount = evaluator.getTotalEdgesCount()
-                                totalEdges = Int(totalEdgesCount)
-                                
-                                let foundEdgesCount = evaluator.getFoundEdgesCount()
-                                
-                                // Calculate coverage percentage
-                                if totalEdgesCount > 0 {
-                                    coverageTotal = Double(foundEdgesCount) / Double(totalEdgesCount)
-                                }
-                                
-                                if let covEdgeSet = aspects as? CovEdgeSet {
-                                    edgesFound = Int(covEdgeSet.count)
-                                } else {
-                                    edgesFound = 0
-                                }
-                                
-                                turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
-                                feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
-                            }
-                            
-                            let programHash = DatabaseUtils.calculateProgramHash(program: program)
-                            let executionInput = PostgreSQLStorage.ExecutionInput(
-                                programHash: programHash,
-                                mutatorTypeId: mutatorTypeId,
-                                executionOutcomeId: outcomeId,
-                                coverageTotal: coverageTotal,
-                                edgesFound: edgesFound,
-                                totalEdges: totalEdges,
-                                isNewEdge: isNewEdge,
-                                stdout: execution.stdout,
-                                stderr: execution.stderr,
-                                fuzzout: execution.fuzzout,
-                                turbofanOptimizationBits: turbofanOptimizationBits,
-                                feedbackNexusCount: feedbackNexusCount,
-                                createdAt: Date()
-                            )
-                            await self.storage.addExecutionToBatch(executionInput)
-                            
-                            if self.enableLogging {
-                                let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
-                                let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
-                                self.logger.info("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
-                            }
-                        }
+                    let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                    let executionInput = PostgreSQLStorage.ExecutionInput(
+                        programHash: programHash,
+                        mutatorTypeId: mutatorTypeId,
+                        executionOutcomeId: outcomeId,
+                        coverageTotal: coverageTotal,
+                        edgesFound: edgesFound,
+                        totalEdges: totalEdges,
+                        isNewEdge: isNewEdge,
+                        stdout: stdout,
+                        stderr: stderr,
+                        fuzzout: fuzzout,
+                        turbofanOptimizationBits: turbofanOptimizationBits,
+                        feedbackNexusCount: feedbackNexusCount,
+                        createdAt: Date()
+                    )
+                    await self.storage.addExecutionToBatch(executionInput)
+                    
+                    if self.enableLogging {
+                        let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
+                        let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
+                        self.logger.info("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
                     }
-                } catch {
-                    let errorDetails = String(reflecting: error)
-                    self.logger.error("Failed to store program: \(errorDetails)")
                 }
             }
         }
         
         // Periodic Flush
-        // Aleksi: 1 minute for testing but update later. Ideally, pull dynamically from runtime flag?
+        // TODO Aleksi: 1 minute for testing but update later
         fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 do {
@@ -153,7 +173,25 @@ public class PostgreSQLSync: Module {
                         self.logger.info("Flushed batches to database")
                     }
                 } catch {
-                    self.logger.error("Failed to flush batches: \(error)")
+                    let errorString = String(reflecting: error)
+                    self.logger.error("Failed to flush batches: \(errorString)")
+                }
+            }
+        }
+        
+        // Heartbeat: Update fuzzer activity every 1 minute to prevent being marked as stale
+        // TODO Aleksi: 1 minute for testing but update later
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
+            Task {
+                if let fuzzerId = self.cachedFuzzerId {
+                    do {
+                        try await self.storage.updateFuzzerActivity(fuzzerId: fuzzerId)
+                        if self.enableLogging {
+                            self.logger.info("Heartbeat: Updated fuzzer activity")
+                        }
+                    } catch {
+                        self.logger.error("Failed to update fuzzer activity: \(error)")
+                    }
                 }
             }
         }
@@ -162,6 +200,22 @@ public class PostgreSQLSync: Module {
         fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
+            }
+        }
+        
+        // Shutdown handler - deactivate fuzzer for graceful shutdown
+        fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
+            Task {
+                if let fuzzerId = self.cachedFuzzerId {
+                    do {
+                        try await self.storage.deactivateFuzzer(fuzzerId: fuzzerId)
+                        if self.enableLogging {
+                            self.logger.info("Fuzzer deactivated on shutdown")
+                        }
+                    } catch {
+                        self.logger.error("Failed to deactivate fuzzer on shutdown: \(error)")
+                    }
+                }
             }
         }
     }

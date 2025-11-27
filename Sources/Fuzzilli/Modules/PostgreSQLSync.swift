@@ -9,8 +9,6 @@ public class PostgreSQLSync: Module {
     private let logger = Logger(withLabel: "PostgreSQLSync")
     
     private var cachedFuzzerId: Int?
-    private var programExecutionMap: [String: Execution] = [:]  // Track executions by program hash
-    private let executionMapLock = NSLock()
     private var covEvaluator: ProgramCoverageEvaluator?  // Cache coverage evaluator for metrics
     
     public init(storage: PostgreSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
@@ -45,34 +43,12 @@ public class PostgreSQLSync: Module {
             }
         }
         
-        // Listen for executions to track them
-        // We need to use PreExecute to get the program, then store it for later association with the execution result
-        var programBeingExecuted: Program? = nil
-        var programBeingExecutedLock = NSLock()
-        
-        fuzzer.registerEventListener(for: fuzzer.events.PreExecute) { ev in
-            programBeingExecutedLock.lock()
-            programBeingExecuted = ev.program
-            programBeingExecutedLock.unlock()
-        }
-        
-        fuzzer.registerEventListener(for: fuzzer.events.PostExecute) { execution in
-            programBeingExecutedLock.lock()
-            let program = programBeingExecuted
-            programBeingExecutedLock.unlock()
-            
-            guard let program = program else { return }
-            
-            let programHash = DatabaseUtils.calculateProgramHash(program: program)
-            
-            self.executionMapLock.lock()
-            self.programExecutionMap[programHash] = execution
-            self.executionMapLock.unlock()
-        }
         
         fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
             let program = ev.program
             let aspects = ev.aspects
+            let execution = ev.execution
+            
             // Only sync programs found locally to avoid cycles
             guard ev.origin == .local else { return }
             
@@ -84,14 +60,9 @@ public class PostgreSQLSync: Module {
                     }
                     
                     if let fuzzerId = self.cachedFuzzerId {
-                        let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                        await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
                         
-                        self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
-                        
-                        self.executionMapLock.lock()
-                        let execution = self.programExecutionMap[programHash]
-                        self.executionMapLock.unlock()
-
+                        // Only store execution if we have execution data
                         if let execution = execution {
                             let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
                             
@@ -140,6 +111,7 @@ public class PostgreSQLSync: Module {
                                 feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                             }
                             
+                            let programHash = DatabaseUtils.calculateProgramHash(program: program)
                             let executionInput = PostgreSQLStorage.ExecutionInput(
                                 programHash: programHash,
                                 mutatorTypeId: mutatorTypeId,
@@ -155,40 +127,31 @@ public class PostgreSQLSync: Module {
                                 feedbackNexusCount: feedbackNexusCount,
                                 createdAt: Date()
                             )
-                            self.storage.addExecutionToBatch(executionInput)
+                            await self.storage.addExecutionToBatch(executionInput)
                             
                             if self.enableLogging {
                                 let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
                                 let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
                                 self.logger.info("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
                             }
-                        } else {
-                            if self.enableLogging {
-                                self.logger.warning("No execution data found for program \(programHash)")
-                            }
                         }
                     }
                 } catch {
-                    self.logger.error("Failed to store program: \(error)")
+                    let errorDetails = String(reflecting: error)
+                    self.logger.error("Failed to store program: \(errorDetails)")
                 }
             }
         }
         
         // Periodic Flush
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        // Aleksi: 1 minute for testing but update later. Ideally, pull dynamically from runtime flag?
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
                     if self.enableLogging {
                         self.logger.info("Flushed batches to database")
                     }
-                    
-                    // Clean up old execution map entries to prevent memory leak
-                    self.executionMapLock.lock()
-                    if self.programExecutionMap.count > 10000 {
-                        self.programExecutionMap.removeAll()
-                    }
-                    self.executionMapLock.unlock()
                 } catch {
                     self.logger.error("Failed to flush batches: \(error)")
                 }
@@ -196,7 +159,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
             }

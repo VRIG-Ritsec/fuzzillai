@@ -704,12 +704,16 @@ fuzzer.sync {
             fuzzerInstanceId = "fuzzer-\(randomHash)"
         }
         
-        let databasePool = DatabasePool(connectionString: url, enableLogging: postgresLogging)
-        let storage = PostgreSQLStorage(databasePool: databasePool, enableLogging: postgresLogging)
-        let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging)
-        fuzzer.addModule(postgresSync)
-        
-        logger.info("Added PostgreSQL synchronization module with instance ID: \(fuzzerInstanceId)")
+        do {
+            let databasePool = try DatabasePool(connectionString: url, enableLogging: postgresLogging)
+            let storage = PostgreSQLStorage(databasePool: databasePool, enableLogging: postgresLogging)
+            let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging)
+            fuzzer.addModule(postgresSync)
+            
+            logger.info("Added PostgreSQL synchronization module with instance ID: \(fuzzerInstanceId)")
+        } catch {
+            logger.fatal("Failed to initialize PostgreSQL connection: \(error)")
+        }
     }
 
     // Check for potential misconfiguration.

@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   postgres-master:
@@ -13,8 +12,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /mnt/vdc/postgres-data/:/var/lib/postgresql/data
-      - /mnt/vdb/fuzzillai/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /mnt/vdc/new-postgres-data/:/var/lib/postgresql/data
+      - /home/aleksi/fuzzillai/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fuzzilli -d fuzzilli_master"]
       interval: 10s

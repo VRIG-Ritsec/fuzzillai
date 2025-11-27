@@ -17,7 +17,7 @@ ProgramTemplates.swift
 ProgramTemplateWeights.swift
 fog_logs/
 ebg_logs/
-
+.gemini/
 # custom GCE configuration
 Cloud/GCE/config.sh
 

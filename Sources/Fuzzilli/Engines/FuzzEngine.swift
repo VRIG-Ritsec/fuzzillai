@@ -53,7 +53,7 @@ public class FuzzEngine: ComponentBase {
                         program.comments.add("Program may be interesting due to \(aspects)", at: .footer)
                         program.comments.add("RUNNER ARGS: \(fuzzer.runner.processArguments.joined(separator: " "))", at: .header)
                     }
-                    isInteresting = fuzzer.processMaybeInteresting(program, havingAspects: aspects, origin: .local)
+                    isInteresting = fuzzer.processMaybeInteresting(program, havingAspects: aspects, origin: .local, execution: execution)
                 }
 
                 if isInteresting {

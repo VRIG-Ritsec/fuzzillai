@@ -473,14 +473,14 @@ public class Fuzzer {
 
         case .succeeded:
             if let aspects = evaluator.evaluate(execution) {
-                wasImported = processMaybeInteresting(program, havingAspects: aspects, origin: origin)
+                wasImported = processMaybeInteresting(program, havingAspects: aspects, origin: origin, execution: execution)
             }
 
             if case .corpusImport(let mode) = origin, mode == .full, !wasImported {
                 // We're performing a full corpus import, so the sample still needs to be added to our corpus even though it doesn't trigger any new behaviour.
                 corpus.add(program, ProgramAspects(outcome: .succeeded))
                 // We also dispatch the InterestingProgramFound event here since we technically found an interesting program, but also so that the program is forwarded to child nodes.
-                dispatchEvent(events.InterestingProgramFound, data: (program, ProgramAspects(outcome: .succeeded), origin))
+                dispatchEvent(events.InterestingProgramFound, data: (program, ProgramAspects(outcome: .succeeded), origin, execution))
                 wasImported = true
             }
 
@@ -712,7 +712,7 @@ public class Fuzzer {
     /// This function will first determine which (if any) of the interesting aspects are triggered reliably, then schedule the program for minimization and inclusion in the corpus.
     /// Returns true if this program was interesting (i.e. had at least some interesting aspects that are triggered reliably), false if not.
     @discardableResult
-    func processMaybeInteresting(_ program: Program, havingAspects aspects: ProgramAspects, origin: ProgramOrigin) -> Bool {
+    func processMaybeInteresting(_ program: Program, havingAspects aspects: ProgramAspects, origin: ProgramOrigin, execution: Execution? = nil) -> Bool {
         var aspects = aspects
 
         // Determine which (if any) aspects of the program are triggered deterministially.
@@ -760,7 +760,7 @@ public class Fuzzer {
                 }
             }
             assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
-            dispatchEvent(events.InterestingProgramFound, data: (program, aspects, origin))
+            dispatchEvent(events.InterestingProgramFound, data: (program, aspects, origin, execution))
 
             // If we're running in static corpus mode, we only add programs to our corpus during corpus import.
             if !config.staticCorpus || origin.isFromCorpusImport() {

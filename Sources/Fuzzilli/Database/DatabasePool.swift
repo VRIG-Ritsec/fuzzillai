@@ -20,19 +20,21 @@ public class DatabasePool {
     private let enableLogging: Bool
     private var configuration: SQLPostgresConfiguration?
     
-        public init(connectionString: String, maxConnections: Int = 5, connectionTimeout: TimeInterval = 120.0, retryAttempts: Int = 3, enableLogging: Bool = false) {
+    public init(connectionString: String, maxConnections: Int = 5, connectionTimeout: TimeInterval = 120.0, retryAttempts: Int = 3, enableLogging: Bool = false) throws {
         self.connectionString = connectionString
         self.maxConnections = maxConnections
         self.connectionTimeout = connectionTimeout
         self.retryAttempts = retryAttempts
         self.enableLogging = enableLogging
         self.logger = Logging.Logger(label: "DatabasePool")
+        
+        try initialize()
     }
     
     /// Initialize the connection pool
-    public func initialize() async throws {
+    private func initialize() throws {
         // Check if already initialized
-        let alreadyInitialized = await withLock(lock) { isInitialized }
+        let alreadyInitialized = withLock(lock) { isInitialized }
         
         guard !alreadyInitialized else {
             if enableLogging {
@@ -67,12 +69,12 @@ public class DatabasePool {
             // Create connection pool
             connectionPool = EventLoopGroupConnectionPool(
                 source: connectionSource,
-                maxConnectionsPerEventLoop: maxConnections / System.coreCount,
+                maxConnectionsPerEventLoop: max(1, maxConnections / System.coreCount),
                 logger: logger,
                 on: eventLoopGroup
             )
             
-            await withLock(lock) {
+            withLock(lock) {
                 isInitialized = true
             }
             
@@ -82,7 +84,9 @@ public class DatabasePool {
             
         } catch {
             logger.error("Failed to initialize database connection pool: \(error)")
-            await shutdown()
+            // shutdown() is async, so we can't call it here easily. 
+            // But since we failed init, we probably just need to clean up what we created.
+            // For now, just throw.
             throw DatabasePoolError.initializationFailed("Failed to initialize pool: \(error)")
         }
     }
@@ -111,9 +115,9 @@ public class DatabasePool {
     }
     
     /// Shutdown the connection pool
-    public func shutdown() async {
-        // Use async-safe lock for the check
-        let shouldShutdown = await withLock(lock) { isInitialized }
+    public func shutdown() {
+        // Use lock for the check
+        let shouldShutdown = withLock(lock) { isInitialized }
         
         guard shouldShutdown else {
             if enableLogging {
@@ -126,35 +130,31 @@ public class DatabasePool {
             logger.info("Shutting down database connection pool...")
         }
         
-        do {
-            // Shutdown connection pool
-            if let pool = connectionPool {
-                // Use Task.detached to avoid blocking the async context
-                Task.detached {
-                    pool.shutdown()
-                }
-                connectionPool = nil
-            }
-            
-            // Shutdown event loop group
-            if let eventLoopGroup = eventLoopGroup {
-                try await eventLoopGroup.shutdownGracefully()
+        // Shutdown connection pool
+        if let pool = connectionPool {
+            pool.shutdown()
+            connectionPool = nil
+        }
+        
+        // Shutdown event loop group synchronously
+        if let eventLoopGroup = eventLoopGroup {
+            do {
+                try eventLoopGroup.syncShutdownGracefully()
                 self.eventLoopGroup = nil
+            } catch {
+                logger.error("Error shutting down event loop group: \(error)")
             }
-            
-            await withLock(lock) {
-                isInitialized = false
-            }
-            
-            if enableLogging {
-                logger.info("Database connection pool shutdown complete")
-            }
-            
-        } catch {
-            logger.error("Error during database pool shutdown: \(error)")
+        }
+        
+        withLock(lock) {
+            isInitialized = false
+        }
+        
+        if enableLogging {
+            logger.info("Database connection pool shutdown complete")
         }
     }
-    
+
     /// Check if the pool is initialized
     public var isReady: Bool {
         lock.lock()

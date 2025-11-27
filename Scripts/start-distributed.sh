@@ -145,8 +145,6 @@ echo ""
 
 # Generate docker-compose worker file with all services
 cat > "${WORKER_COMPOSE}" <<EOF
-version: '3.8'
-
 services:
 EOF
 
@@ -236,7 +234,6 @@ if [ "$USE_REMOTE_DB" = false ] && [ -n "$POSTGRES_DATA_PATH" ]; then
     
     # Generate master compose file with bind mount
     cat > "${MASTER_COMPOSE}" <<EOF
-version: '3.8'
 
 services:
   postgres-master:

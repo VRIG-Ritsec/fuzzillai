@@ -11,7 +11,7 @@ import PostgresKit
 /// Note: This is a simplified implementation that logs operations instead of
 /// performing actual database operations. The actual database integration will
 /// be implemented when we have a working PostgreSQL setup.
-public class PostgreSQLStorage {
+public actor PostgreSQLStorage {
     
     // MARK: - Properties
     
@@ -22,7 +22,7 @@ public class PostgreSQLStorage {
     // Batching
     private var pendingPrograms: [(Program, Int)] = []
     private var pendingExecutions: [ExecutionInput] = []
-    private let batchLock = NSLock()
+
     
     /// Input data for creating an execution record (before database insert assigns executionId)
     /// This mirrors ExecutionRecord from Models.swift but without the executionId field
@@ -213,53 +213,13 @@ public class PostgreSQLStorage {
         return fuzzerId
     }
     
-    /// Get fuzzer instance by name
-    public func getFuzzer(name: String) async throws -> FuzzerInstance? {
-        if enableLogging {
-            logger.info("Getting fuzzer: name=\(name)")
-        }
-        
-        // Use direct connection to avoid connection pool deadlock
-        let connection = try await createDirectConnection()
-        defer { Task { _ = try? await connection.close() } }
-        
-        let query: PostgresQuery = "SELECT fuzzer_id, created_at, fuzzer_name, engine_type, status FROM main WHERE fuzzer_name = \(name)"
-        let result = try await connection.query(query, logger: self.logger)
-        let rows = try await result.collect()
-        
-        guard let row = rows.first else {
-            return nil
-        }
-        
-        let fuzzerId = try row.decode(Int.self, context: PostgresDecodingContext.default)
-        let createdAt = try row.decode(Date.self, context: PostgresDecodingContext.default)
-        let status = try row.decode(String.self, context: PostgresDecodingContext.default)
-        
-        let fuzzer = FuzzerInstance(
-            fuzzerId: fuzzerId,
-            createdAt: createdAt,
-            status: status,
-            lastActivity: createdAt,
-            engineArguments: nil // uhh
-        )
-        
-        if enableLogging {
-            self.logger.info("Found fuzzer ID: \(fuzzerId)")
-        }
-        return fuzzer
-    }
-    
     // MARK: - Batching Methods
     
     public func addProgramToBatch(_ program: Program, fuzzerId: Int) {
-        batchLock.lock()
-        defer { batchLock.unlock() }
         pendingPrograms.append((program, fuzzerId))
     }
     
     public func addExecutionToBatch(_ execution: ExecutionInput) {
-        batchLock.lock()
-        defer { batchLock.unlock() }
         pendingExecutions.append(execution)
     }
     
@@ -267,12 +227,10 @@ public class PostgreSQLStorage {
         let programsToStore: [(Program, Int)]
         let executionsToStore: [ExecutionInput]
         
-        batchLock.lock()
         programsToStore = pendingPrograms
         executionsToStore = pendingExecutions
         pendingPrograms = []
         pendingExecutions = []
-        batchLock.unlock()
         
         if !programsToStore.isEmpty {
             // Group by fuzzerId to use storeProgramsBatch
@@ -345,59 +303,6 @@ public class PostgreSQLStorage {
         return programHashes
     }
     
-
-    
-    /// Store a program in the database
-    //public func storeProgram(program: Program, fuzzerId: Int) async throws -> String {
-    //    let programHash = DatabaseUtils.calculateProgramHash(program: program)
-    //    let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
-    //    if enableLogging {
-    //        logger.info("Storing program: hash=\(programHash), fuzzerId=\(fuzzerId)")
-    //    }
-    //    
-    //    // Use direct connection to avoid connection pool deadlock
-    //    let connection = try await createDirectConnection()
-    //    defer { Task { _ = try? await connection.close() } }
-    //    
-    //    // Insert into fuzzer table (corpus)
-    //    let fuzzerQuery: PostgresQuery = """
-    //        INSERT INTO fuzzer (program_hash, fuzzer_id, program_size, program_base64) 
-    //        VALUES ('\(programHash)', \(fuzzerId), \(program.size), '\(programBase64)') 
-    //        ON CONFLICT DO NOTHING
-    //    """
-    //    try await connection.query(fuzzerQuery, logger: self.logger)
-    //    
-    //    // Generate JavaScript code from the program
-    //    let lifter = JavaScriptLifter(ecmaVersion: .es6)
-    //    _ = lifter.lift(program, withOptions: [])
-    //    
-    //    // Insert into program table (executed programs) - use two-step upsert
-    //    let updateQuery: PostgresQuery = """
-    //        UPDATE program SET 
-    //            fuzzer_id = \(fuzzerId),
-    //            program_size = \(program.size),
-    //            program_base64 = '\(programBase64)'
-    //        WHERE program_hash = '\(programHash)'
-    //    """
-    //    let updateResult = try await connection.query(updateQuery, logger: self.logger)
-    //    let updateRows = try await updateResult.collect()
-    //    
-    //    // If no rows were updated, insert the new program
-    //    if updateRows.isEmpty {
-    //        let insertQuery: PostgresQuery = """
-    //            INSERT INTO program (program_hash, fuzzer_id, program_size, program_base64) 
-    //            VALUES ('\(programHash)', \(fuzzerId), \(program.size), '\(programBase64)') 
-    //            ON CONFLICT DO NOTHING
-    //        """
-    //        try await connection.query(insertQuery, logger: self.logger)
-    //    }
-    //    
-    //    if enableLogging {
-    //        self.logger.info("Program storage successful: hash=\(programHash)")
-    //    }
-    //    return programHash
-    //}
-    
     // MARK: - Execution Management
     
     /// Store multiple executions in batch for better performance
@@ -456,77 +361,6 @@ public class PostgreSQLStorage {
         
         return executionIds
     }
-    
-    /// Store execution record in the database
-    //public func storeExecution(
-    //    program: Program,
-    //    fuzzerId: Int,
-    //    executionType: DatabaseExecutionPurpose,
-    //    mutatorType: String? = nil,
-    //    outcome: ExecutionOutcome,
-    //    coverage: Double = 0.0,
-    //    executionTimeMs: Int = 0,
-    //    coverageEdges: Set<Int> = [],
-    //    stdout: String? = nil,
-    //    stderr: String? = nil,
-    //    fuzzout: String? = nil
-    //) async throws -> Int {
-    //    let programHash = DatabaseUtils.calculateProgramHash(program: program)
-    //    if enableLogging {
-    //        logger.info("Storing execution: hash=\(programHash), fuzzerId=\(fuzzerId), type=\(executionType), outcome=\(outcome)")
-    //    }
-    //    
-    //    // Use direct connection to avoid connection pool deadlock
-    //    let connection = try await createDirectConnection()
-    //    defer { Task { _ = try? await connection.close() } }
-    //    
-    //    let executionTypeId = DatabaseUtils.mapExecutionType(purpose: executionType)
-    //    
-    //    // Extract execution metadata from ExecutionOutcome
-    //    let (signalCode, exitCode) = extractExecutionMetadata(from: outcome)
-    //    
-    //    // Use signal-aware mapping for execution outcomes
-    //    let outcomeId = DatabaseUtils.mapExecutionOutcomeWithSignal(outcome: outcome, signalCode: signalCode)
-    //    
-    //    // Prepare parameters for NULL handling - store mutator name as text instead of ID
-    //    let mutatorTypeValue = mutatorType != nil ? "'\(mutatorType!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-    //    let signalCodeValue = signalCode != nil ? "\(signalCode!)" : "NULL"
-    //    let exitCodeValue = exitCode != nil ? "\(exitCode!)" : "NULL"
-    //    let stdoutValue = stdout != nil ? "'\(stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-    //    let stderrValue = stderr != nil ? "'\(stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-    //    let fuzzoutValue = fuzzout != nil ? "'\(fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-    //    // These are not passed in storeExecution arguments currently, so we default to NULL for now
-    //    // or we should update the signature. Since storeExecution is likely legacy/single-use, NULL is fine.
-    //    let turbofanBitsValue = "NULL"
-    //    let nexusCountValue = "NULL"
-    //    
-    //    let query = PostgresQuery(stringLiteral: """
-    //        INSERT INTO execution (
-    //            program_hash, execution_type_id, mutator_type_id, 
-    //            execution_outcome_id, coverage_total, execution_time_ms, 
-    //            signal_code, exit_code, stdout, stderr, fuzzout, 
-    //            turbofan_optimization_bits, feedback_nexus_count, created_at
-    //        ) VALUES (
-    //            '\(programHash)', \(executionTypeId), 
-    //            \(mutatorTypeValue), \(outcomeId), \(coverage), 
-    //            \(executionTimeMs), \(signalCodeValue), \(exitCodeValue), 
-    //            \(stdoutValue), \(stderrValue), \(fuzzoutValue), 
-    //            \(turbofanBitsValue), \(nexusCountValue), NOW()
-    //        ) RETURNING execution_id
-    //    """)
-    //    
-    //    let result = try await connection.query(query, logger: self.logger)
-    //    let rows = try await result.collect()
-    //    guard let row = rows.first else {
-    //        throw PostgreSQLStorageError.noResult
-    //    }
-    //    
-    //    let executionId = try row.decode(Int.self, context: PostgresDecodingContext.default)
-    //    if enableLogging {
-    //        self.logger.info("Execution storage successful: executionId=\(executionId)")
-    //    }
-    //    return executionId
-    //}
     
     /// Extract execution metadata from ExecutionOutcome
     private func extractExecutionMetadata(from outcome: ExecutionOutcome) -> (signalCode: Int?, exitCode: Int?) {

@@ -485,10 +485,6 @@ public actor PostgreSQLStorage {
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let sinceString = dateFormatter.string(from: since)
         
-        if enableLogging {
-            logger.info("Formatted since date: \(sinceString)")
-        }
-
         let query = PostgresQuery(stringLiteral: """
             SELECT program_hash, program_base64 
             FROM fuzzer 

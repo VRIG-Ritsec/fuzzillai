@@ -11,6 +11,13 @@ public class PostgreSQLSync: Module {
     private var cachedFuzzerId: Int?
     private var covEvaluator: ProgramCoverageEvaluator?  // Cache coverage evaluator for metrics
     
+    // Cache for execution outputs to avoid race conditions with REPRL
+    // Key: program ID (UUID string), Value: execution outputs
+    private var executionCache: [String: (stdout: String, stderr: String, fuzzout: String)] = [:]
+    private let maxCacheSize = 1000 
+
+    private var mutatorCache: [String: String] = [:]
+
     public init(storage: PostgreSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
         self.storage = storage
         self.fuzzerInstanceId = fuzzerInstanceId
@@ -64,25 +71,65 @@ public class PostgreSQLSync: Module {
             }
         }
         
+        // Track program ID for each execution to correlate with outputs
+        var currentExecutingProgramId: String? = nil
+        fuzzer.registerEventListener(for: fuzzer.events.PreExecute) { (program, _) in
+            currentExecutingProgramId = program.id.uuidString
+        }
+        
+        // Capture execution outputs immediately after execution completes
+        fuzzer.registerEventListener(for: fuzzer.events.PostExecute) { execution in
+            guard let programId = currentExecutingProgramId else { return }
+            
+            // Cache the outputs while they're still valid (before next REPRL execution)
+            self.executionCache[programId] = (
+                stdout: execution.stdout,
+                stderr: execution.stderr,
+                fuzzout: execution.fuzzout
+            )
+            
+            // Implement simple LRU-style cleanup to prevent unbounded growth
+            if self.executionCache.count > self.maxCacheSize {
+                // Remove oldest entries (first 100 entries)
+                let keysToRemove = Array(self.executionCache.keys.prefix(100))
+                for key in keysToRemove {
+                    self.executionCache.removeValue(forKey: key)
+                }
+            }
+        }
+
+        // Cache mutator names from ProgramGenerated event (before minimization)
+        // This works around the fact that contributors don't survive protobuf serialization
+        // TODO Aleksi: This doesn't seem to work 
+        fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
+            let programId = program.id.uuidString
+            
+            // Extract mutator name from contributors while they're still intact
+            if let mutatorName = program.contributors.first(where: { $0.name.contains("Mutator") })?.name {
+                self.mutatorCache[programId] = mutatorName
+                
+                // Implement LRU-style cleanup
+                if self.mutatorCache.count > self.maxCacheSize {
+                    let keysToRemove = Array(self.mutatorCache.keys.prefix(100))
+                    for key in keysToRemove {
+                        self.mutatorCache.removeValue(forKey: key)
+                    }
+                }
+            }
+        }
         
         fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
             let program = ev.program
             let aspects = ev.aspects
             let execution = ev.execution
             
-            // Capture execution outputs synchronously to avoid race conditions and thread safety issues
-            // Accessing these properties triggers event dispatching which must happen on the Fuzzer queue
-
-            // TODO Aleksi: These are probably not available on synced programs
-            // This assertion fails in REPRL.swift:188 => assert(outputStreamsAreValid)
-            //let stdout = execution?.stdout ?? ""
-            //let stderr = execution?.stderr ?? ""
-            //let fuzzout = execution?.fuzzout ?? ""
-
-            // Testing
-            let stdout = ""
-            let stderr = ""
-            let fuzzout = ""
+            // Retrieve cached execution outputs using program ID
+            // If not found (e.g., corpus import), use empty strings
+            let programId = program.id.uuidString
+            let (stdout, stderr, fuzzout) = self.executionCache[programId] ?? ("", "", "")
+            
+            // Clean up the cache entry immediately after use
+            self.executionCache.removeValue(forKey: programId)
             
             Task {
                 guard let fuzzerId = self.cachedFuzzerId else {
@@ -94,10 +141,13 @@ public class PostgreSQLSync: Module {
                     
                 if let execution = execution {
                     let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
-                    
-                    let mutatorName = program.contributors.first(where: { contributor in
+
+                    // Try to get mutator name from cache first (for locally generated programs)
+                    // Fall back to contributors (though they may be empty for imported programs)
+                    let mutatorName = self.mutatorCache[programId] ?? program.contributors.first(where: { contributor in
                         contributor.name.contains("Mutator")
                     })?.name
+                    self.mutatorCache.removeValue(forKey: programId)
                     
                     let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
                     
@@ -165,9 +215,91 @@ public class PostgreSQLSync: Module {
             }
         }
         
+        fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
+            let program = ev.program
+            let behaviour = ev.behaviour  // .deterministic or .flaky
+            let isUnique = ev.isUnique
+            
+            // Retrieve cached execution outputs using program ID
+            // For crashes, stderr will contain the crash stacktrace and signal info
+            let programId = program.id.uuidString
+            let (stdout, stderr, fuzzout) = self.executionCache[programId] ?? ("", "", "")
+            
+            // Clean up the cache entry immediately after use
+            self.executionCache.removeValue(forKey: programId)
+            
+            Task {
+                guard let fuzzerId = self.cachedFuzzerId else {
+                    self.logger.error("Fuzzer ID not set - registration may have failed")
+                    return
+                }
+                
+                await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
+                
+                // Extract mutator information from cache or contributors
+                let mutatorName = self.mutatorCache[programId] ?? program.contributors.first(where: { contributor in
+                    contributor.name.contains("Mutator")
+                })?.name
+                self.mutatorCache.removeValue(forKey: programId) 
+
+                let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
+                
+                // Get coverage metrics if available (crashes may still have coverage)
+                var coverageTotal: Double? = nil
+                var edgesFound: Int? = nil
+                var totalEdges: Int? = nil
+                var turbofanOptimizationBits: Int64? = nil
+                var feedbackNexusCount: Int? = nil
+                
+                if let evaluator = self.covEvaluator {
+                    let totalEdgesCount = evaluator.getTotalEdgesCount()
+                    totalEdges = Int(totalEdgesCount)
+                    
+                    let foundEdgesCount = evaluator.getFoundEdgesCount()
+                    
+                    if totalEdgesCount > 0 {
+                        coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
+                    }
+                    
+                    // For crashes, we don't have new edge information in the same way
+                    edgesFound = Int(foundEdgesCount)
+                    
+                    turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
+                    feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
+                }
+                
+                let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                
+                // Create execution record with outcome_id = 1 (Crashed)
+                let executionInput = PostgreSQLStorage.ExecutionInput(
+                    programHash: programHash,
+                    mutatorTypeId: mutatorTypeId,
+                    executionOutcomeId: 1,  // Crashed
+                    coverageTotal: coverageTotal,
+                    edgesFound: edgesFound,
+                    totalEdges: totalEdges,
+                    isNewEdge: false,  // Crashes don't contribute new edges
+                    stdout: stdout,
+                    stderr: stderr,  // Contains crash stacktrace and signal info
+                    fuzzout: fuzzout,
+                    turbofanOptimizationBits: turbofanOptimizationBits,
+                    feedbackNexusCount: feedbackNexusCount,
+                    createdAt: Date()
+                )
+                await self.storage.addExecutionToBatch(executionInput)
+                
+                if self.enableLogging {
+                    let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
+                    let behaviourInfo = behaviour == .deterministic ? "deterministic" : "flaky"
+                    let uniqueInfo = isUnique ? "unique" : "duplicate"
+                    self.logger.info("Added crash to batch: \(behaviourInfo), \(uniqueInfo)\(mutatorInfo)")
+                }
+            }
+        }
+        
         // Periodic Flush
         // TODO Aleksi: 1 minute for testing but update later
-        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
@@ -183,7 +315,7 @@ public class PostgreSQLSync: Module {
         
         // Heartbeat: Update fuzzer activity every 1 minute to prevent being marked as stale
         // TODO Aleksi: 1 minute for testing but update later
-        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
             Task {
                 if let fuzzerId = self.cachedFuzzerId {
                     do {
@@ -199,7 +331,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
             }

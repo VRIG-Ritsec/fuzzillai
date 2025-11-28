@@ -25,7 +25,7 @@ public class DatabaseUtils {
             var proto = program.asProtobuf()
             // We don't want to store the parent history in the blob as it's stored by reference in the DB
             // This prevents the blob from growing indefinitely and hitting size limits
-            proto.clearParent()
+            //proto.clearParent()
             
             return try proto.serializedData()
         } catch {
@@ -46,7 +46,7 @@ public class DatabaseUtils {
             var proto = program.asProtobuf()
             // We don't want to store the parent history in the blob as it's stored by reference in the DB
             // This prevents the blob from growing indefinitely and hitting size limits
-            proto.clearParent()
+            //proto.clearParent()
             
             let data = try proto.serializedData()
 

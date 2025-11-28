@@ -7,14 +7,8 @@ import PostgresKit
 /// This class provides methods to store and retrieve programs, executions, crashes,
 /// and metadata from PostgreSQL database. It handles the actual database operations
 /// that the PostgreSQLCorpus uses for persistence and synchronization.
-///
-/// Note: This is a simplified implementation that logs operations instead of
-/// performing actual database operations. The actual database integration will
-/// be implemented when we have a working PostgreSQL setup.
 public actor PostgreSQLStorage {
-    
-    // MARK: - Properties
-    
+
     private let databasePool: DatabasePool
     private let logger: Logging.Logger
     private let enableLogging: Bool
@@ -58,23 +52,17 @@ public actor PostgreSQLStorage {
         }
     }
     
-    // MARK: - Initialization
-    
     public init(databasePool: DatabasePool, enableLogging: Bool = false) {
         self.databasePool = databasePool
         self.enableLogging = enableLogging
         self.logger = Logging.Logger(label: "PostgreSQLStorage")
     }
     
-    // MARK: - Helper Methods
-    
-    /// Create a direct connection using the database pool's configuration
     private func createDirectConnection() async throws -> PostgresConnection {
         guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
             throw PostgreSQLStorageError.noResult
         }
         
-        // Get the connection string and parse it
         let connectionString = databasePool.getConnectionString()
         guard let url = URL(string: connectionString) else {
             throw PostgreSQLStorageError.connectionFailed
@@ -109,18 +97,13 @@ public actor PostgreSQLStorage {
         )
     }
 
-    // MARK: - Fuzzer Management
-    
     /// Register a new fuzzer instance in the database or register worker with an existing fuzzer
     /// 
     /// This function implements atomic fuzzer registration using PostgreSQL's SELECT FOR UPDATE SKIP LOCKED
     /// to prevent race conditions when multiple workers start simultaneously. It will:
     /// 1. Try to claim an existing inactive fuzzer or a stale active fuzzer (no activity for 5+ minutes)
     /// 2. If no fuzzer is available, create a new one
-    /// 
-    /// - Returns: The fuzzer_id assigned to this worker
-    /// - Throws: PostgreSQLStorageError if registration fails
-    public func registerFuzzer() async throws -> Int {
+    public func registerFuzzer(engineArguments: [String]? = nil) async throws -> Int {
         // Use direct connection to avoid connection pool deadlock
         let connection: PostgresConnection
         do {
@@ -138,7 +121,6 @@ public actor PostgreSQLStorage {
         defer { Task { _ = try? await connection.close() } }
         
         do {
-            // Begin transaction for atomic registration
             try await connection.query("BEGIN", logger: self.logger)
             
             // Step 1: Try to claim an existing inactive or stale fuzzer
@@ -181,10 +163,18 @@ public actor PostgreSQLStorage {
                     logger.info("No inactive fuzzer found, creating new fuzzer")
                 }
 
-                // TODO Aleksi: pull engine arguments  
+                let engineArgsValue: String
+                if let args = engineArguments, !args.isEmpty {
+                    // Escape single quotes and format as PostgreSQL array: ARRAY['arg1', 'arg2', ...]
+                    let escapedArgs = args.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+                    engineArgsValue = "ARRAY[\(escapedArgs.joined(separator: ", "))]"
+                } else {
+                    engineArgsValue = "NULL"
+                }
+
                 let insertQuery = PostgresQuery(stringLiteral: """
                     INSERT INTO main (status, last_activity, engine_arguments) 
-                    VALUES ('active', NOW(), NULL)
+                    VALUES ('active', NOW(), \(engineArgsValue))
                     RETURNING fuzzer_id
                 """)
                 
@@ -202,7 +192,6 @@ public actor PostgreSQLStorage {
                 }
             }
             
-            // Commit transaction
             try await connection.query("COMMIT", logger: self.logger)
             
             if enableLogging {
@@ -212,7 +201,6 @@ public actor PostgreSQLStorage {
             return fuzzerId
             
         } catch {
-            // Rollback on error
             _ = try? await connection.query("ROLLBACK", logger: self.logger)
             
             if enableLogging {
@@ -223,70 +211,12 @@ public actor PostgreSQLStorage {
         }
     }
     
-    /// Synchronize corpus from database after fuzzer registration
-    /// 
-    /// Fetches all programs from the fuzzer table and returns them for corpus initialization.
-    /// This ensures the worker starts with the current shared corpus state.
-    /// 
-    /// - Returns: Array of (Program, programHash) tuples
-    /// - Throws: PostgreSQLStorageError if sync fails
-    // TODO Aleksi: Verify this actually works :)
-    public func syncCorpusFromDatabase() async throws -> [Program] {
-        if enableLogging {
-            logger.info("Syncing corpus from database...")
-        }
-        
-        // Use direct connection to avoid connection pool deadlock
-        let connection = try await createDirectConnection()
-        defer { Task { _ = try? await connection.close() } }
-        
-        // Query all programs from the fuzzer table
-        let query = PostgresQuery(stringLiteral: """
-            SELECT program_hash, program_base64 
-            FROM fuzzer 
-            ORDER BY inserted_at DESC
-        """)
-        
-        let result = try await connection.query(query, logger: self.logger)
-        let rows = try await result.collect()
-        
-        var programs: [Program] = []
-        var seenHashes = Set<String>() 
-
-        for row in rows {
-            do {
-                let hash = try row.decode(String.self, context: PostgresDecodingContext.default)
-                let base64 = try row.decode(String.self, context: PostgresDecodingContext.default)
-
-                guard !seenHashes.contains(hash) else { continue }
-                
-                if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: base64) {
-                    programs.append(program)
-                    seenHashes.insert(hash)
-                }
-            } catch {
-                if enableLogging {
-                    logger.warning("Failed to decode program from database: \(error)")
-                }
-            }
-        }
-        
-        if enableLogging {
-            logger.info("Synced \(programs.count) programs from database")
-        }
-        
-        return programs
-    }
     
     /// Update fuzzer activity timestamp (heartbeat)
     /// 
     /// This should be called periodically (e.g., every 60 seconds) to indicate the worker is still alive.
     /// Prevents the fuzzer from being marked as stale and reclaimed by another worker.
-    /// 
-    /// - Parameter fuzzerId: The fuzzer ID to update
-    /// - Throws: PostgreSQLStorageError if update fails
     public func updateFuzzerActivity(fuzzerId: Int) async throws {
-        // Use direct connection to avoid connection pool deadlock
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
         
@@ -307,11 +237,7 @@ public actor PostgreSQLStorage {
     /// 
     /// Marks the fuzzer as inactive so it can be reused by another worker when the campaign resumes.
     /// Should be called during worker shutdown.
-    /// 
-    /// - Parameter fuzzerId: The fuzzer ID to deactivate
-    /// - Throws: PostgreSQLStorageError if deactivation fails
     public func deactivateFuzzer(fuzzerId: Int) async throws {
-        // Use direct connection to avoid connection pool deadlock
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
         
@@ -327,8 +253,6 @@ public actor PostgreSQLStorage {
             logger.info("Deactivated fuzzer_id: \(fuzzerId)")
         }
     }
-    
-    // MARK: - Batching Methods
     
     public func addProgramToBatch(_ program: Program, fuzzerId: Int) {
         pendingPrograms.append((program, fuzzerId))
@@ -361,196 +285,210 @@ public actor PostgreSQLStorage {
         }
     }
 
-    // MARK: - Optimized Batch Methods
-
-    /// Store multiple programs in batch for better performance
-    /// Uses true batch INSERT with single query and CTE pattern
     // TODO Aleksi: Verify this actually works :)
     public func storeProgramsBatch(programs: [Program], fuzzerId: Int) async throws -> [String] {
         guard !programs.isEmpty else { return [] }
 
-        // Use direct connection to avoid connection pool deadlock
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
 
         var programHashes: [String] = []
-        var fuzzerValues: [String] = []
-        var programValues: [String] = []
 
-        // Prepare batch data
-        for program in programs {
-            let programHash = DatabaseUtils.calculateProgramHash(program: program)
-            let programBase64 = DatabaseUtils.encodeProgramToBase64(program: program)
-            let escapedBase64 = programBase64.replacingOccurrences(of: "'", with: "''")
-
-            programHashes.append(programHash)
-
-            // Prepare fuzzer table values
-            fuzzerValues.append("('\(programHash)', \(fuzzerId), NOW(), '\(escapedBase64)')")
-
-            // Extract metadata for program table
-            let mutatorName = program.contributors.first(where: { $0.name.contains("Mutator") })?.name
-            let sourceMutatorValue = mutatorName != nil ? "'\(mutatorName!)'" : "NULL"
-
-            // Prepare program table values (parent_program_hash remains NULL as per TODO)
-            programValues.append("('\(programHash)', \(fuzzerId), NOW(), \(sourceMutatorValue), NULL)")
-        }
-
-        // Use a transaction with CTE for atomicity and performance
         try await connection.query("BEGIN", logger: self.logger)
 
         do {
-            // Single batch insert into fuzzer table with CTE pattern
-            let fuzzerQuery = PostgresQuery(stringLiteral: """
-                WITH inserted_fuzzer AS (
+            for program in programs {
+                let programHash = DatabaseUtils.calculateProgramHash(program: program)
+
+                let programData = DatabaseUtils.encodeProgramToBase64(program: program)
+
+                //logger.info("Storing program: \(programHash) with data: \(programData)")
+
+                let mutatorName = program.contributors.first(where: { $0.name.contains("Mutator") })?.name
+
+                let parentHash: String?
+                if let parentProgram = program.parent {
+                    parentHash = DatabaseUtils.calculateProgramHash(program: parentProgram)
+                } else {
+                    parentHash = nil
+                }
+
+                let fuzzerQuery: PostgresQuery = """
                     INSERT INTO fuzzer (program_hash, fuzzer_id, inserted_at, program_base64) 
-                    VALUES \(fuzzerValues.joined(separator: ", "))
-                    ON CONFLICT (program_hash) DO UPDATE SET
+                    VALUES (\(programHash), \(fuzzerId), NOW(), \(programData))
+                    ON CONFLICT (program_hash) DO UPDATE SET 
                         fuzzer_id = EXCLUDED.fuzzer_id,
-                        program_base64 = EXCLUDED.program_base64
-                    RETURNING program_hash
-                )
-                INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutator, parent_program_hash)
-                VALUES \(programValues.joined(separator: ", "))
-                ON CONFLICT (program_hash) DO NOTHING
-            """)
+                        program_base64 = EXCLUDED.program_base64,
+                        inserted_at = EXCLUDED.inserted_at
+                """
 
-            try await connection.query(fuzzerQuery, logger: self.logger)
+                try await connection.query(fuzzerQuery, logger: self.logger)
 
-            // Commit transaction
+                let programQuery: PostgresQuery = """
+                    INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutator, parent_program_hash) 
+                    VALUES (\(programHash), \(fuzzerId), NOW(), \(mutatorName), \(parentHash))
+                    ON CONFLICT (program_hash) DO NOTHING
+                """
+
+                try await connection.query(programQuery, logger: self.logger)
+
+                programHashes.append(programHash)
+            }
+
             try await connection.query("COMMIT", logger: self.logger)
 
             if enableLogging {
-                logger.info("Successfully batch stored \(programHashes.count) programs in database using optimized CTE pattern")
+                logger.info("Successfully batch stored \(programHashes.count) programs in database")
             }
 
             return programHashes
 
         } catch {
-            // Rollback on error
             _ = try? await connection.query("ROLLBACK", logger: self.logger)
 
             if enableLogging {
-                logger.error("Failed to batch store programs: \(error)")
+                logger.error("Failed to batch store programs: \(String(reflecting: error))")
             }
-
             throw error
         }
     }
 
-    /// Store multiple executions in batch for better performance
-    /// Uses true batch INSERT with transaction wrapper
     // TODO Aleksi: Verify this actually works :)
     public func storeExecutionsBatch(executions: [ExecutionInput]) async throws -> [Int] {
         guard !executions.isEmpty else { return [] }
-
-        // Use direct connection to avoid connection pool deadlock
+    
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
-
+    
         var executionIds: [Int] = []
-        var executionValues: [String] = []
-
-        // Prepare batch data
-        for execution in executions {
-            // Map IDs to values for SQL
-            let mutatorTypeValue = execution.mutatorTypeId != nil ? "\(execution.mutatorTypeId!)" : "NULL"
-            let coverageTotalValue = execution.coverageTotal != nil ? "\(execution.coverageTotal!)" : "NULL"
-            let edgesFoundValue = execution.edgesFound != nil ? "\(execution.edgesFound!)" : "NULL"
-            let totalEdgesValue = execution.totalEdges != nil ? "\(execution.totalEdges!)" : "NULL"
-            let isNewEdgeValue = execution.isNewEdge ? "TRUE" : "FALSE"
-            let stdoutValue = execution.stdout != nil ? "'\(execution.stdout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let stderrValue = execution.stderr != nil ? "'\(execution.stderr!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let fuzzoutValue = execution.fuzzout != nil ? "'\(execution.fuzzout!.replacingOccurrences(of: "'", with: "''"))'" : "NULL"
-            let turbofanBitsValue = execution.turbofanOptimizationBits != nil ? "\(execution.turbofanOptimizationBits!)" : "NULL"
-            let nexusCountValue = execution.feedbackNexusCount != nil ? "\(execution.feedbackNexusCount!)" : "NULL"
-
-            executionValues.append("""
-                ('\(execution.programHash)', \(mutatorTypeValue), \(execution.executionOutcomeId), \(coverageTotalValue), 
-                \(edgesFoundValue), \(totalEdgesValue), \(isNewEdgeValue),
-                \(stdoutValue), \(stderrValue), \(fuzzoutValue), 
-                \(turbofanBitsValue), \(nexusCountValue), NOW())
-            """)
-        }
-
-        // Wrap in transaction for atomicity
+    
         try await connection.query("BEGIN", logger: self.logger)
-
+    
         do {
-            // Single batch insert with true VALUES list
-            let queryString = """
-                INSERT INTO execution (
-                    program_hash, mutator_type_id, execution_outcome_id, coverage_total,
-                    edges_found, total_edges, is_new_edge,
-                    stdout, stderr, fuzzout,
-                    turbofan_optimization_bits, feedback_nexus_count, created_at
-                ) VALUES \(executionValues.joined(separator: ", ")) RETURNING execution_id
-            """
-
-            let query = PostgresQuery(stringLiteral: queryString)
-            let result = try await connection.query(query, logger: self.logger)
-            let rows = try await result.collect()
-
-            for row in rows {
-                let executionId = try row.decode(Int.self, context: PostgresDecodingContext.default)
-                executionIds.append(executionId)
+            for execution in executions {
+                let query: PostgresQuery = """
+                    INSERT INTO execution (
+                        program_hash, mutator_type_id, execution_outcome_id, coverage_total, 
+                        edges_found, total_edges, is_new_edge, 
+                        stdout, stderr, fuzzout, 
+                        turbofan_optimization_bits, feedback_nexus_count, created_at
+                    ) VALUES (
+                        \(execution.programHash), \(execution.mutatorTypeId), \(execution.executionOutcomeId), \(execution.coverageTotal), 
+                        \(execution.edgesFound), \(execution.totalEdges), \(execution.isNewEdge), 
+                        \(execution.stdout), \(execution.stderr), \(execution.fuzzout), 
+                        \(execution.turbofanOptimizationBits), \(execution.feedbackNexusCount), NOW()
+                    ) RETURNING execution_id
+                """
+    
+                let result = try await connection.query(query, logger: self.logger)
+                
+                for row in try await result.collect() {
+                    let id = try row.decode(Int.self) 
+                    executionIds.append(id)
+                }
             }
-
-            // Commit transaction
+    
             try await connection.query("COMMIT", logger: self.logger)
-
+    
             if enableLogging {
-                logger.info("Successfully batch stored \(executionIds.count) executions in database with transaction")
+                logger.info("Successfully batch stored \(executionIds.count) executions")
             }
-
+    
             return executionIds
-
+    
         } catch {
-            // Rollback on error
             _ = try? await connection.query("ROLLBACK", logger: self.logger)
-
             if enableLogging {
-                logger.error("Failed to batch store executions: \(error)")
+                logger.error("Failed to batch store executions: \(String(reflecting: error))")
             }
-
             throw error
         }
     } 
-    /// Extract execution metadata from ExecutionOutcome
-    private func extractExecutionMetadata(from outcome: ExecutionOutcome) -> (signalCode: Int?, exitCode: Int?) {
-        switch outcome {
-        case .crashed(let signal):
-            return (signalCode: signal, exitCode: nil)
-        case .failed(let exitCode):
-            return (signalCode: nil, exitCode: exitCode)
-        case .succeeded, .timedOut:
-            return (signalCode: nil, exitCode: nil)
+
+    /// Synchronize corpus from database after fuzzer registration
+    /// 
+    /// Fetches all programs from the fuzzer table and returns them for corpus initialization.
+    /// This ensures the worker starts with the current shared corpus state.
+    public func syncCorpusFromDatabase() async throws -> [Program] {
+        if enableLogging {
+            logger.info("Syncing corpus from database...")
         }
+        
+        let connection = try await createDirectConnection()
+        defer { Task { _ = try? await connection.close() } }
+        
+        let query = PostgresQuery(stringLiteral: """
+            SELECT program_hash, program_base64 
+            FROM fuzzer 
+            ORDER BY inserted_at DESC
+        """)
+        
+        if enableLogging {
+            logger.info("Executing sync query: \(query)")
+        }
+
+        let result = try await connection.query(query, logger: self.logger)
+        let rows = try await result.collect()
+        
+        if enableLogging {
+            logger.info("Sync query returned \(rows.count) rows")
+        }
+
+        var programs: [Program] = []
+        var seenHashes = Set<String>() 
+
+        for row in rows {
+            do {
+                let (hash, data) = try row.decode((String, String).self, context: .default)
+
+                guard !seenHashes.contains(hash) else { 
+                    if enableLogging {
+                        logger.debug("Skipping duplicate hash: \(hash)")
+                    }
+                    continue 
+                }
+                
+                if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: data) {
+                    programs.append(program)
+                    seenHashes.insert(hash)
+                } else if enableLogging {
+                    logger.warning("Failed to decode program for hash: \(hash)")
+                }
+            } catch {
+                if enableLogging {
+                    logger.warning("Failed to decode row from database: \(error)")
+                }
+            }
+        }
+        
+        if enableLogging {
+            logger.info("Synced \(programs.count) programs from database (unique)")
+        }
+        
+        return programs
     }
-    
-    // MARK: - Query Operations
-    
+
     /// Fetch new programs from the database that were added after a certain time
     /// - Parameters:
     ///   - since: The timestamp to fetch programs from
     ///   - limit: Maximum number of programs to fetch
-    /// - Returns: A list of (Program, ProgramHash) tuples
-    // TODO Aleksi: Verify this actually works :) it doesn't seem to...
     public func fetchNewPrograms(since: Date, limit: Int = 100) async throws -> [(Program, String)] {
         if enableLogging {
             logger.info("Fetching new programs since: \(since)")
         }
         
-        // Use direct connection to avoid connection pool deadlock
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
         
-        // Query for programs added after the specified time
         // Format the date for PostgreSQL
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let sinceString = dateFormatter.string(from: since)
         
+        if enableLogging {
+            logger.info("Formatted since date: \(sinceString)")
+        }
+
         let query = PostgresQuery(stringLiteral: """
             SELECT program_hash, program_base64 
             FROM fuzzer 
@@ -559,34 +497,45 @@ public actor PostgreSQLStorage {
             LIMIT \(limit)
         """)
         
+        if enableLogging {
+            logger.info("Executing fetch query: \(query)")
+        }
+
         let result = try await connection.query(query, logger: self.logger)
         let rows = try await result.collect()
         
+        if enableLogging {
+            logger.info("Fetch query returned \(rows.count) rows")
+        }
+
         var programs: [(Program, String)] = []
         
         for row in rows {
             do {
-                let hash = try row.decode(String.self, context: PostgresDecodingContext.default)
-                let base64 = try row.decode(String.self, context: PostgresDecodingContext.default)
+                let (hash, data) = try row.decode((String, String).self, context: .default)
+
+                //logger.info("FOUND data: \(data)")
+                //logger.info("FOUND hash: \(hash)")
                 
-                if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: base64) {
+                if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: data) {
                     programs.append((program, hash))
+                } else if enableLogging {
+                    logger.warning("Failed to decode program for hash: \(hash)")
                 }
             } catch {
                 if enableLogging {
-                    logger.warning("Failed to decode program from database: \(error)")
+                    logger.warning("Failed to decode row from database: \(error)")
                 }
             }
         }
         
         if enableLogging {
-            logger.info("Fetched \(programs.count) new programs")
+            logger.info("Fetched \(programs.count) new programs successfully decoded")
         }
         
         return programs
     }
 
-    /// PostgreSQL storage errors
     public enum PostgreSQLStorageError: Error, LocalizedError {
         case noResult
         case invalidData
@@ -605,18 +554,5 @@ public actor PostgreSQLStorage {
                 return "Database query failed: \(message)"
             }
         }
-    }
-}
-
-// MARK: - Coverage Tracking Methods
-
-extension PostgreSQLStorage {
-    /// Execute a simple query without expecting results
-    public func executeQuery(_ query: PostgresQuery) async throws {
-        // Use direct connection to avoid connection pool deadlock
-        let connection = try await createDirectConnection()
-        defer { Task { _ = try? await connection.close() } }
-        
-        try await connection.query(query, logger: self.logger)
     }
 }

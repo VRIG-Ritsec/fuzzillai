@@ -35,13 +35,15 @@ public class PostgreSQLSync: Module {
         Task {
             do {
                 // Step 1: Register this worker with the database
-                self.cachedFuzzerId = try await storage.registerFuzzer()
+                let engineArgs = fuzzer.config.arguments
+                self.cachedFuzzerId = try await storage.registerFuzzer(engineArguments: engineArgs)
                 if enableLogging {
-                    logger.info("Fuzzer registered with PostgreSQL database: ID \(self.cachedFuzzerId ?? -1)")
+                    logger.info("Fuzzer registered with PostgreSQL database: fuzzerId \(self.cachedFuzzerId ?? -1)")
                 }
                 
                 // Step 2: Sync corpus from database to in-memory basicCorpus
                 let programs = try await storage.syncCorpusFromDatabase()
+                logger.info("Found: \(programs.count) programs from db")
                 if enableLogging {
                     logger.info("Syncing \(programs.count) programs from database to corpus")
                 }
@@ -68,31 +70,32 @@ public class PostgreSQLSync: Module {
             let aspects = ev.aspects
             let execution = ev.execution
             
-            // Only sync programs found locally to avoid cycles
-            guard ev.origin == .local else { return }
-            
             // Capture execution outputs synchronously to avoid race conditions and thread safety issues
             // Accessing these properties triggers event dispatching which must happen on the Fuzzer queue
-            let stdout = execution?.stdout ?? ""
-            let stderr = execution?.stderr ?? ""
-            let fuzzout = execution?.fuzzout ?? ""
+
+            // TODO Aleksi: These are probably not available on synced programs
+            // This assertion fails in REPRL.swift:188 => assert(outputStreamsAreValid)
+            //let stdout = execution?.stdout ?? ""
+            //let stderr = execution?.stderr ?? ""
+            //let fuzzout = execution?.fuzzout ?? ""
+
+            // Testing
+            let stdout = ""
+            let stderr = ""
+            let fuzzout = ""
             
             Task {
-                // Ensure we have a fuzzer ID (should already be set from initialization)
                 guard let fuzzerId = self.cachedFuzzerId else {
                     self.logger.error("Fuzzer ID not set - registration may have failed")
                     return
                 }
                 
-                // Store program and execution data
                 await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
                     
-                // Only store execution if we have execution data
                 if let execution = execution {
                     let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
                     
                     let mutatorName = program.contributors.first(where: { contributor in
-                        // Check if this contributor's name matches known mutator patterns
                         contributor.name.contains("Mutator")
                     })?.name
                     
@@ -121,9 +124,8 @@ public class PostgreSQLSync: Module {
                         
                         let foundEdgesCount = evaluator.getFoundEdgesCount()
                         
-                        // Calculate coverage percentage
                         if totalEdgesCount > 0 {
-                            coverageTotal = Double(foundEdgesCount) / Double(totalEdgesCount)
+                            coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
                         }
                         
                         if let covEdgeSet = aspects as? CovEdgeSet {
@@ -221,8 +223,11 @@ public class PostgreSQLSync: Module {
     }
     
     private func syncWithDatabase(_ fuzzer: Fuzzer) async {
+        if enableLogging {
+            logger.info("Starting periodic sync with database. Last sync time: \(lastSyncTime)")
+        }
         do {
-            let newPrograms = try await storage.fetchNewPrograms(since: lastSyncTime)
+            let newPrograms = try await storage.fetchNewPrograms(since: lastSyncTime, limit: 100)
             if !newPrograms.isEmpty {
                 if enableLogging {
                     logger.info("Fetched \(newPrograms.count) new programs from database")

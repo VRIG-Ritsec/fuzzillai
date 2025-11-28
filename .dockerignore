@@ -10,7 +10,6 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-build/
 dist/
 *.egg-info/
 .vscode/
@@ -19,5 +18,6 @@ dist/
 *.swo
 *~
 .DS_Store
-.build/
-Package.resolved
+Corpus/
+*.md
+!README.md

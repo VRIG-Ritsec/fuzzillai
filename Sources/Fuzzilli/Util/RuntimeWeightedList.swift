@@ -35,6 +35,11 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
         }
     }
 
+    public convenience init(from weightedList: WeightedList<Element>) {
+        let values = weightedList.map { ($0, 1) }
+        self.init(values)
+    }
+
     public var description: String {
         return String(format: "%.2f", totalRuntimeWeight)
     }

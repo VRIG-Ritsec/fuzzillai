@@ -58,8 +58,7 @@ public class PostgreSQLSync: Module {
                 // Import each program into the fuzzer's corpus
                 for program in programs {
                     fuzzer.async {
-                        // Use .corpusImport origin to indicate it came from the database
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: false)))
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
                     }
                 }
                 
@@ -100,13 +99,19 @@ public class PostgreSQLSync: Module {
 
         // Cache mutator names from ProgramGenerated event (before minimization)
         // This works around the fact that contributors don't survive protobuf serialization
-        // TODO Aleksi: This doesn't seem to work 
         fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
             let programId = program.id.uuidString
             
-            // Extract mutator name from contributors while they're still intact
-            if let mutatorName = program.contributors.first(where: { $0.name.contains("Mutator") })?.name {
-                self.mutatorCache[programId] = mutatorName
+            //self.logger.info("[ProgramGenerated] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
+            
+            // Extract ALL mutator names from contributors
+            let mutators = program.contributors.filter { $0.name.contains("Mutator") }
+            if !mutators.isEmpty {
+                let mutatorNames = mutators.map { $0.name }.joined(separator: ", ")
+                self.logger.info("[ProgramGenerated] Found mutators: \(mutatorNames)")
+                
+                // Cache the first mutator name (or we could cache all of them)
+                self.mutatorCache[programId] = mutators.first!.name
                 
                 // Implement LRU-style cleanup
                 if self.mutatorCache.count > self.maxCacheSize {
@@ -144,6 +149,7 @@ public class PostgreSQLSync: Module {
 
                     // Try to get mutator name from cache first (for locally generated programs)
                     // Fall back to contributors (though they may be empty for imported programs)
+                    //self.logger.info("[InterestingProgramFound] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
                     let mutatorName = self.mutatorCache[programId] ?? program.contributors.first(where: { contributor in
                         contributor.name.contains("Mutator")
                     })?.name
@@ -299,7 +305,7 @@ public class PostgreSQLSync: Module {
         
         // Periodic Flush
         // TODO Aleksi: 1 minute for testing but update later
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
@@ -315,7 +321,7 @@ public class PostgreSQLSync: Module {
         
         // Heartbeat: Update fuzzer activity every 1 minute to prevent being marked as stale
         // TODO Aleksi: 1 minute for testing but update later
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 if let fuzzerId = self.cachedFuzzerId {
                     do {
@@ -331,7 +337,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
             }
@@ -369,8 +375,7 @@ public class PostgreSQLSync: Module {
                 
                 for (program, _) in newPrograms {
                     fuzzer.async {
-                        // Use .corpusImport origin to indicate it came from the database
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: false)))
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
                     }
                 }
             }

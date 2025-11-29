@@ -53,4 +53,5 @@ CMD ./FuzzilliCli --profile=v8 --engine=multi --resume --corpus=postgresql \
       --postgres-url="${POSTGRES_URL}" \
       --timeout="${TIMEOUT}" \
       --minMutationsPerSample="${MIN_MUTATIONS_PER_SAMPLE}" \
+      --logLevel=verbose \
       --postgres-logging ./fuzzbuild/d8

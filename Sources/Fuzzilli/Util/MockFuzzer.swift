@@ -97,13 +97,6 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
         (CombineMutator(),                    1),
     ])
 
-    let runtimeMutators = RuntimeWeightedList<Mutator>([
-        (CodeGenMutator(), 1),
-        (OperationMutator(), 1),
-        (InputMutator(typeAwareness: .loose), 1),
-        (CombineMutator(), 1)
-    ])
-
     let engine = maybeEngine ?? MutationEngine(numConsecutiveMutations: 5)
 
     // The evaluator to score produced samples.
@@ -141,7 +134,6 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
                         codeGenerators: codeGenerators,
                         programTemplates: programTemplates,
                         evaluator: evaluator,
-                        runtimeWeightedMutators: runtimeMutators,
                         environment: environment,
                         lifter: lifter,
                         corpus: corpus,

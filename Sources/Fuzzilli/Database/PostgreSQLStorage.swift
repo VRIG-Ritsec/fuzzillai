@@ -300,7 +300,13 @@ public actor PostgreSQLStorage {
             for program in programs {
                 let programHash = DatabaseUtils.calculateProgramHash(program: program)
 
-                let programData = DatabaseUtils.encodeProgramToBase64(program: program)
+                var programData: String
+                do {
+                    programData = try DatabaseUtils.encodeProgramToBase64(program: program)
+                } catch {
+                    logger.info("Failed to encode program with hash \(programHash) continuing...")
+                    continue
+                }
 
                 //logger.info("Storing program: \(programHash) with data: \(programData)")
 

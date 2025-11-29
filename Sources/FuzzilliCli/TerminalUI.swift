@@ -125,13 +125,15 @@ class TerminalUI {
         } else {
             print("Fuzzer Statistics")
         }
-        
-        // PostgreSQL corpus stats are no longer available since PostgreSQLCorpus was removed
-        // The functionality is now handled by PostgreSQLSync module
-        let postgresStats = ""
-        
+
+        let mutationWeightsLine: String
+        if fuzzer.mutators is RuntimeWeightedList<Mutator> {
+            mutationWeightsLine = "Mutation Weights:             \(fuzzer.runtimeWeightedMutators.description)\n"
+        } else {
+            mutationWeightsLine = ""
+        }
+
         print("""
-        \(postgresStats)\
         -----------------
         Fuzzer state:                 \(state)
         Uptime:                       \(formatTimeInterval(fuzzer.uptime()))
@@ -152,7 +154,7 @@ class TerminalUI {
         Execs / Second:               \(String(format: "%.2f", stats.execsPerSecond))
         Fuzzer Overhead:              \(String(format: "%.2f", stats.fuzzerOverhead * 100))%
         Minimization Overhead:        \(String(format: "%.2f", stats.minimizationOverhead * 100))%
-        Mutation Weights:             \(fuzzer.runtimeWeightedMutators.description)
+        \(mutationWeightsLine)
         Total Execs:                  \(stats.totalExecs)
         """)
     }

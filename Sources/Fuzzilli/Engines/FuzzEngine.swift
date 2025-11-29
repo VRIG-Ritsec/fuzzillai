@@ -42,7 +42,7 @@ public class FuzzEngine: ComponentBase {
         switch execution.outcome {
             case .crashed(let termsig):
                 fuzzer.processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
-                fuzzer.runtimeWeightedMutators.adjustBatchWeight(fuzzer.runtimeWeightedMutators.getLastElements(), 1.1, 0.9)
+                fuzzer.adjustMutatorWeightsForCrash()
                 program.contributors.generatedCrashingSample()
 
             case .succeeded:
@@ -58,10 +58,10 @@ public class FuzzEngine: ComponentBase {
 
                 if isInteresting {
                     program.contributors.generatedInterestingSample()
-                    fuzzer.runtimeWeightedMutators.adjustBatchWeight(fuzzer.runtimeWeightedMutators.getLastElements(), 1.1, 0.9)
+                    fuzzer.adjustMutatorWeightsForInteresting()
                 } else {
                     program.contributors.generatedValidSample()
-                    fuzzer.runtimeWeightedMutators.adjustBatchWeight(fuzzer.runtimeWeightedMutators.getLastElements(), 0.9, 1.1)
+                    fuzzer.adjustMutatorWeightsForValid()
                 }
 
             case .failed(_):

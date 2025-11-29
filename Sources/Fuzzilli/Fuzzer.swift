@@ -69,7 +69,12 @@ public class Fuzzer {
     public let mutators: WeightedList<Mutator>
 
     /// The mutators used by the engine when dynamically weighted during runtime
-    public let runtimeWeightedMutators: RuntimeWeightedList<Mutator>
+    public var runtimeWeightedMutators: RuntimeWeightedList<Mutator> {
+        guard let runtime = mutators as? RuntimeWeightedList<Mutator> else {
+            fatalError("This engine requires RuntimeWeightedList mutators, but got \(type(of: mutators))")
+        }
+        return runtime
+    }
 
     /// The evaluator to score generated programs.
     public let evaluator: ProgramEvaluator
@@ -180,7 +185,6 @@ public class Fuzzer {
     public init(
         configuration: Configuration, scriptRunner: ScriptRunner, engine: FuzzEngine, mutators: WeightedList<Mutator>,
         codeGenerators: WeightedList<CodeGenerator>, programTemplates: WeightedList<ProgramTemplate>, evaluator: ProgramEvaluator,
-        runtimeWeightedMutators: RuntimeWeightedList<Mutator>,
         environment: JavaScriptEnvironment, lifter: Lifter, corpus: Corpus, minimizer: Minimizer, queue: DispatchQueue? = nil
     ) {
         let uniqueId = UUID()
@@ -192,7 +196,6 @@ public class Fuzzer {
         self.timers = Timers(queue: self.queue)
         self.engine = engine
         self.mutators = mutators
-        self.runtimeWeightedMutators = runtimeWeightedMutators
         self.codeGenerators = codeGenerators
 
         self.programTemplates = programTemplates
@@ -473,12 +476,19 @@ public class Fuzzer {
 
         case .succeeded:
             if let aspects = evaluator.evaluate(execution) {
+                // Aleksi debugging
+                //logger.info("Program succeded with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
+
                 wasImported = processMaybeInteresting(program, havingAspects: aspects, origin: origin, execution: execution)
             }
 
             if case .corpusImport(let mode) = origin, mode == .full, !wasImported {
                 // We're performing a full corpus import, so the sample still needs to be added to our corpus even though it doesn't trigger any new behaviour.
                 corpus.add(program, ProgramAspects(outcome: .succeeded))
+
+                //Aleksi Debugging
+                //logger.info("Added program to corpus with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
+
                 // We also dispatch the InterestingProgramFound event here since we technically found an interesting program, but also so that the program is forwarded to child nodes.
                 dispatchEvent(events.InterestingProgramFound, data: (program, ProgramAspects(outcome: .succeeded), origin, execution))
                 wasImported = true
@@ -932,7 +942,6 @@ public class Fuzzer {
 
         // Perform the next iteration as soon as all tasks related to the current iteration are finished.
         fuzzGroup.notify(queue: queue) {
-            self.runtimeWeightedMutators.flushLastElements()
             self.fuzzOne()
         }
     }
@@ -1072,6 +1081,21 @@ public class Fuzzer {
 
         logger.info("Startup tests finished successfully")
         return actualTimeout
+    }
+
+    public func adjustMutatorWeightsForCrash() {
+        guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
+        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 1.1, 0.9)
+    }
+    
+    public func adjustMutatorWeightsForInteresting() {
+        guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
+        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 1.1, 0.9)
+    }
+    
+    public func adjustMutatorWeightsForValid() {
+        guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
+        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 0.9, 1.1)
     }
 
     /// A pending corpus import job together with some statistics.

@@ -47,30 +47,38 @@ public class MutationEngine: FuzzEngine {
     public override func fuzzOne(_ group: DispatchGroup) {
         var parent = fuzzer.corpus.randomElementForMutating()
         parent = prepareForMutating(parent)
-        for _ in 0..<numConsecutiveMutations {
+        logger.verbose("[DEBUG] Starting mutation with parent program size: \(parent.size)")
+        for mutationRound in 0..<numConsecutiveMutations {
             // TODO: factor out code shared with the HybridEngine?
             var mutator = fuzzer.mutators.randomElement()
             let maxAttempts = 10
             var mutatedProgram: Program? = nil
-            for _ in 0..<maxAttempts {
+            logger.verbose("[DEBUG] Mutation round \(mutationRound): Trying mutator \(mutator.name)")
+            for attempt in 0..<maxAttempts {
                 if let result = mutator.mutate(parent, for: fuzzer) {
                     // Success!
+                    logger.verbose("[DEBUG] Mutator \(mutator.name) succeeded on attempt \(attempt), program size: \(result.size), contributors: \(result.contributors.map({ $0.name }).joined(separator: ", "))")
                     result.contributors.formUnion(parent.contributors)
                     mutator.addedInstructions(result.size - parent.size)
                     mutatedProgram = result
                     break
                 } else {
                     // Try a different mutator.
+                    logger.verbose("[DEBUG] Mutator \(mutator.name) failed on attempt \(attempt)")
                     mutator.failedToGenerate()
                     mutator = fuzzer.mutators.randomElement()
+                    if attempt < maxAttempts - 1 {
+                        logger.verbose("[DEBUG] Switching to mutator \(mutator.name) for attempt \(attempt + 1)")
+                    }
                 }
             }
 
             guard let program = mutatedProgram else {
-                logger.warning("Could not mutate sample, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
+                logger.warning("[DEBUG] Could not mutate sample after \(maxAttempts) attempts, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
                 continue
             }
 
+            logger.verbose("[DEBUG] Executing mutated program with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
             assert(program !== parent)
             let outcome = execute(program)
 

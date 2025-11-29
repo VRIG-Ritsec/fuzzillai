@@ -66,7 +66,7 @@ public class PostgreSQLSync: Module {
                     logger.info("Corpus synchronization complete: imported \(programs.count) programs")
                 }
             } catch {
-                logger.error("Failed to register fuzzer with PostgreSQL database: \(error)")
+                logger.error("Failed to register fuzzer with PostgreSQL database: \(String(reflecting: error))")
             }
         }
         
@@ -102,13 +102,14 @@ public class PostgreSQLSync: Module {
         fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
             let programId = program.id.uuidString
             
-            //self.logger.info("[ProgramGenerated] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
+            self.logger.verbose("[ProgramGenerated] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
+
             
             // Extract ALL mutator names from contributors
             let mutators = program.contributors.filter { $0.name.contains("Mutator") }
             if !mutators.isEmpty {
                 let mutatorNames = mutators.map { $0.name }.joined(separator: ", ")
-                self.logger.info("[ProgramGenerated] Found mutators: \(mutatorNames)")
+                self.logger.verbose("[ProgramGenerated] Found mutators: \(mutatorNames)")
                 
                 // Cache the first mutator name (or we could cache all of them)
                 self.mutatorCache[programId] = mutators.first!.name
@@ -213,9 +214,9 @@ public class PostgreSQLSync: Module {
                     await self.storage.addExecutionToBatch(executionInput)
                     
                     if self.enableLogging {
-                        let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
+                        let mutatorInfo = mutatorName.map { " (mutator: \($0))" } ?? ""
                         let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
-                        self.logger.info("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
+                        self.logger.verbose("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
                     }
                 }
             }

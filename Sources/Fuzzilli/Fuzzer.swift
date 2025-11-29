@@ -128,6 +128,11 @@ public class Fuzzer {
         assert(newState != .waiting || state == .uninitialized)     // We're only transitioning into .waiting during initialization
         assert(state != .fuzzing)   // Currently we never transition out of .fuzzing (although we could allow scheduling a corpus import while already fuzzing)
 
+        // Track when corpus generation starts
+        if newState == .corpusGeneration {
+            corpusGenerationStartTime = Date()
+        }
+        
         state = newState
     }
 
@@ -169,6 +174,7 @@ public class Fuzzer {
     /// State management.
     private var iterations = 0
     private var iterationOfLastInteratingSample = 0
+    private var corpusGenerationStartTime: Date? = nil
 
     /// Currently active corpus import job, if any.
     private var currentCorpusImportJob = CorpusImportJob(corpus: [], mode: .full)
@@ -476,18 +482,12 @@ public class Fuzzer {
 
         case .succeeded:
             if let aspects = evaluator.evaluate(execution) {
-                // Aleksi debugging
-                //logger.info("Program succeded with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
-
                 wasImported = processMaybeInteresting(program, havingAspects: aspects, origin: origin, execution: execution)
             }
 
             if case .corpusImport(let mode) = origin, mode == .full, !wasImported {
                 // We're performing a full corpus import, so the sample still needs to be added to our corpus even though it doesn't trigger any new behaviour.
                 corpus.add(program, ProgramAspects(outcome: .succeeded))
-
-                //Aleksi Debugging
-                //logger.info("Added program to corpus with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
 
                 // We also dispatch the InterestingProgramFound event here since we technically found an interesting program, but also so that the program is forwarded to child nodes.
                 dispatchEvent(events.InterestingProgramFound, data: (program, ProgramAspects(outcome: .succeeded), origin, execution))
@@ -755,9 +755,10 @@ public class Fuzzer {
                 aspects = intersection
             } while !didConverge || attempt < minAttempts
         }
-        // Update the iteration counter for any interesting program found
-        // This is crucial for corpus generation phase to properly track progress
-        iterationOfLastInteratingSample = iterations
+        
+        if origin == .local {
+            iterationOfLastInteratingSample = iterations
+        }
 
         // Determine whether the program needs to be minimized, then, using this helper function, dispatch the appropriate
         // event and insert the sample into the corpus.
@@ -923,15 +924,39 @@ public class Fuzzer {
             iterations += 1
             corpusGenerationEngine.fuzzOne(fuzzGroup)
 
-            // Perform initial corpus generation until we haven't found a new interesting sample in the last N
-            // iterations. The rough order of magnitude of N has been determined experimentally: run two instances with
-            // different values (e.g. 10 and 100) for roughly the same number of iterations (approximately until both
-            // have finished the initial corpus generation), then compare the corpus size and coverage.
+            // Exit corpus generation if any of these conditions are met:
+            var shouldExitCorpusGeneration = false
+            var exitReason = ""
+            
+            // Condition 1: Haven't found interesting sample in 100 iterations (original heuristic)
             if iterationsSinceLastInterestingProgram > 100 {
+                shouldExitCorpusGeneration = true
+                exitReason = "100 iterations without new interesting sample"
+            }
+            
+            // Condition 2: Time-based limit (5 minutes max in corpus generation)
+            // This prevents infinite corpus generation in distributed scenarios where
+            // multiple workers keep finding and sharing interesting samples
+            if let startTime = corpusGenerationStartTime {
+                let timeInCorpusGen = -startTime.timeIntervalSinceNow
+                if timeInCorpusGen > 5 * Minutes {
+                    shouldExitCorpusGeneration = true
+                    exitReason = "time limit reached (\(String(format: "%.1f", timeInCorpusGen))s)"
+                }
+            }
+            
+            // Condition 3: Corpus size-based limit (500+ samples is plenty)
+            // If we have a large corpus (e.g., from PostgreSQL sync), we should move to fuzzing
+            if corpus.size >= 500 {
+                shouldExitCorpusGeneration = true
+                exitReason = "corpus size threshold reached (\(corpus.size) samples)"
+            }
+            
+            if shouldExitCorpusGeneration {
                 guard !corpus.isEmpty else {
                     logger.fatal("Initial corpus generation failed, corpus is still empty. Is the evaluator working correctly?")
                 }
-                logger.info("Initial corpus generation finished. Corpus now contains \(corpus.size) elements")
+                logger.info("Initial corpus generation finished: \(exitReason). Corpus now contains \(corpus.size) elements")
                 changeState(to: .fuzzing)
             }
 

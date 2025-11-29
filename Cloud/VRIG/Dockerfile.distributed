@@ -1,5 +1,5 @@
 # Stage 1: Build Fuzzilli
-FROM docker.io/swift:latest as builder
+FROM docker.io/swift:latest AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV SHELL=bash

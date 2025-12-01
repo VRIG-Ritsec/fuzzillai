@@ -417,29 +417,88 @@ public actor PostgresSQLStorage {
         }
     }
 
-    // TODO Aleksi: This doesn't have to return anything
     public func storeProgramsBatch(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
         guard !programInputs.isEmpty else { return [] }
 
+        return try await retryOnDeadlock {
+            try await self._storeProgramsBatchImpl(programInputs: programInputs, fuzzerId: fuzzerId)
+        }
+    }
+    
+    private func _storeProgramsBatchImpl(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
+        // Pre-calculate all hashes and sort to ensure consistent lock ordering
+        struct PreparedProgram {
+            let hash: String
+            let input: ProgramInput
+            let parentHash: String?
+            let programData: String
+        }
+        
+        var preparedPrograms: [PreparedProgram] = []
+        
+        for programInput in programInputs {
+            let program = programInput.program
+            
+            // Calculate program hash
+            let programHash: String
+            do {
+                programHash = try DatabaseUtils.calculateProgramHash(program: program)
+            } catch {
+                if self.enableLogging {
+                    self.logger.warning("Failed to calculate hash for program, skipping: \(error)")
+                }
+                continue
+            }
+            
+            // Calculate parent hash if exists
+            let parentHash: String?
+            if let parentProgram = program.parent {
+                do {
+                    parentHash = try DatabaseUtils.calculateProgramHash(program: parentProgram)
+                } catch {
+                    if self.enableLogging {
+                        self.logger.warning("Failed to calculate parent hash, using nil: \(error)")
+                    }
+                    parentHash = nil
+                }
+            } else {
+                parentHash = nil
+            }
+            
+            // Encode program (must be done after parent hash calculation)
+            let programData: String
+            do {
+                programData = try DatabaseUtils.encodeProgramToBase64(program: program)
+            } catch {
+                if self.enableLogging {
+                    self.logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
+                }
+                continue
+            }
+            
+            preparedPrograms.append(PreparedProgram(
+                hash: programHash,
+                input: programInput,
+                parentHash: parentHash,
+                programData: programData
+            ))
+        }
+        
+        // Sort by hash - ensures all workers acquire locks in the same order
+        preparedPrograms.sort { $0.hash < $1.hash }
+        
         return try await databasePool.withConnection { connection in
             var programHashes: [String] = []
 
             try await connection.query("BEGIN", logger:self.logger)
 
             do {
-                for programInput in programInputs {
-                    let program = programInput.program
-
-                    let programHash: String
-                    do {
-                        programHash = try DatabaseUtils.calculateProgramHash(program: program)
-                    } catch {
-                        if self.enableLogging {
-                            self.logger.warning("Failed to calculate hash for program, skipping: \(error)")
-                        }
-                        continue
-                    }
-
+                var insertedCount = 0
+                var skippedCount = 0
+                
+                for prepared in preparedPrograms {
+                    let programHash = prepared.hash
+                    let programInput = prepared.input
                     let mutatorNames = programInput.mutatorNames
                     let contributorNames = programInput.contributorNames
 
@@ -460,57 +519,48 @@ public actor PostgresSQLStorage {
                         contributorsArray = "NULL"
                     }
 
-                    let parentHash: String?
-                    if let parentProgram = program.parent {
-                        do {
-                            parentHash = try DatabaseUtils.calculateProgramHash(program: parentProgram)
-                        } catch {
-                            if self.enableLogging {
-                                self.logger.warning("Failed to calculate parent hash, using nil: \(error)")
-                            }
-                            parentHash = nil
-                        }
-                    } else {
-                        parentHash = nil
-                    }
-
-                    // Get program data after calculating parent hash because encoding clears the parent
-                    let programData: String
-                    do {
-                        programData = try DatabaseUtils.encodeProgramToBase64(program: program)
-                    } catch {
-                        if self.enableLogging {
-                            self.logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
-                        }
-                        continue
-                    }
-
+                    // Use ON CONFLICT DO NOTHING with RETURNING to detect if insert succeeded
+                    // First worker to insert wins, others skip gracefully
                     let fuzzerQuery: PostgresQuery = """
                         INSERT INTO fuzzer (program_hash, fuzzer_id, inserted_at, program_base64) 
-                        VALUES (\(programHash), \(fuzzerId), NOW(), \(programData))
-                        ON CONFLICT (program_hash) DO UPDATE SET 
-                            fuzzer_id = EXCLUDED.fuzzer_id,
-                            program_base64 = EXCLUDED.program_base64,
-                            inserted_at = EXCLUDED.inserted_at
+                        VALUES (\(programHash), \(fuzzerId), NOW(), \(prepared.programData))
+                        ON CONFLICT (program_hash) DO NOTHING
+                        RETURNING program_hash
                     """
 
-                    try await connection.query(fuzzerQuery, logger:self.logger)
+                    // TODO Aleksi: collecting the result is more for debugging so probably remove later
+                    let fuzzerResult = try await connection.query(fuzzerQuery, logger:self.logger)
+                    let fuzzerRows = try await fuzzerResult.collect()
+                    
+                    // If RETURNING gave us a row, the insert succeeded
+                    // If no rows, it was skipped due to conflict
+                    if fuzzerRows.isEmpty {
+                        skippedCount += 1
+                        continue  // Skip to next program
+                    }
 
                     let programQuery = PostgresQuery(stringLiteral: """
                         INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutators, contributors, parent_program_hash) 
-                        VALUES ('\(programHash)', \(fuzzerId), NOW(), \(mutatorsArray), \(contributorsArray), \(parentHash != nil ? "'\(parentHash!)'" : "NULL"))
+                        VALUES ('\(programHash)', \(fuzzerId), NOW(), \(mutatorsArray), \(contributorsArray), \(prepared.parentHash != nil ? "'\(prepared.parentHash!)'" : "NULL"))
                         ON CONFLICT (program_hash) DO NOTHING
+                        RETURNING program_hash
                     """)
 
-                    try await connection.query(programQuery, logger:self.logger)
-
-                    programHashes.append(programHash)
+                    let programResult = try await connection.query(programQuery, logger:self.logger)
+                    let programRows = try await programResult.collect()
+                    
+                    if !programRows.isEmpty {
+                        programHashes.append(programHash)
+                        insertedCount += 1
+                    } else {
+                        skippedCount += 1
+                    }
                 }
 
                 try await connection.query("COMMIT", logger:self.logger)
 
                 if self.enableLogging {
-                    self.logger.info("Successfully batch stored \(programHashes.count) programs in database")
+                    self.logger.info("Successfully batch stored \(insertedCount) programs in database (\(skippedCount) skipped as duplicates)")
                 }
 
                 return programHashes
@@ -529,13 +579,22 @@ public actor PostgresSQLStorage {
     public func storeExecutionsBatch(executions: [ExecutionInput]) async throws -> [Int] {
         guard !executions.isEmpty else { return [] }
     
+        return try await retryOnDeadlock {
+            try await self._storeExecutionsBatchImpl(executions: executions)
+        }
+    }
+    
+    private func _storeExecutionsBatchImpl(executions: [ExecutionInput]) async throws -> [Int] {
         return try await databasePool.withConnection { connection in
             var executionIds: [Int] = []
     
             try await connection.query("BEGIN", logger:self.logger)
     
             do {
-                for execution in executions {
+                // Sort by program_hash for consistent lock ordering
+                let sortedExecutions = executions.sorted { $0.programHash < $1.programHash }
+                
+                for execution in sortedExecutions {
                     let query: PostgresQuery = """
                         INSERT INTO execution (
                             program_hash, execution_outcome_id, coverage_total, 
@@ -576,51 +635,124 @@ public actor PostgresSQLStorage {
         }
     } 
 
+    /// Retry wrapper for deadlock handling
+    /// Detects PostgreSQL deadlock errors (40P01) and retries with exponential backoff
+    private func retryOnDeadlock<T>(operation: @escaping () async throws -> T) async throws -> T {
+        let maxRetries = 3
+        let baseDelayMs: UInt64 = 100
+        var lastError: Error?
+        
+        for attempt in 1...maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                
+                let errorString = String(describing: error)
+                let isDeadlock = errorString.contains("40P01") || 
+                                errorString.contains("deadlock") ||
+                                errorString.contains("could not serialize")
+                
+                if isDeadlock && attempt < maxRetries {
+                    if self.enableLogging {
+                        self.logger.warning("Deadlock detected (attempt \(attempt)/\(maxRetries)), retrying after delay...")
+                    }
+                    
+                    // Exponential backoff with jitter to avoid thundering herd
+                    let delayNs = baseDelayMs * UInt64(attempt) * 1_000_000
+                    let jitter = UInt64.random(in: 0...(delayNs / 2))
+                    try? await Task.sleep(nanoseconds: delayNs + jitter)
+                    
+                    continue
+                } else {
+                    throw error
+                }
+            }
+        }
+        
+        throw lastError ?? PostgresSQLStorageError.queryFailed("Unknown error after retries")
+    }
+
     /// Synchronize corpus from database after fuzzer registration
     /// 
-    /// Fetches all programs from the fuzzer table and returns them for corpus initialization.
-    /// This ensures the worker starts with the current shared corpus state.
+    /// Fetches all programs from the fuzzer table using pagination to handle large corpora.
+    /// This prevents memory spikes and connection timeouts for campaigns with 50k+ programs.
     public func syncCorpusFromDatabase() async throws -> [Program] {
-        return try await databasePool.withConnection { connection in 
-            if self.enableLogging {
-                self.logger.info("Syncing corpus from database...")
+        if self.enableLogging {
+            self.logger.info("Syncing corpus from database...")
+        }
+        
+        var allPrograms: [Program] = []
+        var seenHashes = Set<String>()
+        let batchSize = 5000  // Fetch 5k programs at a time
+        var offset = 0
+        var totalFetched = 0
+        
+        while true {
+            let batch = try await fetchCorpusBatch(offset: offset, limit: batchSize)
+            
+            if batch.isEmpty {
+                break
             }
+            
+            // Deduplicate and add to results
+            for program in batch {
+                do {
+                    let hash = try DatabaseUtils.calculateProgramHash(program: program)
+                    
+                    if !seenHashes.contains(hash) {
+                        allPrograms.append(program)
+                        seenHashes.insert(hash)
+                    }
+                } catch {
+                    if self.enableLogging {
+                        self.logger.warning("Failed to calculate hash for program, skipping: \(error)")
+                    }
+                }
+            }
+            
+            totalFetched += batch.count
+            
+            if self.enableLogging {
+                self.logger.info("Corpus sync progress: \(allPrograms.count) unique programs (\(totalFetched) total fetched)")
+            }
+            
+            offset += batchSize
+            
+            // If we got fewer results than requested, we've reached the end
+            if batch.count < batchSize {
+                break
+            }
+        }
+        
+        if self.enableLogging {
+            self.logger.info("Corpus sync complete: \(allPrograms.count) unique programs from \(totalFetched) total")
+        }
+        
+        return allPrograms
+    }
+    
+    /// Fetch a batch of programs from the corpus (internal helper for pagination)
+    private func fetchCorpusBatch(offset: Int, limit: Int) async throws -> [Program] {
+        return try await databasePool.withConnection { connection in 
             let query = PostgresQuery(stringLiteral: """
                 SELECT program_hash, program_base64 
                 FROM fuzzer 
                 ORDER BY inserted_at DESC
+                LIMIT \(limit) OFFSET \(offset)
             """)
-        
-            if self.enableLogging {
-                self.logger.info("Executing sync query: \(query)")
-            }
-
+            
             let result = try await connection.query(query, logger:self.logger)
             let rows = try await result.collect()
-        
-            if self.enableLogging {
-                self.logger.info("Sync query returned \(rows.count) rows")
-            }
-
+            
             var programs: [Program] = []
-            var seenHashes = Set<String>() 
-
+            
             for row in rows {
                 do {
-                    let (hash, data) = try row.decode((String, String).self, context: .default)
-
-                    guard !seenHashes.contains(hash) else { 
-                        if self.enableLogging {
-                            self.logger.debug("Skipping duplicate hash: \(hash)")
-                        }
-                        continue 
-                    }
-
+                    let (_, data) = try row.decode((String, String).self, context: .default)
+                    
                     if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: data) {
                         programs.append(program)
-                        seenHashes.insert(hash)
-                    } else if self.enableLogging {
-                        self.logger.warning("Failed to decode program for hash: \(hash)")
                     }
                 } catch {
                     if self.enableLogging {
@@ -628,11 +760,7 @@ public actor PostgresSQLStorage {
                     }
                 }
             }
-        
-            if self.enableLogging {
-                self.logger.info("Synced \(programs.count) programs from database (unique)")
-            }
-        
+            
             return programs
         }
     }
@@ -690,7 +818,7 @@ public actor PostgresSQLStorage {
             }
         
             if self.enableLogging {
-                self.logger.info("Fetched \(programs.count) new programs successfully decoded")
+                self.logger.info("Fetched \(programs.count) new programs successfully decoded (from \(rows.count) rows)")
             }
         
             return programs

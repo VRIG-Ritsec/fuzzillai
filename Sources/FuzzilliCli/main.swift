@@ -684,7 +684,7 @@ fuzzer.sync {
         }
         
         do {
-            let databasePool = try DatabasePool(connectionString: url, enableLogging: postgresLogging)
+            let databasePool = try DatabasePool(connectionString: url, maxConnections: 5, enableLogging: postgresLogging)
             let storage = PostgreSQLStorage(databasePool: databasePool, enableLogging: postgresLogging)
             let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging)
             fuzzer.addModule(postgresSync)

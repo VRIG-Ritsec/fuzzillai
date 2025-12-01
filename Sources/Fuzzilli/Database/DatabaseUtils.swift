@@ -20,6 +20,7 @@ public class DatabaseUtils {
     public static func encodeProgramToProtobuf(program: Program) -> Data? {
         do {
             // Make sure the program does not contain internal operations
+            // TODO Aleksi: This should probably get changed to throw instead of assert so the fuzzers don't crash
             assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
             
             var proto = program.asProtobuf()
@@ -41,6 +42,7 @@ public class DatabaseUtils {
     
     public static func calculateProgramHash(program: Program) -> String {
         do {
+            // TODO Aleksi: This should probably get changed to throw instead of assert so the fuzzers don't crash
             assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
 
             var proto = program.asProtobuf()

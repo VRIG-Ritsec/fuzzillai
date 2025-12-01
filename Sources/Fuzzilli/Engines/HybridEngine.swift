@@ -132,38 +132,30 @@ public class HybridEngine: FuzzEngine {
         // We do this for example because pure code generation will often not generate "weird" code (e.g. weird inputs to operations, infinite loops, very large arrays, odd-looking object/class literals, etc.), but mutators are pretty good at that.
         // Further, some mutators have access to runtime information (e.g. Probe and Explore mutator) which the static code generation lacks.
         var parent = refinedProgram
-        logger.verbose("[DEBUG] Starting mutation phase with parent program size: \(parent.size)")
         for mutationRound in 0..<numConsecutiveMutations {
             // TODO: factor out code shared with the MutationEngine?
             var mutator = fuzzer.mutators.randomElement()
             let maxAttempts = 10
             var mutatedProgram: Program? = nil
-            logger.verbose("[DEBUG] Mutation round \(mutationRound): Trying mutator \(mutator.name)")
-            for attempt in 0..<maxAttempts {
+            for _ in 0..<maxAttempts {
                 if let result = mutator.mutate(parent, for: fuzzer) {
                     // Success!
-                    logger.verbose("[DEBUG] Mutator \(mutator.name) succeeded on attempt \(attempt), program size: \(result.size), contributors: \(result.contributors.map({ $0.name }).joined(separator: ", "))")
                     result.contributors.formUnion(parent.contributors)
                     mutator.addedInstructions(result.size - parent.size)
                     mutatedProgram = result
                     break
                 } else {
                     // Try a different mutator.
-                    logger.verbose("[DEBUG] Mutator \(mutator.name) failed on attempt \(attempt)")
                     mutator.failedToGenerate()
                     mutator = fuzzer.mutators.randomElement()
-                    if attempt < maxAttempts - 1 {
-                        logger.verbose("[DEBUG] Switching to mutator \(mutator.name) for attempt \(attempt + 1)")
-                    }
                 }
             }
 
             guard let program = mutatedProgram else {
-                logger.warning("[DEBUG] Could not mutate sample after \(maxAttempts) attempts, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
+                logger.warning("Could not mutate sample after \(maxAttempts) attempts, giving up. Sample:\n\(FuzzILLifter().lift(parent))")
                 continue
             }
 
-            logger.verbose("[DEBUG] Executing mutated program with contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
             assert(program !== parent)
             let outcome = execute(program)
 

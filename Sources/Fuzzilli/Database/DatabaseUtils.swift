@@ -93,6 +93,10 @@ public class DatabaseUtils {
             return 9
         case "RuntimeAssistedMutator":
             return 10
+        case "InputMutator (loose)":
+            return 11
+        case "InputMutator (aware)":
+            return 12
         default:
             return nil
         }

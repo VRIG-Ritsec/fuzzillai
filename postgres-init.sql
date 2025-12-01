@@ -44,6 +44,13 @@ CREATE INDEX idx_program_contributors ON program USING GIN(contributors);  -- GI
 CREATE INDEX idx_program_parent ON program(parent_program_hash);
 CREATE INDEX idx_program_fuzzer_created ON program(fuzzer_id, created_at DESC);
 
+-- Mutator type lookup table (must be created before mutator_stats references it)
+CREATE TABLE IF NOT EXISTS mutator_type (
+    id SMALLINT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    category VARCHAR(30)
+);
+
 -- Add mutator statistics table (per fuzzer instance)
 CREATE TABLE IF NOT EXISTS mutator_stats (
     fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
@@ -66,13 +73,6 @@ CREATE TABLE IF NOT EXISTS mutator_stats (
 
 CREATE INDEX idx_mutator_stats_fuzzer ON mutator_stats(fuzzer_id);
 CREATE INDEX idx_mutator_stats_mutator ON mutator_stats(mutator_type_id);
-
--- Mutator type lookup table
-CREATE TABLE IF NOT EXISTS mutator_type (
-    id SMALLINT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE,
-    category VARCHAR(30)
-);
 
 INSERT INTO mutator_type (id, name, category) VALUES 
     (1, 'ExplorationMutator', 'runtime_assisted'),
@@ -260,7 +260,6 @@ SELECT
     COUNT(*) as crash_count,
     MIN(e.created_at) as first_crash,
     MAX(e.created_at) as last_crash,
-    STRING_AGG(DISTINCT e.mutator_type_id::TEXT, ',') as mutators_involved,
     MAX(e.coverage_total) as max_coverage_before_crash,
     BOOL_OR(e.is_new_edge) as found_new_edges
 FROM execution e
@@ -333,7 +332,6 @@ SELECT
     e.program_hash,
     p.fuzzer_id,
     array_to_string(p.source_mutators, ', ') as source_mutators,
-    mt.name as mutator_name,
     eo.outcome,
     e.coverage_total,
     e.edges_found,
@@ -341,7 +339,6 @@ SELECT
     e.created_at
 FROM execution e
 JOIN program p ON e.program_hash = p.program_hash
-LEFT JOIN mutator_type mt ON e.mutator_type_id = mt.id
 JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
 WHERE e.created_at > NOW() - INTERVAL '1 hour'
 ORDER BY e.created_at DESC;
@@ -356,7 +353,6 @@ SELECT
     COUNT(e.execution_id) as execution_count,
     MAX(e.coverage_total) as max_coverage,
     AVG(e.coverage_total) as avg_coverage,
-    COUNT(DISTINCT e.mutator_type_id) as mutators_spawned,
     COUNT(*) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_found,
     MIN(e.created_at) as first_execution,
     MAX(e.created_at) as last_execution

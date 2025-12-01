@@ -20,7 +20,7 @@ public class DatabasePool {
     private let enableLogging: Bool
     private var configuration: SQLPostgresConfiguration?
     
-    public init(connectionString: String, maxConnections: Int = 5, connectionTimeout: TimeInterval = 120.0, retryAttempts: Int = 3, enableLogging: Bool = false) throws {
+    public init(connectionString: String, maxConnections: Int = 2, connectionTimeout: TimeInterval = 120.0, retryAttempts: Int = 3, enableLogging: Bool = false) throws {
         self.connectionString = connectionString
         self.maxConnections = maxConnections
         self.connectionTimeout = connectionTimeout
@@ -89,6 +89,24 @@ public class DatabasePool {
             // For now, just throw.
             throw DatabasePoolError.initializationFailed("Failed to initialize pool: \(error)")
         }
+    }
+
+    public func withConnection<T>(_ closure: @escaping (PostgresConnection) async throws -> T) async throws -> T {
+        guard let pool = connectionPool else {
+            throw DatabasePoolError.notInitialized
+        }
+        
+        // Bridge async/await to EventLoopFuture using the connection's EventLoop
+        // The pool expects a closure that returns an EventLoopFuture.
+        // We use 'makeFutureWithTask' to bridge the async closure into the NIO world.
+        let futureResult = pool.withConnection(logger: logger) { conn in
+            return conn.eventLoop.makeFutureWithTask {
+                try await closure(conn)
+            }
+        }
+        
+        // Await the result of the future to return to the async world
+        return try await futureResult.get()
     }
     
     /// Get event loop group for direct connections
@@ -162,8 +180,6 @@ public class DatabasePool {
         return isInitialized
     }
     
-    // MARK: - Private Methods
-    
     /// Async-safe locking helper
     private func withLock<T>(_ lock: NSLock, _ body: () throws -> T) rethrows -> T {
         lock.lock()
@@ -202,9 +218,6 @@ public class DatabasePool {
     }
 }
 
-// MARK: - Supporting Types
-
-/// Database pool errors
 public enum DatabasePoolError: Error, LocalizedError {
     case notInitialized
     case initializationFailed(String)

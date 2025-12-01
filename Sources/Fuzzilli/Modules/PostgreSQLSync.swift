@@ -39,17 +39,28 @@ public class PostgreSQLSync: Module {
             }
         }
         
-        // Register fuzzer and sync corpus
+        // Register fuzzer synchronously before setting up event listeners
+        // This ensures cachedFuzzerId is set before any events start firing
+        // Use a semaphore to block until registration completes
+        let registrationSemaphore = DispatchSemaphore(value: 0)
+        
         Task {
             do {
-                // Step 1: Register this worker with the database
+                // Sleep for a random amount of time to avoid stampedes
+                let jitter = TimeInterval.random(in: 0...60)
+                try? await Task.sleep(nanoseconds: UInt64(jitter * 1_000_000_000))
+
+                // Step 1: Register this worker with the database (blocking via semaphore)
                 let engineArgs = fuzzer.config.arguments
                 self.cachedFuzzerId = try await storage.registerFuzzer(engineArguments: engineArgs)
                 if enableLogging {
                     logger.info("Fuzzer registered with PostgreSQL database: fuzzerId \(self.cachedFuzzerId ?? -1)")
                 }
                 
-                // Step 2: Sync corpus from database to in-memory basicCorpus
+                // Signal that registration is complete
+                registrationSemaphore.signal()
+                
+                // Step 2: Sync corpus from database to in-memory basicCorpus (can be async)
                 let programs = try await storage.syncCorpusFromDatabase()
                 logger.info("Found: \(programs.count) programs from db")
                 if enableLogging {
@@ -68,7 +79,16 @@ public class PostgreSQLSync: Module {
                 }
             } catch {
                 logger.error("Failed to register fuzzer with PostgreSQL database: \(String(reflecting: error))")
+                // Signal even on error so we don't deadlock
+                registrationSemaphore.signal()
             }
+        }
+        
+        // Wait for registration to complete before continuing with event listener setup
+        registrationSemaphore.wait()
+        
+        if enableLogging {
+            logger.info("Fuzzer registration complete, proceeding with event listener setup")
         }
         
         // Track program ID for each execution to correlate with outputs
@@ -206,10 +226,11 @@ public class PostgreSQLSync: Module {
                     )
                     await self.storage.addExecutionToBatch(executionInput)
                     
-                    if self.enableLogging {
-                        let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
-                        self.logger.verbose("Added interesting program and execution to batch\(edgeInfo)")
-                    }
+                    // TODO Aleksi: This is a bit too verbose, maybe only log every x times
+                    //if self.enableLogging {
+                    //    let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
+                    //    self.logger.verbose("Added interesting program and execution to batch\(edgeInfo)")
+                    //}
                 }
             }
         }
@@ -304,7 +325,6 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Flush
-        // TODO Aleksi: 1 minute for testing but update later
         fuzzer.timers.scheduleTask(every: 15 * Minutes) {
             Task {
                 do {
@@ -320,7 +340,6 @@ public class PostgreSQLSync: Module {
         }
         
         // Heartbeat: Update fuzzer activity every 1 minute to prevent being marked as stale
-        // TODO Aleksi: 1 minute for testing but update later
         fuzzer.timers.scheduleTask(every: 15 * Minutes) {
             Task {
                 if let fuzzerId = self.cachedFuzzerId {
@@ -386,7 +405,7 @@ public class PostgreSQLSync: Module {
                 }
             }
         } catch {
-            logger.error("Failed to sync with database: \(error)")
+            logger.error("Failed to sync with database: \(String(reflecting: error))")
         }
     }
 
@@ -429,7 +448,7 @@ public class PostgreSQLSync: Module {
                 logger.info("Synced mutator statistics for \(statsInputs.count) mutators")
             }
         } catch {
-            logger.error("Failed to sync mutator stats: \(error)")
+            logger.error("Failed to sync mutator stats: \(String(reflecting: error))")
         }
     }
 

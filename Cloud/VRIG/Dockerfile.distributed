@@ -17,10 +17,7 @@ COPY Sources ./Sources
 COPY Tests ./Tests
 COPY Tools ./Tools
 
-RUN swift build && \
-    # Verify the executable was created
-    ls -la .build/debug/ && \
-    find .build -name "FuzzilliCli" -type f -executable
+RUN swift build
 
 #####################
 # Stage 2: Runtime

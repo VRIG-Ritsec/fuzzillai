@@ -102,14 +102,11 @@ public class PostgreSQLSync: Module {
         fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
             let programId = program.id.uuidString
             
-            self.logger.verbose("[ProgramGenerated] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
-
-            
             // Extract ALL mutator names from contributors
             let mutators = program.contributors.filter { $0.name.contains("Mutator") }
             if !mutators.isEmpty {
-                let mutatorNames = mutators.map { $0.name }.joined(separator: ", ")
-                self.logger.verbose("[ProgramGenerated] Found mutators: \(mutatorNames)")
+                // TODO aleksi: We probably want to track all mutators, not just the first one
+                //let mutatorNames = mutators.map { $0.name }.joined(separator: ", ")
                 
                 // Cache the first mutator name (or we could cache all of them)
                 self.mutatorCache[programId] = mutators.first!.name
@@ -195,7 +192,16 @@ public class PostgreSQLSync: Module {
                         feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                     }
                     
-                    let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                    let programHash: String
+                    do {
+                        programHash = try DatabaseUtils.calculateProgramHash(program: program)
+                    } catch {
+                        if self.enableLogging {
+                            self.logger.warning("Failed to calculate program hash, skipping execution record: \(error)")
+                        }
+                        return
+                    }
+                    
                     let executionInput = PostgreSQLStorage.ExecutionInput(
                         programHash: programHash,
                         mutatorTypeId: mutatorTypeId,
@@ -275,7 +281,15 @@ public class PostgreSQLSync: Module {
                     feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                 }
                 
-                let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                let programHash: String
+                do {
+                    programHash = try DatabaseUtils.calculateProgramHash(program: program)
+                } catch {
+                    if self.enableLogging {
+                        self.logger.warning("Failed to calculate program hash for crash, skipping execution record: \(error)")
+                    }
+                    return
+                }
                 
                 // Create execution record with outcome_id = 1 (Crashed)
                 let executionInput = PostgreSQLStorage.ExecutionInput(

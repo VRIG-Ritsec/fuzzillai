@@ -16,8 +16,10 @@ public actor PostgreSQLStorage {
     // Batching
     private var pendingPrograms: [(Program, Int)] = []
     private var pendingExecutions: [ExecutionInput] = []
-
     
+    // Track program hashes we've already seen to avoid duplicates
+    private var seenProgramHashes: Set<String> = []
+
     /// Input data for creating an execution record (before database insert assigns executionId)
     /// This mirrors ExecutionRecord from Models.swift but without the executionId field
     public struct ExecutionInput {
@@ -255,6 +257,22 @@ public actor PostgreSQLStorage {
     }
     
     public func addProgramToBatch(_ program: Program, fuzzerId: Int) {
+        guard let programHash = try? DatabaseUtils.calculateProgramHash(program: program) else {
+            if enableLogging {
+                logger.warning("Failed to calculate program hash, skipping program")
+            }
+            return
+        }
+        
+        // Skip if we've already added this program to the batch
+        guard !seenProgramHashes.contains(programHash) else {
+            if enableLogging {
+                logger.warning("Skipping duplicate program with hash: \(programHash)")
+            }
+            return
+        }
+        
+        seenProgramHashes.insert(programHash)
         pendingPrograms.append((program, fuzzerId))
     }
     
@@ -270,6 +288,7 @@ public actor PostgreSQLStorage {
         executionsToStore = pendingExecutions
         pendingPrograms = []
         pendingExecutions = []
+        seenProgramHashes = []  // Clear the deduplication set
         
         if !programsToStore.isEmpty {
             // Group by fuzzerId to use storeProgramsBatch
@@ -298,13 +317,23 @@ public actor PostgreSQLStorage {
 
         do {
             for program in programs {
-                let programHash = DatabaseUtils.calculateProgramHash(program: program)
+                let programHash: String
+                do {
+                    programHash = try DatabaseUtils.calculateProgramHash(program: program)
+                } catch {
+                    if enableLogging {
+                        logger.warning("Failed to calculate hash for program, skipping: \(error)")
+                    }
+                    continue
+                }
 
-                var programData: String
+                let programData: String
                 do {
                     programData = try DatabaseUtils.encodeProgramToBase64(program: program)
                 } catch {
-                    logger.info("Failed to encode program with hash \(programHash) continuing...")
+                    if enableLogging {
+                        logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
+                    }
                     continue
                 }
 
@@ -314,7 +343,14 @@ public actor PostgreSQLStorage {
 
                 let parentHash: String?
                 if let parentProgram = program.parent {
-                    parentHash = DatabaseUtils.calculateProgramHash(program: parentProgram)
+                    do {
+                        parentHash = try DatabaseUtils.calculateProgramHash(program: parentProgram)
+                    } catch {
+                        if enableLogging {
+                            logger.warning("Failed to calculate parent hash, using nil: \(error)")
+                        }
+                        parentHash = nil
+                    }
                 } else {
                     parentHash = nil
                 }

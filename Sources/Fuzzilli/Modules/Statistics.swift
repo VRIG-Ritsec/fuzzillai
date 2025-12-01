@@ -227,7 +227,6 @@ public class Statistics: Module {
                     self.logger.info("    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)")
                 }
             }
-
         }
         if fuzzer.config.logLevel.isAtLeast(.verbose) {
             fuzzer.timers.scheduleTask(every: 30 * Minutes) {

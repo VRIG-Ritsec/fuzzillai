@@ -32,16 +32,40 @@ CREATE TABLE IF NOT EXISTS program (
     program_hash VARCHAR(64) PRIMARY KEY REFERENCES fuzzer(program_hash) ON DELETE CASCADE,
     fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT NOW(),
-    source_mutator VARCHAR(50),
+    source_mutators VARCHAR(50)[],  -- Array of mutator names that contributed to this program
+    contributors VARCHAR(50)[],      -- Array of all contributor names (mutators + other sources)
     parent_program_hash VARCHAR(64) REFERENCES program(program_hash) ON DELETE SET NULL
-
 );
 
 CREATE INDEX idx_program_fuzzer ON program(fuzzer_id);
 CREATE INDEX idx_program_created ON program(created_at DESC);
-CREATE INDEX idx_program_mutator ON program(source_mutator);
+CREATE INDEX idx_program_mutators ON program USING GIN(source_mutators);  -- GIN index for array searching
+CREATE INDEX idx_program_contributors ON program USING GIN(contributors);  -- GIN index for array searching
 CREATE INDEX idx_program_parent ON program(parent_program_hash);
 CREATE INDEX idx_program_fuzzer_created ON program(fuzzer_id, created_at DESC);
+
+-- Add mutator statistics table (per fuzzer instance)
+CREATE TABLE IF NOT EXISTS mutator_stats (
+    fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
+    mutator_type_id SMALLINT NOT NULL REFERENCES mutator_type(id),
+    total_samples BIGINT DEFAULT 0,
+    crashes_found INT DEFAULT 0,
+    timeouts INT DEFAULT 0,
+    interesting_samples INT DEFAULT 0,
+    invalid_samples INT DEFAULT 0,
+    valid_samples INT DEFAULT 0,
+    total_instructions_added BIGINT DEFAULT 0,
+    correctness_rate NUMERIC(5,2),
+    failure_rate NUMERIC(5,2),
+    timeout_rate NUMERIC(5,2),
+    interesting_samples_rate NUMERIC(5,2),
+    avg_instructions_added NUMERIC(8,2),
+    last_updated TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (fuzzer_id, mutator_type_id)
+);
+
+CREATE INDEX idx_mutator_stats_fuzzer ON mutator_stats(fuzzer_id);
+CREATE INDEX idx_mutator_stats_mutator ON mutator_stats(mutator_type_id);
 
 -- Mutator type lookup table
 CREATE TABLE IF NOT EXISTS mutator_type (
@@ -82,8 +106,6 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS execution (
     execution_id BIGSERIAL PRIMARY KEY,
     program_hash VARCHAR(64) NOT NULL REFERENCES program(program_hash) ON DELETE CASCADE,
-    -- id of the mutator that was used to execute the program
-    mutator_type_id SMALLINT REFERENCES mutator_type(id),
     -- id of if the system crashed, failed, succeeded, timed out, or sigcheck
     execution_outcome_id SMALLINT NOT NULL REFERENCES execution_outcome(id), 
     coverage_total NUMERIC(5,2) CHECK (coverage_total >= 0 AND coverage_total <= 100), 
@@ -106,7 +128,6 @@ CREATE INDEX idx_execution_created_desc ON execution(created_at DESC);
 CREATE INDEX idx_execution_coverage_desc ON execution(coverage_total DESC NULLS LAST) WHERE coverage_total IS NOT NULL;
 CREATE INDEX idx_execution_crashes ON execution(execution_outcome_id) WHERE execution_outcome_id = 1;
 CREATE INDEX idx_execution_new_edges ON execution(execution_id) WHERE is_new_edge = TRUE;
-CREATE INDEX idx_execution_mutator ON execution(mutator_type_id) WHERE mutator_type_id IS NOT NULL;
 CREATE INDEX idx_execution_edges ON execution(edges_found, total_edges) WHERE edges_found IS NOT NULL;
 
 -- Feedback vector, this is def not correct 
@@ -149,9 +170,6 @@ CREATE INDEX idx_execution_edges ON execution(edges_found, total_edges) WHERE ed
 -- CREATE INDEX idx_feedback_maps ON feedback_vector_detail USING GIN(maps) WHERE maps IS NOT NULL;
 -- CREATE INDEX idx_feedback_handlers ON feedback_vector_detail USING GIN(handlers) WHERE handlers IS NOT NULL;
 
-
-
-
 -- Materialized view: Fuzzer performance dashboard
 CREATE MATERIALIZED VIEW IF NOT EXISTS fuzzer_dashboard AS
 SELECT 
@@ -177,25 +195,45 @@ GROUP BY m.fuzzer_id, m.status, m.created_at, m.last_activity;
 
 CREATE UNIQUE INDEX idx_fuzzer_dashboard_id ON fuzzer_dashboard(fuzzer_id);
 
--- Materialized view: Mutator effectiveness
-CREATE MATERIALIZED VIEW IF NOT EXISTS mutator_effectiveness AS
+-- Per-fuzzer mutator effectiveness
+CREATE MATERIALIZED VIEW IF NOT EXISTS mutator_effectiveness_per_fuzzer AS
+SELECT 
+    ms.fuzzer_id,
+    m.fuzzer_id as main_fuzzer_id,
+    m.status,
+    mt.id as mutator_id,
+    mt.name as mutator_name,
+    mt.category,
+    ms.total_samples,
+    ms.crashes_found,
+    ms.interesting_samples,
+    ms.correctness_rate,
+    ms.failure_rate,
+    ms.timeout_rate,
+    ms.interesting_samples_rate,
+    ms.avg_instructions_added,
+    ms.last_updated
+FROM mutator_stats ms
+JOIN mutator_type mt ON ms.mutator_type_id = mt.id
+JOIN main m ON ms.fuzzer_id = m.fuzzer_id;
+
+-- Aggregate across all fuzzers (campaign-wide view)
+CREATE MATERIALIZED VIEW IF NOT EXISTS mutator_effectiveness_aggregate AS
 SELECT 
     mt.id as mutator_id,
     mt.name as mutator_name,
     mt.category,
-    COUNT(e.execution_id) as total_executions,
-    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_found,
-    ROUND(COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE)::NUMERIC / 
-          NULLIF(COUNT(e.execution_id), 0) * 100, 2) as edge_discovery_rate,
-    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) as crashes_found,
-    AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL) as avg_coverage,
-    MAX(e.coverage_total) as max_coverage,
+    SUM(ms.total_samples) as total_samples,
+    SUM(ms.crashes_found) as total_crashes_found,
+    SUM(ms.interesting_samples) as total_interesting_samples,
+    AVG(ms.correctness_rate) as avg_correctness_rate,
+    AVG(ms.failure_rate) as avg_failure_rate,
+    AVG(ms.avg_instructions_added) as avg_instructions_added,
+    COUNT(DISTINCT ms.fuzzer_id) as active_fuzzers_using_mutator,
     NOW() as refreshed_at
-FROM mutator_type mt
-LEFT JOIN execution e ON mt.id = e.mutator_type_id
+FROM mutator_stats ms
+JOIN mutator_type mt ON ms.mutator_type_id = mt.id
 GROUP BY mt.id, mt.name, mt.category;
-
-CREATE UNIQUE INDEX idx_mutator_effectiveness_id ON mutator_effectiveness(mutator_id);
 
 -- Materialized view: Coverage progression
 CREATE MATERIALIZED VIEW IF NOT EXISTS coverage_progression AS
@@ -240,7 +278,7 @@ WITH RECURSIVE lineage AS (
         program_hash,
         fuzzer_id,
         parent_program_hash,
-        source_mutator,
+        source_mutators,
         created_at,
         1 as generation,
         program_hash::TEXT as lineage_path
@@ -253,7 +291,7 @@ WITH RECURSIVE lineage AS (
         p.program_hash,
         p.fuzzer_id,
         p.parent_program_hash,
-        p.source_mutator,
+        p.source_mutators,
         p.created_at,
         l.generation + 1,
         l.lineage_path || ' -> ' || p.program_hash
@@ -294,7 +332,7 @@ SELECT
     e.execution_id,
     e.program_hash,
     p.fuzzer_id,
-    p.source_mutator,
+    array_to_string(p.source_mutators, ', ') as source_mutators,
     mt.name as mutator_name,
     eo.outcome,
     e.coverage_total,
@@ -313,7 +351,8 @@ CREATE OR REPLACE VIEW top_performing_programs AS
 SELECT 
     p.program_hash,
     p.fuzzer_id,
-    p.source_mutator,
+    p.source_mutators,
+    p.contributors,
     COUNT(e.execution_id) as execution_count,
     MAX(e.coverage_total) as max_coverage,
     AVG(e.coverage_total) as avg_coverage,
@@ -323,7 +362,7 @@ SELECT
     MAX(e.created_at) as last_execution
 FROM program p
 LEFT JOIN execution e ON p.program_hash = e.program_hash
-GROUP BY p.program_hash, p.fuzzer_id, p.source_mutator
+GROUP BY p.program_hash, p.fuzzer_id, p.source_mutators, p.contributors
 HAVING COUNT(e.execution_id) > 0
 ORDER BY new_edges_found DESC, max_coverage DESC
 LIMIT 1000;

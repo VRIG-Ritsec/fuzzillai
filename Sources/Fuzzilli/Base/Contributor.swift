@@ -19,13 +19,13 @@ public class Contributor: Hashable {
     public let name: String
 
     // Number of valid programs produced (i.e. programs that run to completion)
-    private var validSamples = 0
+    public var validSamples = 0
     // Number of interesting programs produces (i.e. programs that triggered new interesting behavior). All interesting programs are also valid.
-    private var interestingSamples = 0
+    public var interestingSamples = 0
     // Number of invalid programs produced (i.e. programs that raised an exception or timed out)
-    private var invalidSamples = 0
+    public var invalidSamples = 0
     // Number of produced programs that resulted in a timeout.
-    private var timedOutSamples = 0
+    public var timedOutSamples = 0
     // Number of crashing programs produced.
     private var crashingSamples = 0
     // The number of times this contributor has been invoked
@@ -36,7 +36,7 @@ public class Contributor: Hashable {
     // Number of times this instance failed to generate/mutate code.
     private var failures = 0
     // Total number of instructions added to programs by this contributor.
-    private var totalInstructionProduced = 0
+    public var totalInstructionProduced = 0
 
     public init(name: String) {
         self.name = name

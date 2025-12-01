@@ -7,14 +7,14 @@ import PostgresKit
 /// This class provides methods to store and retrieve programs, executions, crashes,
 /// and metadata from PostgreSQL database. It handles the actual database operations
 /// that the PostgreSQLCorpus uses for persistence and synchronization.
-public actor PostgreSQLStorage {
+public actor PostgresSQLStorage {
 
     private let databasePool: DatabasePool
     private let logger: Logging.Logger
     private let enableLogging: Bool
     
     // Batching
-    private var pendingPrograms: [(Program, Int)] = []
+    private var pendingPrograms: [ProgramInput] = []
     private var pendingExecutions: [ExecutionInput] = []
     
     // Track program hashes we've already seen to avoid duplicates
@@ -24,7 +24,6 @@ public actor PostgreSQLStorage {
     /// This mirrors ExecutionRecord from Models.swift but without the executionId field
     public struct ExecutionInput {
         public let programHash: String
-        public let mutatorTypeId: Int?
         public let executionOutcomeId: Int
         public let coverageTotal: Double?
         public let edgesFound: Int?
@@ -37,9 +36,21 @@ public actor PostgreSQLStorage {
         public let feedbackNexusCount: Int?
         public let createdAt: Date
         
-        public init(programHash: String, mutatorTypeId: Int?, executionOutcomeId: Int, coverageTotal: Double?, edgesFound: Int?, totalEdges: Int?, isNewEdge: Bool, stdout: String?, stderr: String?, fuzzout: String?, turbofanOptimizationBits: Int64?, feedbackNexusCount: Int?, createdAt: Date) {
+        public init(
+            programHash: String, 
+            executionOutcomeId: Int, 
+            coverageTotal: Double?, 
+            edgesFound: Int?, 
+            totalEdges: Int?, 
+            isNewEdge: Bool, 
+            stdout: String?, 
+            stderr: String?, 
+            fuzzout: String?, 
+            turbofanOptimizationBits: Int64?, 
+            feedbackNexusCount: Int?, 
+            createdAt: Date
+        ) {
             self.programHash = programHash
-            self.mutatorTypeId = mutatorTypeId
             self.executionOutcomeId = executionOutcomeId
             self.coverageTotal = coverageTotal
             self.edgesFound = edgesFound
@@ -53,25 +64,94 @@ public actor PostgreSQLStorage {
             self.createdAt = createdAt
         }
     }
+
+    public struct ProgramInput {
+        public let program: Program
+        public let fuzzerId: Int
+        public let mutatorNames: [String]
+        public let contributorNames: [String]
+
+        public init(
+            program: Program, 
+            fuzzerId: Int, 
+            mutatorNames: [String], 
+            contributorNames: [String]
+        ) {
+            self.program = program
+            self.fuzzerId = fuzzerId
+            self.mutatorNames = mutatorNames
+            self.contributorNames = contributorNames
+        }
+    }
+
+    /// Input data for mutator statistics (per fuzzer instance)
+    public struct MutatorStatsInput {
+        public let fuzzerId: Int
+        public let mutatorTypeId: Int
+        public let totalSamples: Int
+        public let crashesFound: Int
+        public let timeouts: Int
+        public let interestingSamples: Int
+        public let invalidSamples: Int
+        public let validSamples: Int
+        public let totalInstructionsAdded: Int
+        public let correctnessRate: Double?
+        public let failureRate: Double?
+        public let timeoutRate: Double?
+        public let interestingSamplesRate: Double?
+        public let avgInstructionsAdded: Double
+        
+        public init(
+            fuzzerId: Int,
+            mutatorTypeId: Int,
+            totalSamples: Int,
+            crashesFound: Int,
+            timeouts: Int,
+            interestingSamples: Int,
+            invalidSamples: Int,
+            validSamples: Int,
+            totalInstructionsAdded: Int,
+            correctnessRate: Double?,
+            failureRate: Double?,
+            timeoutRate: Double?,
+            interestingSamplesRate: Double?,
+            avgInstructionsAdded: Double
+        ) {
+            self.fuzzerId = fuzzerId
+            self.mutatorTypeId = mutatorTypeId
+            self.totalSamples = totalSamples
+            self.crashesFound = crashesFound
+            self.timeouts = timeouts
+            self.interestingSamples = interestingSamples
+            self.invalidSamples = invalidSamples
+            self.validSamples = validSamples
+            self.totalInstructionsAdded = totalInstructionsAdded
+            self.correctnessRate = correctnessRate
+            self.failureRate = failureRate
+            self.timeoutRate = timeoutRate
+            self.interestingSamplesRate = interestingSamplesRate
+            self.avgInstructionsAdded = avgInstructionsAdded
+        }
+    }
     
     public init(databasePool: DatabasePool, enableLogging: Bool = false) {
         self.databasePool = databasePool
         self.enableLogging = enableLogging
-        self.logger = Logging.Logger(label: "PostgreSQLStorage")
+        self.logger = Logging.Logger(label: "PostgresSQLStorage")
     }
     
     private func createDirectConnection() async throws -> PostgresConnection {
         guard let eventLoopGroup = databasePool.getEventLoopGroup() else {
-            throw PostgreSQLStorageError.noResult
+            throw PostgresSQLStorageError.noResult
         }
         
         let connectionString = databasePool.getConnectionString()
         guard let url = URL(string: connectionString) else {
-            throw PostgreSQLStorageError.connectionFailed
+            throw PostgresSQLStorageError.connectionFailed
         }
         
         guard url.scheme == "postgresql" || url.scheme == "postgres" else {
-            throw PostgreSQLStorageError.connectionFailed
+            throw PostgresSQLStorageError.connectionFailed
         }
         
         let host = url.host ?? "localhost"
@@ -184,7 +264,7 @@ public actor PostgreSQLStorage {
                 let insertRows = try await insertResult.collect()
                 
                 guard let firstRow = insertRows.first else {
-                    throw PostgreSQLStorageError.noResult
+                    throw PostgresSQLStorageError.noResult
                 }
                 
                 fuzzerId = try firstRow.decode(Int.self, context: PostgresDecodingContext.default)
@@ -209,7 +289,7 @@ public actor PostgreSQLStorage {
                 logger.error("Failed to register fuzzer: \(error)")
             }
             
-            throw PostgreSQLStorageError.queryFailed("Fuzzer registration failed: \(error)")
+            throw PostgresSQLStorageError.queryFailed("Fuzzer registration failed: \(error)")
         }
     }
     
@@ -255,9 +335,74 @@ public actor PostgreSQLStorage {
             logger.info("Deactivated fuzzer_id: \(fuzzerId)")
         }
     }
+
+    public func updateMutatorStats(_ stats: [MutatorStatsInput]) async throws {
+        guard !stats.isEmpty else { return }
+
+        let connection = try await createDirectConnection()
+        defer { Task { _ = try? await connection.close() } }
+
+        try await connection.query("BEGIN", logger: self.logger)
+
+        do {
+            for stat in stats {
+                let query: PostgresQuery = """
+                    INSERT INTO mutator_stats (
+                        fuzzer_id, mutator_type_id, 
+                        total_samples, crashes_found, timeouts, 
+                        interesting_samples, failed_samples, successful_samples,
+                        total_instructions_added,
+                        correctness_rate, failure_rate, timeout_rate,
+                        interesting_samples_rate, avg_instructions_added,
+                        last_updated
+                    ) VALUES (
+                        \(stat.fuzzerId), \(stat.mutatorTypeId),
+                        \(stat.totalSamples), \(stat.crashesFound), \(stat.timeouts),
+                        \(stat.interestingSamples), \(stat.invalidSamples), \(stat.validSamples),
+                        \(stat.totalInstructionsAdded),
+                        \(stat.correctnessRate), \(stat.failureRate), \(stat.timeoutRate),
+                        \(stat.interestingSamplesRate), \(stat.avgInstructionsAdded),
+                        NOW()
+                    )
+                    ON CONFLICT (fuzzer_id, mutator_type_id) 
+                    DO UPDATE SET
+                        total_samples = EXCLUDED.total_samples,
+                        crashes_found = EXCLUDED.crashes_found,
+                        timeouts = EXCLUDED.timeouts,
+                        interesting_samples = EXCLUDED.interesting_samples,
+                        failed_samples = EXCLUDED.failed_samples,
+                        successful_samples = EXCLUDED.successful_samples,
+                        total_instructions_added = EXCLUDED.total_instructions_added,
+                        correctness_rate = EXCLUDED.correctness_rate,
+                        failure_rate = EXCLUDED.failure_rate,
+                        timeout_rate = EXCLUDED.timeout_rate,
+                        interesting_samples_rate = EXCLUDED.interesting_samples_rate,
+                        avg_instructions_added = EXCLUDED.avg_instructions_added,
+                        last_updated = NOW()
+                """
+
+                try await connection.query(query, logger: self.logger)
+            }
+
+            try await connection.query("COMMIT", logger: self.logger)
+
+            if enableLogging {
+                logger.info("Successfully updated \(stats.count) mutator statistics")
+            }
+
+        } catch {
+            _ = try? await connection.query("ROLLBACK", logger: self.logger)
+
+            if enableLogging {
+                logger.error("Failed to update mutator stats: \(String(reflecting: error))")
+            }
+
+            throw PostgresSQLStorageError.queryFailed("Mutator stats update failed: \(error)")
+        }
+    }
     
-    public func addProgramToBatch(_ program: Program, fuzzerId: Int) {
-        guard let programHash = try? DatabaseUtils.calculateProgramHash(program: program) else {
+    public func addProgramToBatch(_ programInput: ProgramInput) {
+        guard let programHash = try? DatabaseUtils.calculateProgramHash(program: programInput.program) else {
             if enableLogging {
                 logger.warning("Failed to calculate program hash, skipping program")
             }
@@ -273,29 +418,36 @@ public actor PostgreSQLStorage {
         }
         
         seenProgramHashes.insert(programHash)
-        pendingPrograms.append((program, fuzzerId))
+        pendingPrograms.append(programInput)
     }
     
     public func addExecutionToBatch(_ execution: ExecutionInput) {
+        guard !seenProgramHashes.contains(execution.programHash) else {
+            if enableLogging {
+                logger.warning("Skipping duplicate execution with hash: \(execution.programHash)")
+            }
+            return
+        }
+        
+        seenProgramHashes.insert(execution.programHash)
         pendingExecutions.append(execution)
     }
     
     public func flushBatches() async throws {
-        let programsToStore: [(Program, Int)]
+        let programsToStore: [ProgramInput]
         let executionsToStore: [ExecutionInput]
         
         programsToStore = pendingPrograms
         executionsToStore = pendingExecutions
         pendingPrograms = []
         pendingExecutions = []
-        seenProgramHashes = []  // Clear the deduplication set
+        seenProgramHashes = []
         
         if !programsToStore.isEmpty {
             // Group by fuzzerId to use storeProgramsBatch
-            let groupedPrograms = Dictionary(grouping: programsToStore, by: { $0.1 })
-            for (fuzzerId, items) in groupedPrograms {
-                let programs = items.map { $0.0 }
-                _ = try await storeProgramsBatch(programs: programs, fuzzerId: fuzzerId)
+            let groupedPrograms = Dictionary(grouping: programsToStore, by: { $0.fuzzerId})
+            for (fuzzerId, programInputs) in groupedPrograms {
+                _ = try await storeProgramsBatch(programInputs: programInputs, fuzzerId: fuzzerId)
             }
         }
         
@@ -304,9 +456,8 @@ public actor PostgreSQLStorage {
         }
     }
 
-    // TODO Aleksi: Verify this actually works :)
-    public func storeProgramsBatch(programs: [Program], fuzzerId: Int) async throws -> [String] {
-        guard !programs.isEmpty else { return [] }
+    public func storeProgramsBatch(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
+        guard !programInputs.isEmpty else { return [] }
 
         let connection = try await createDirectConnection()
         defer { Task { _ = try? await connection.close() } }
@@ -316,7 +467,9 @@ public actor PostgreSQLStorage {
         try await connection.query("BEGIN", logger: self.logger)
 
         do {
-            for program in programs {
+            for programInput in programInputs {
+                let program = programInput.program
+
                 let programHash: String
                 do {
                     programHash = try DatabaseUtils.calculateProgramHash(program: program)
@@ -327,19 +480,25 @@ public actor PostgreSQLStorage {
                     continue
                 }
 
-                let programData: String
-                do {
-                    programData = try DatabaseUtils.encodeProgramToBase64(program: program)
-                } catch {
-                    if enableLogging {
-                        logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
-                    }
-                    continue
+                let mutatorNames = programInput.mutatorNames
+                let contributorNames = programInput.contributorNames
+                
+                // Format as PostgreSQL arrays: ARRAY['name1', 'name2', ...]
+                let mutatorsArray: String
+                if !mutatorNames.isEmpty {
+                    let escapedMutators = mutatorNames.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+                    mutatorsArray = "ARRAY[\(escapedMutators.joined(separator: ", "))]"
+                } else {
+                    mutatorsArray = "NULL"
                 }
-
-                //logger.info("Storing program: \(programHash) with data: \(programData)")
-
-                let mutatorName = program.contributors.first(where: { $0.name.contains("Mutator") })?.name
+                
+                let contributorsArray: String
+                if !contributorNames.isEmpty {
+                    let escapedContributors = contributorNames.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+                    contributorsArray = "ARRAY[\(escapedContributors.joined(separator: ", "))]"
+                } else {
+                    contributorsArray = "NULL"
+                }
 
                 let parentHash: String?
                 if let parentProgram = program.parent {
@@ -355,6 +514,17 @@ public actor PostgreSQLStorage {
                     parentHash = nil
                 }
 
+                // Get program data after calculating parent hash because encoding clears the parent
+                let programData: String
+                do {
+                    programData = try DatabaseUtils.encodeProgramToBase64(program: program)
+                } catch {
+                    if enableLogging {
+                        logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
+                    }
+                    continue
+                }
+
                 let fuzzerQuery: PostgresQuery = """
                     INSERT INTO fuzzer (program_hash, fuzzer_id, inserted_at, program_base64) 
                     VALUES (\(programHash), \(fuzzerId), NOW(), \(programData))
@@ -366,11 +536,11 @@ public actor PostgreSQLStorage {
 
                 try await connection.query(fuzzerQuery, logger: self.logger)
 
-                let programQuery: PostgresQuery = """
-                    INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutator, parent_program_hash) 
-                    VALUES (\(programHash), \(fuzzerId), NOW(), \(mutatorName), \(parentHash))
+                let programQuery = PostgresQuery(stringLiteral: """
+                    INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutators, contributors, parent_program_hash) 
+                    VALUES ('\(programHash)', \(fuzzerId), NOW(), \(mutatorsArray), \(contributorsArray), \(parentHash != nil ? "'\(parentHash!)'" : "NULL"))
                     ON CONFLICT (program_hash) DO NOTHING
-                """
+                """)
 
                 try await connection.query(programQuery, logger: self.logger)
 
@@ -410,12 +580,12 @@ public actor PostgreSQLStorage {
             for execution in executions {
                 let query: PostgresQuery = """
                     INSERT INTO execution (
-                        program_hash, mutator_type_id, execution_outcome_id, coverage_total, 
+                        program_hash, execution_outcome_id, coverage_total, 
                         edges_found, total_edges, is_new_edge, 
                         stdout, stderr, fuzzout, 
                         turbofan_optimization_bits, feedback_nexus_count, created_at
                     ) VALUES (
-                        \(execution.programHash), \(execution.mutatorTypeId), \(execution.executionOutcomeId), \(execution.coverageTotal), 
+                        \(execution.programHash), \(execution.executionOutcomeId), \(execution.coverageTotal), 
                         \(execution.edgesFound), \(execution.totalEdges), \(execution.isNewEdge), 
                         \(execution.stdout), \(execution.stderr), \(execution.fuzzout), 
                         \(execution.turbofanOptimizationBits), \(execution.feedbackNexusCount), NOW()
@@ -574,7 +744,7 @@ public actor PostgreSQLStorage {
         return programs
     }
 
-    public enum PostgreSQLStorageError: Error, LocalizedError {
+    public enum PostgresSQLStorageError: Error, LocalizedError {
         case noResult
         case invalidData
         case connectionFailed

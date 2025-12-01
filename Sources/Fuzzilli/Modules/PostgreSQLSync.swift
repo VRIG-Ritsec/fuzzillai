@@ -1,7 +1,7 @@
 import Foundation
 
 public class PostgreSQLSync: Module {
-    private let storage: PostgreSQLStorage
+    private let storage: PostgresSQLStorage
     private let fuzzerInstanceId: String
     private let enableLogging: Bool
     private var lastSyncTime: Date
@@ -16,9 +16,10 @@ public class PostgreSQLSync: Module {
     private var executionCache: [String: (stdout: String, stderr: String, fuzzout: String)] = [:]
     private let maxCacheSize = 1000 
 
-    private var mutatorCache: [String: String] = [:]
+    private var mutatorCache: [String: [String]] = [:]
+    private var contributorCache: [String: [String]] = [:]
 
-    public init(storage: PostgreSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
+    public init(storage: PostgresSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
         self.storage = storage
         self.fuzzerInstanceId = fuzzerInstanceId
         self.enableLogging = enableLogging
@@ -87,37 +88,25 @@ public class PostgreSQLSync: Module {
                 fuzzout: execution.fuzzout
             )
             
-            // Implement simple LRU-style cleanup to prevent unbounded growth
-            if self.executionCache.count > self.maxCacheSize {
-                // Remove oldest entries (first 100 entries)
-                let keysToRemove = Array(self.executionCache.keys.prefix(100))
-                for key in keysToRemove {
-                    self.executionCache.removeValue(forKey: key)
-                }
-            }
+            self.cleanupCache(&self.executionCache)
         }
 
-        // Cache mutator names from ProgramGenerated event (before minimization)
+        // Cache all mutator names and contributor names from ProgramGenerated event (before minimization)
         // This works around the fact that contributors don't survive protobuf serialization
         fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
             let programId = program.id.uuidString
-            
-            // Extract ALL mutator names from contributors
-            let mutators = program.contributors.filter { $0.name.contains("Mutator") }
-            if !mutators.isEmpty {
-                // TODO aleksi: We probably want to track all mutators, not just the first one
-                //let mutatorNames = mutators.map { $0.name }.joined(separator: ", ")
-                
-                // Cache the first mutator name (or we could cache all of them)
-                self.mutatorCache[programId] = mutators.first!.name
-                
-                // Implement LRU-style cleanup
-                if self.mutatorCache.count > self.maxCacheSize {
-                    let keysToRemove = Array(self.mutatorCache.keys.prefix(100))
-                    for key in keysToRemove {
-                        self.mutatorCache.removeValue(forKey: key)
-                    }
-                }
+
+            let allContributorNames = program.contributors.map { $0.name }
+            let mutatorNames = allContributorNames.filter { $0.contains("Mutator") }
+            let contributorNames = allContributorNames.filter { $0.contains("Contributor") }
+
+            if !mutatorNames.isEmpty {
+                self.mutatorCache[programId] = mutatorNames
+                self.cleanupCache(&self.mutatorCache)
+            }
+            if !contributorNames.isEmpty {
+                self.contributorCache[programId] = contributorNames
+                self.cleanupCache(&self.contributorCache)
             }
         }
         
@@ -139,22 +128,21 @@ public class PostgreSQLSync: Module {
                     self.logger.error("Fuzzer ID not set - registration may have failed")
                     return
                 }
+
+                let mutatorNames =  self.mutatorCache[programId] ?? [] 
+                let contributorNames = self.contributorCache[programId] ?? []
                 
-                await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
+                let programInput = PostgresSQLStorage.ProgramInput(
+                    program: program,
+                    fuzzerId: fuzzerId,
+                    mutatorNames: mutatorNames,
+                    contributorNames: contributorNames
+                )
+                await self.storage.addProgramToBatch(programInput)
                     
                 if let execution = execution {
                     let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
 
-                    // Try to get mutator name from cache first (for locally generated programs)
-                    // Fall back to contributors (though they may be empty for imported programs)
-                    //self.logger.info("[InterestingProgramFound] Contributors: \(program.contributors.map({ $0.name }).joined(separator: ", "))")
-                    let mutatorName = self.mutatorCache[programId] ?? program.contributors.first(where: { contributor in
-                        contributor.name.contains("Mutator")
-                    })?.name
-                    self.mutatorCache.removeValue(forKey: programId)
-                    
-                    let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
-                    
                     // Determine if new edges were found
                     // Check if aspects is a CovEdgeSet to distinguish between:
                     // - New coverage edges (CovEdgeSet with count > 0)
@@ -202,9 +190,8 @@ public class PostgreSQLSync: Module {
                         return
                     }
                     
-                    let executionInput = PostgreSQLStorage.ExecutionInput(
+                    let executionInput = PostgresSQLStorage.ExecutionInput(
                         programHash: programHash,
-                        mutatorTypeId: mutatorTypeId,
                         executionOutcomeId: outcomeId,
                         coverageTotal: coverageTotal,
                         edgesFound: edgesFound,
@@ -220,9 +207,8 @@ public class PostgreSQLSync: Module {
                     await self.storage.addExecutionToBatch(executionInput)
                     
                     if self.enableLogging {
-                        let mutatorInfo = mutatorName.map { " (mutator: \($0))" } ?? ""
                         let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
-                        self.logger.verbose("Added interesting program and execution to batch\(mutatorInfo)\(edgeInfo)")
+                        self.logger.verbose("Added interesting program and execution to batch\(edgeInfo)")
                     }
                 }
             }
@@ -246,16 +232,17 @@ public class PostgreSQLSync: Module {
                     self.logger.error("Fuzzer ID not set - registration may have failed")
                     return
                 }
-                
-                await self.storage.addProgramToBatch(program, fuzzerId: fuzzerId)
-                
-                // Extract mutator information from cache or contributors
-                let mutatorName = self.mutatorCache[programId] ?? program.contributors.first(where: { contributor in
-                    contributor.name.contains("Mutator")
-                })?.name
-                self.mutatorCache.removeValue(forKey: programId) 
 
-                let mutatorTypeId = mutatorName != nil ? DatabaseUtils.mapMutatorNameToId(mutatorName!) : nil
+                let mutatorNames =  self.mutatorCache[programId] ?? [] 
+                let contributorNames = self.contributorCache[programId] ?? []
+                
+                let programInput = PostgresSQLStorage.ProgramInput(
+                    program: program,
+                    fuzzerId: fuzzerId,
+                    mutatorNames: mutatorNames,
+                    contributorNames: contributorNames
+                )
+                await self.storage.addProgramToBatch(programInput)
                 
                 // Get coverage metrics if available (crashes may still have coverage)
                 var coverageTotal: Double? = nil
@@ -292,9 +279,8 @@ public class PostgreSQLSync: Module {
                 }
                 
                 // Create execution record with outcome_id = 1 (Crashed)
-                let executionInput = PostgreSQLStorage.ExecutionInput(
+                let executionInput = PostgresSQLStorage.ExecutionInput(
                     programHash: programHash,
-                    mutatorTypeId: mutatorTypeId,
                     executionOutcomeId: 1,  // Crashed
                     coverageTotal: coverageTotal,
                     edgesFound: edgesFound,
@@ -310,10 +296,9 @@ public class PostgreSQLSync: Module {
                 await self.storage.addExecutionToBatch(executionInput)
                 
                 if self.enableLogging {
-                    let mutatorInfo = mutatorName != nil ? " (mutator: \(mutatorName!))" : ""
                     let behaviourInfo = behaviour == .deterministic ? "deterministic" : "flaky"
                     let uniqueInfo = isUnique ? "unique" : "duplicate"
-                    self.logger.info("Added crash to batch: \(behaviourInfo), \(uniqueInfo)\(mutatorInfo)")
+                    self.logger.info("Added crash to batch: \(behaviourInfo), \(uniqueInfo)")
                 }
             }
         }
@@ -357,6 +342,12 @@ public class PostgreSQLSync: Module {
                 await self.syncWithDatabase(fuzzer)
             }
         }
+
+        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+            Task {
+                await self.syncMutatorStats(fuzzer)
+            }
+        }
         
         // Shutdown handler - deactivate fuzzer for graceful shutdown
         fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
@@ -396,6 +387,58 @@ public class PostgreSQLSync: Module {
             }
         } catch {
             logger.error("Failed to sync with database: \(error)")
+        }
+    }
+
+    private func syncMutatorStats(_ fuzzer: Fuzzer) async {
+        guard let fuzzerId = self.cachedFuzzerId else { return }
+
+        var statsInputs: [PostgresSQLStorage.MutatorStatsInput] = []
+
+        for mutator in fuzzer.mutators {
+            guard let mutatorTypeId = DatabaseUtils.mapMutatorNameToId(mutator.name) else {
+                if enableLogging {
+                    logger.warning("Unknown mutator name: \(mutator.name), skipping stats sync")
+                }
+                continue
+            }
+
+            let statsInput = PostgresSQLStorage.MutatorStatsInput(
+                fuzzerId: fuzzerId,
+                mutatorTypeId: mutatorTypeId,
+                totalSamples: mutator.totalSamples,
+                crashesFound: mutator.crashesFound,
+                timeouts: mutator.timedOutSamples,
+                interestingSamples: mutator.interestingSamples,
+                invalidSamples: mutator.invalidSamples,
+                validSamples: mutator.validSamples,
+                totalInstructionsAdded: mutator.totalInstructionProduced,
+                correctnessRate: mutator.correctnessRate,
+                failureRate: mutator.failureRate,
+                timeoutRate: mutator.timeoutRate,
+                interestingSamplesRate: mutator.interestingSamplesRate,
+                avgInstructionsAdded: mutator.avgNumberOfInstructionsGenerated
+            )
+
+            statsInputs.append(statsInput)
+        }
+
+        do {
+            try await storage.updateMutatorStats(statsInputs)
+            if enableLogging {
+                logger.info("Synced mutator statistics for \(statsInputs.count) mutators")
+            }
+        } catch {
+            logger.error("Failed to sync mutator stats: \(error)")
+        }
+    }
+
+    private func cleanupCache<K: Hashable, V>(_ cache: inout [K: V]) {
+        if cache.count > self.maxCacheSize {
+            let keysToRemove = Array(cache.keys.prefix(100))
+            for key in keysToRemove {
+                cache.removeValue(forKey: key)
+            }
         }
     }
 }

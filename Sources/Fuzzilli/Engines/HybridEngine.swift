@@ -132,7 +132,7 @@ public class HybridEngine: FuzzEngine {
         // We do this for example because pure code generation will often not generate "weird" code (e.g. weird inputs to operations, infinite loops, very large arrays, odd-looking object/class literals, etc.), but mutators are pretty good at that.
         // Further, some mutators have access to runtime information (e.g. Probe and Explore mutator) which the static code generation lacks.
         var parent = refinedProgram
-        for mutationRound in 0..<numConsecutiveMutations {
+        for _ in 0..<numConsecutiveMutations {
             // TODO: factor out code shared with the MutationEngine?
             var mutator = fuzzer.mutators.randomElement()
             let maxAttempts = 10

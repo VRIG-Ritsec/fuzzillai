@@ -383,14 +383,6 @@ public actor PostgresSQLStorage {
     }
     
     public func addExecutionToBatch(_ execution: ExecutionInput) {
-        guard !seenProgramHashes.contains(execution.programHash) else {
-            //if self.enableLogging {
-            //    self.logger.verbose("Skipping duplicate execution with hash: \(execution.programHash)")
-            //}
-            return
-        }
-        
-        seenProgramHashes.insert(execution.programHash)
         pendingExecutions.append(execution)
     }
     
@@ -822,6 +814,31 @@ public actor PostgresSQLStorage {
             }
         
             return programs
+        }
+    }
+
+    public func refreshMaterializedViews() async throws {
+        try await databasePool.withConnection { connection in
+            do {
+                // Call the PostgreSQL function that refreshes all materialized views
+                let query = PostgresQuery(stringLiteral: "SELECT * FROM refresh_all_stats()")
+                let result = try await connection.query(query, logger: self.logger)
+                let rows = try await result.collect()
+                
+                if self.enableLogging {
+                    self.logger.info("Refreshed \(rows.count) materialized views:")
+                    for row in rows {
+                        if let (viewName, refreshTime) = try? row.decode((String, String).self, context: .default) {
+                            self.logger.info("  - \(viewName): \(refreshTime)")
+                        }
+                    }
+                }
+            } catch {
+                if self.enableLogging {
+                    self.logger.error("Failed to refresh materialized views: \(String(reflecting: error))")
+                }
+                throw PostgresSQLStorageError.queryFailed("Materialized view refresh failed: \(error)")
+            }
         }
     }
 

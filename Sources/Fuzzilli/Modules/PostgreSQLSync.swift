@@ -367,6 +367,19 @@ public class PostgreSQLSync: Module {
                 await self.syncMutatorStats(fuzzer)
             }
         }
+
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+            Task {
+                do {
+                    try await self.storage.refreshMaterializedViews()
+                    if self.enableLogging {
+                        self.logger.info("Refreshed materialized views")
+                    }
+                } catch {
+                    self.logger.error("Failed to refresh materialized views: \(error)")
+                }
+            }
+        }
         
         // Shutdown handler - deactivate fuzzer for graceful shutdown
         fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in

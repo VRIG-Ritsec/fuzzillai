@@ -217,6 +217,8 @@ FROM mutator_stats ms
 JOIN mutator_type mt ON ms.mutator_type_id = mt.id
 JOIN main m ON ms.fuzzer_id = m.fuzzer_id;
 
+CREATE UNIQUE INDEX idx_mutator_effectiveness_per_fuzzer_id ON mutator_effectiveness_per_fuzzer(fuzzer_id, mutator_id);
+
 -- Aggregate across all fuzzers (campaign-wide view)
 CREATE MATERIALIZED VIEW IF NOT EXISTS mutator_effectiveness_aggregate AS
 SELECT 
@@ -235,6 +237,8 @@ FROM mutator_stats ms
 JOIN mutator_type mt ON ms.mutator_type_id = mt.id
 GROUP BY mt.id, mt.name, mt.category;
 
+CREATE UNIQUE INDEX idx_mutator_effectiveness_aggregate_id ON mutator_effectiveness_aggregate(mutator_id);
+
 -- Materialized view: Coverage progression
 CREATE MATERIALIZED VIEW IF NOT EXISTS coverage_progression AS
 SELECT 
@@ -251,6 +255,7 @@ WHERE e.coverage_total IS NOT NULL
 GROUP BY p.fuzzer_id, DATE_TRUNC('hour', e.created_at);
 
 CREATE INDEX idx_coverage_progression_fuzzer ON coverage_progression(fuzzer_id, time_bucket DESC);
+CREATE UNIQUE INDEX idx_coverage_progression_unique ON coverage_progression(fuzzer_id, time_bucket);
 
 -- Materialized view: Crash analysis
 CREATE MATERIALIZED VIEW IF NOT EXISTS crash_analysis AS
@@ -269,6 +274,7 @@ GROUP BY p.fuzzer_id, e.program_hash;
 
 CREATE INDEX idx_crash_analysis_fuzzer ON crash_analysis(fuzzer_id);
 CREATE INDEX idx_crash_analysis_count ON crash_analysis(crash_count DESC);
+CREATE UNIQUE INDEX idx_crash_analysis_unique ON crash_analysis(fuzzer_id, program_hash);
 
 -- Materialized view: Program lineage (mutation tree)
 CREATE MATERIALIZED VIEW IF NOT EXISTS program_lineage AS
@@ -307,6 +313,7 @@ FROM lineage l;
 
 CREATE INDEX idx_program_lineage_fuzzer ON program_lineage(fuzzer_id);
 CREATE INDEX idx_program_lineage_generation ON program_lineage(generation);
+CREATE UNIQUE INDEX idx_program_lineage_unique ON program_lineage(program_hash);
 
 -- Materialized view: Feedback slot statistics
 -- COMMENTED OUT: references feedback_vector_detail which is commented out

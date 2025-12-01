@@ -325,7 +325,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Flush
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
@@ -340,7 +340,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Heartbeat: Update fuzzer activity every 1 minute to prevent being marked as stale
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 1 * Minutes) {
             Task {
                 if let fuzzerId = self.cachedFuzzerId {
                     do {
@@ -356,13 +356,13 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
             }
         }
 
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 30 * Minutes) {
             Task {
                 await self.syncMutatorStats(fuzzer)
             }
@@ -390,7 +390,7 @@ public class PostgreSQLSync: Module {
             logger.info("Starting periodic sync with database. Last sync time: \(lastSyncTime)")
         }
         do {
-            let newPrograms = try await storage.fetchNewPrograms(since: lastSyncTime, limit: 10000)
+            let newPrograms = try await storage.fetchNewPrograms(since: lastSyncTime, limit: 2000)
             if !newPrograms.isEmpty {
                 if enableLogging {
                     logger.info("Fetched \(newPrograms.count) new programs from database")

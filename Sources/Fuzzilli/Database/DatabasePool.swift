@@ -52,7 +52,11 @@ public class DatabasePool {
         
         do {
             // Create event loop group
-            eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+            // We limit the number of threads to maxConnections to prevent the connection pool
+            // from creating more connections than allowed. This is because EventLoopGroupConnectionPool
+            // creates at least one connection per event loop.
+            let threadCount = max(1, min(System.coreCount, maxConnections))
+            eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: threadCount)
             guard let eventLoopGroup = eventLoopGroup else {
                 throw DatabasePoolError.initializationFailed("Failed to create event loop group")
             }
@@ -69,7 +73,7 @@ public class DatabasePool {
             // Create connection pool
             connectionPool = EventLoopGroupConnectionPool(
                 source: connectionSource,
-                maxConnectionsPerEventLoop: max(1, maxConnections / System.coreCount),
+                maxConnectionsPerEventLoop: max(1, maxConnections / threadCount),
                 logger: logger,
                 on: eventLoopGroup
             )

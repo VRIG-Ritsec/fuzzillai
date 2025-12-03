@@ -155,9 +155,23 @@ def db_get_fuzzer_performance_summary(fuzzer_id: int) -> str:
 @tool
 def base64_program_to_js(base64_program: str) -> str:
     """
-    Converts base64 program from fuzzer program table to JS using base64_decode function, fzil_decode function, and fzil_to_js function not in database.
+    Converts a base64 string using base64 decode -> FZIL Tool and returns the JS code
     """
-    return "TODO"
+    try:
+        decoded_program = base64.b64decode(base64_program)
+    except Exception as e:
+        return json.dumps(f"Error decoding base64: {e}")
+
+    with open(TEMP_FUZZIL_PATH, "wb") as f:
+        f.write(decoded_program)
+
+    cmd = f"{FUZZILLI_TOOL_BIN} --liftToJS {TEMP_FUZZIL_PATH}"
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        output = get_output(result)
+        return json.dumps(output)
+    except Exception as e:
+        return json.dumps(f"Error running FuzzILTool: {e}")
     
 
 
@@ -188,7 +202,30 @@ def db_list_fuzzers() -> str:
 
 @tool
 def db_get_crash_diversity(fuzzer_id: int) -> str:
-    return ""
+    """
+    Use crash_analysis materialized view to get crash diversity for a specific fuzzer
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cursor.execute("SELECT * FROM crash_analysis WHERE fuzzer_id = %s", (fuzzer_id,))
+        rows = cursor.fetchall()
+        result_json = json.dumps(rows, default=json_serial, indent=2)
+        return result_json
+    except psycopg2.Error as e:
+        return f"Database error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
    
 
 @tool
@@ -212,7 +249,6 @@ def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) ->
             SELECT * FROM mutator_effectiveness_per_fuzzer 
             WHERE fuzzer_id = %s 
             AND last_updated > NOW() - INTERVAL '%s hours'
-            ORDER BY interesting_samples DESC
         """, (fuzzer_id, time_window_hours))
         
         rows = cursor.fetchall()
@@ -233,7 +269,10 @@ def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size
     
 @tool
 def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int = 24, sample_interval_minutes: int = 5) -> str:
-    return ""       
+    """
+
+    """  
+    return ""    
 
 
 @tool

@@ -84,7 +84,9 @@ INSERT INTO mutator_type (id, name, category) VALUES
     (7, 'CombineMutator', 'instruction'),
     (8, 'ConcatMutator', 'base'),
     (9, 'FixupMutator', 'runtime_assisted'),
-    (10, 'RuntimeAssistedMutator', 'runtime_assisted')
+    (10, 'RuntimeAssistedMutator', 'runtime_assisted'),
+    (11, 'InputMutator (loose)', 'instruction'),
+    (12, 'InputMutator (aware)', 'instruction')
 ON CONFLICT (id) DO NOTHING;
 
 -- CREATE INDEX idx_mutator_category ON mutator_type(category);

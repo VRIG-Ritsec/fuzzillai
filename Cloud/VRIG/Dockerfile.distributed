@@ -46,7 +46,7 @@ ENV DEBUG_LOGGING=true
 
 # Default command for distributed fuzzing
 # Single master database mode - all workers connect directly to master
-CMD ./FuzzilliCli --profile=v8 --engine=multi --resume --corpus=postgresql \
+CMD exec ./FuzzilliCli --profile=v8 --engine=multi --resume --corpus=postgresql \
       --postgres-url="${POSTGRES_URL}" \
       --timeout="${TIMEOUT}" \
       --minMutationsPerSample="${MIN_MUTATIONS_PER_SAMPLE}" \

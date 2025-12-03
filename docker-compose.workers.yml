@@ -30,7 +30,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -65,7 +65,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -100,7 +100,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -135,7 +135,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -170,7 +170,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -205,7 +205,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -240,7 +240,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -275,7 +275,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -310,7 +310,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -345,7 +345,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -380,7 +380,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -415,7 +415,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -450,7 +450,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -485,7 +485,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -520,7 +520,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 
@@ -555,7 +555,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128G
+          memory: 10G
         reservations:
           memory: 1G
 

@@ -194,7 +194,7 @@ def db_get_crash_diversity(fuzzer_id: int) -> str:
 @tool
 def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) -> str:
     """
-    Use database materialized view for mutator effectiveness, mutator_effectiveness_per_fuzzer
+    Use database materialized view for mutator effectiveness, mutator_effectiveness_per_fuzzer limited to time_window_hours
     """
     conn = None
     try:
@@ -206,10 +206,19 @@ def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) ->
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute("SELECT * FROM mutator_effectiveness_per_fuzzer WHERE fuzzer_id = %s", (fuzzer_id,))
+        
+        # Filter by fuzzer_id and time window using last_updated
+        cursor.execute("""
+            SELECT * FROM mutator_effectiveness_per_fuzzer 
+            WHERE fuzzer_id = %s 
+            AND last_updated > NOW() - INTERVAL '%s hours'
+            ORDER BY interesting_samples DESC
+        """, (fuzzer_id, time_window_hours))
+        
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
+        
     except psycopg2.Error as e:
         return f"Database error: {e}"
     except Exception as e:

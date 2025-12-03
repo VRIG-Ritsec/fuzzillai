@@ -49,11 +49,11 @@ def json_serial(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
-# provide the agents calling this tool with the associated database schema in DatabaseSchema.swift
+
 @tool
 def db_query(query: str, params: list = []) -> str:
-    '''
-    Perform and arbitrary query on the PostgresSQL database.
+    """
+    Perform and arbitrary user specified query
 
     Args:
         query (str): The SQL query to perform.
@@ -61,7 +61,7 @@ def db_query(query: str, params: list = []) -> str:
 
     Returns:
         str: A JSON string containing the query results.
-    '''
+    """ 
     conn = None
     try:
         conn = psycopg2.connect(
@@ -71,21 +71,13 @@ def db_query(query: str, params: list = []) -> str:
             user=POSTGRES_USER,
             password=POSTGRES_PASSWORD
         )
-
-        query = query.strip()
-        if not query:
-            return "Error: Empty query provided"
-        if "%s" in query and not params:
-            return "Error: Query contains %s placeholder but no parameters provided"
-
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cursor.execute(query, params)
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
-        return result_json  
-
+        return result_json
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
@@ -95,17 +87,16 @@ def db_query(query: str, params: list = []) -> str:
 @tool
 def db_list_programs(limit: int = 10, offset: int = 0, fuzzer_id: int = None, include_source: bool = False) -> str:
     """
-    Lists executed programs from the Fuzzilli database with pagination and filtering.
+    List programs in the database for a specific fuzzer either including the base64 program or not
 
     Args:
-        limit (int): The number of programs to retrieve (default: 10).
-        offset (int): The number of programs to skip (default: 0).
-        fuzzer_id (int, optional): If provided, only list programs from this specific fuzzer instance.
-        include_source (bool): If True, includes the full 'program_base64' field. 
-                               Defaults to False to save token usage/bandwidth.
+        limit (int): The maximum number of programs to return.
+        offset (int): The offset to start from.
+        fuzzer_id (int): The ID of the fuzzer to list programs for.
+        include_source (bool): Whether to include the source code of the programs.
 
     Returns:
-        str: A JSON string containing a list of program metadata (hash, size, creation time, mutator).
+        str: A JSON string containing the list of programs.
     """
     conn = None
     try:
@@ -117,44 +108,25 @@ def db_list_programs(limit: int = 10, offset: int = 0, fuzzer_id: int = None, in
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        fields = "program_hash, fuzzer_id, created_at, program_size, source_mutator, parent_program_hash"
-        if include_source:
-            fields += ", program_base64"
-
-        query = f"SELECT {fields} FROM program"
-        params = []
-
-        if fuzzer_id is not None:
-            query += " WHERE fuzzer_id = %s"
-            params.append(fuzzer_id)
-
-        query += " LIMIT %s"
-        params.extend([limit])
-
-        cursor.execute(query, tuple(params))
+        cursor.execute("SELECT program_hash, fuzzer_id, inserted_at FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
         rows = cursor.fetchall()
+        if include_source:
+            cursor.execute("SELECT program_hash, fuzzer_id, inserted_at, program_source FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
+            rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
-
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
+
+        
 @tool
 def db_get_fuzzer_performance_summary(fuzzer_id: int) -> str:
-    '''
-    Gets performance summary information about a specific fuzzer instance from the database.
-    Uses optimized query with pre-computed aggregations to avoid correlated subqueries.
-    
-    Args:
-        fuzzer_id (int): The ID of the fuzzer instance to get performance summary information about.
-    Returns:
-        str: A JSON string containing the fuzzer performance summary information.
-    '''
+    """Get performance from fuzzer_dashboard materialized view using index idx_fuzzer_dashboard_id"""
     conn = None
     try:
         conn = psycopg2.connect(
@@ -166,83 +138,45 @@ def db_get_fuzzer_performance_summary(fuzzer_id: int) -> str:
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Optimized query using window functions and aggregations
-        # instead of correlated subqueries
-        query = """
-        WITH fuzzer_data AS (
-            SELECT 
-                m.fuzzer_id,
-                m.fuzzer_name,
-                m.status,
-                m.created_at,
-                COUNT(DISTINCT p.program_hash) as programs_count,
-                COUNT(DISTINCT e.execution_id) as executions_count,
-                SUM(CASE WHEN eo.outcome = 'Crashed' THEN 1 ELSE 0 END) as crash_count,
-                MAX(e.coverage_total) as highest_coverage_pct,
-                COUNT(CASE WHEN e.created_at > NOW() - INTERVAL '1 hour' THEN 1 END)::NUMERIC / 3600.0 as execs_per_second
-            FROM main m
-            LEFT JOIN program p ON m.fuzzer_id = p.fuzzer_id
-            LEFT JOIN execution e ON p.program_hash = e.program_hash
-            LEFT JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            WHERE m.fuzzer_id = %s
-            GROUP BY m.fuzzer_id, m.fuzzer_name, m.status, m.created_at
-        )
-        SELECT 
-            fuzzer_id,
-            fuzzer_name,
-            status,
-            COALESCE(programs_count, 0) as programs_count,
-            COALESCE(executions_count, 0) as executions_count,
-            COALESCE(crash_count, 0) as crash_count,
-            COALESCE(highest_coverage_pct, 0) as highest_coverage_pct,
-            COALESCE(execs_per_second, 0) as execs_per_second
-        FROM fuzzer_data
-        """
-        
-        params = [fuzzer_id]
-        cursor.execute(query, params)
+        cursor.execute("SELECT * FROM fuzzer_dashboard WHERE fuzzer_id = %s", (fuzzer_id,))
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
-        
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
+    
 
 
 @tool
 def base64_program_to_js(base64_program: str) -> str:
-    '''
-    Decode a base64 program into JavaScript
-
-    Args:
-        base64_program (str): The fuzzil as base64 to be decoded into JavaScript
-
-    Returns:
-        str: The JavaScript program decoded from the base64 program
-    '''
+    """
+    Converts a base64 string using base64 decode -> FZIL Tool and returns the JS code
+    """
     try:
         decoded_program = base64.b64decode(base64_program)
-    except base64.binascii.Error as e:
-        return f"Error decoding base64 program: {e}"
-    except UnicodeDecodeError as e:
-        return f"Error decoding unicode (might not be utf-8): {e}"
+    except Exception as e:
+        return json.dumps(f"Error decoding base64: {e}")
 
     with open(TEMP_FUZZIL_PATH, "wb") as f:
         f.write(decoded_program)
 
-    return lift_fuzzil_to_js(TEMP_FUZZIL_PATH)
+    cmd = f"{FUZZILLI_TOOL_BIN} --liftToJS {TEMP_FUZZIL_PATH}"
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        output = get_output(result)
+        return json.dumps(output)
+    except Exception as e:
+        return json.dumps(f"Error running FuzzILTool: {e}")
+    
 
 
 @tool
 def db_list_fuzzers() -> str:
-    """
-    Lists all registered fuzzer instances from the database.
-
-    Returns:
-        str: A JSON string containing a list of fuzzers (id, name, engine, status).
-    """
     conn = None
     try:
         conn = psycopg2.connect(
@@ -253,17 +187,12 @@ def db_list_fuzzers() -> str:
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        query = "SELECT fuzzer_id, fuzzer_name, engine_type, status, created_at FROM main ORDER BY fuzzer_id ASC"
-        
-        cursor.execute(query)
+        cursor.execute("SELECT * FROM main")
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
-
         return result_json
-
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
@@ -274,13 +203,7 @@ def db_list_fuzzers() -> str:
 @tool
 def db_get_crash_diversity(fuzzer_id: int) -> str:
     """
-    Analyze diversity of crashes found (unique signals, locations, reproducibility).
-    
-    Args:
-        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-    
-    Returns:
-        str: A JSON string containing crash diversity metrics.
+    Use crash_analysis materialized view to get crash diversity for a specific fuzzer
     """
     conn = None
     try:
@@ -292,173 +215,23 @@ def db_get_crash_diversity(fuzzer_id: int) -> str:
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        query = """
-        WITH crash_stats AS (
-            SELECT 
-                COUNT(*) as total_crashes,
-                COUNT(DISTINCT e.signal_code) as unique_signals,
-                COUNT(DISTINCT ca.crash_type) as unique_crash_types,
-                COUNT(DISTINCT ca.crash_location) as unique_crash_locations,
-                COUNT(CASE WHEN ca.is_reproducible = TRUE THEN 1 END) as reproducible_count,
-                COUNT(CASE WHEN ca.is_reproducible = FALSE THEN 1 END) as non_reproducible_count
-            FROM execution e
-            JOIN program p ON e.program_hash = p.program_hash
-            JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            LEFT JOIN crash_analysis ca ON e.execution_id = ca.execution_id
-            WHERE p.fuzzer_id = %s AND eo.outcome = 'Crashed'
-        ),
-        signal_breakdown AS (
-            SELECT 
-                CASE 
-                    WHEN e.signal_code = 11 THEN 'SIGSEGV'
-                    WHEN e.signal_code = 6 THEN 'SIGABRT'
-                    WHEN e.signal_code = 4 THEN 'SIGILL'
-                    WHEN e.signal_code = 8 THEN 'SIGFPE'
-                    WHEN e.signal_code = 3 THEN 'SIGQUIT'
-                    WHEN e.signal_code IS NULL THEN 'NO_SIGNAL'
-                    ELSE 'SIG' || e.signal_code::TEXT
-                END as signal_name,
-                e.signal_code,
-                COUNT(*) as count
-            FROM execution e
-            JOIN program p ON e.program_hash = p.program_hash
-            JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            WHERE p.fuzzer_id = %s AND eo.outcome = 'Crashed'
-            GROUP BY e.signal_code
-        )
-        SELECT 
-            cs.total_crashes,
-            cs.unique_signals,
-            cs.unique_crash_types,
-            cs.unique_crash_locations,
-            cs.reproducible_count,
-            cs.non_reproducible_count,
-            CASE 
-                WHEN cs.total_crashes = 0 THEN 0
-                ELSE ROUND((cs.reproducible_count::NUMERIC / cs.total_crashes::NUMERIC) * 100, 2)
-            END as reproducible_percentage,
-            ROUND((cs.unique_signals::NUMERIC + cs.unique_crash_types::NUMERIC + cs.unique_crash_locations::NUMERIC) / 3.0, 2) as crash_diversity_score,
-            json_agg(
-                json_build_object('signal_name', sb.signal_name, 'signal_code', sb.signal_code, 'count', sb.count)
-                ORDER BY sb.count DESC
-            ) as signal_breakdown
-        FROM crash_stats cs, signal_breakdown sb
-        GROUP BY cs.total_crashes, cs.unique_signals, cs.unique_crash_types, cs.unique_crash_locations, 
-                 cs.reproducible_count, cs.non_reproducible_count
-        """
-        
-        params = [fuzzer_id, fuzzer_id]
-        cursor.execute(query, params)
+        cursor.execute("SELECT * FROM crash_analysis WHERE fuzzer_id = %s", (fuzzer_id,))
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
-        
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
+   
 
-
-#@tool
-#def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) -> str:
-#    """
-#    Rank mutators by effectiveness: how often their mutations led to new coverage or crashes.
-#    Uses execution.mutator_type_id since program.source_mutator is typically NULL.
-#    
-#    Args:
-#        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-#        time_window_hours (int): Time window for analysis in hours (default: 24).
-#    
-#    Returns:
-#        str: A JSON string containing per-mutator effectiveness metrics.
-#    """
-#    conn = None
-#    try:
-#        conn = psycopg2.connect(
-#            host=POSTGRES_HOST,
-#            port=POSTGRES_PORT,
-#            dbname=POSTGRES_DB,
-#            user=POSTGRES_USER,
-#            password=POSTGRES_PASSWORD
-#        )
-#        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-#        
-#        query = """
-#        WITH mutator_execution_stats AS (
-#            SELECT 
-#                COALESCE(e.mutator_type_id, 'Unknown') as mutator_name,
-#                COUNT(DISTINCT e.execution_id) as total_executions,
-#                SUM(CASE WHEN eo.outcome = 'Crashed' THEN 1 ELSE 0 END) as crash_discoveries,
-#                SUM(CASE WHEN eo.outcome = 'Succeeded' THEN 1 ELSE 0 END) as successful_executions,
-#                MAX(e.coverage_total) as max_coverage,
-#                AVG(e.coverage_total) as avg_coverage
-#            FROM execution e
-#            JOIN program p ON e.program_hash = p.program_hash
-#            JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-#            WHERE p.fuzzer_id = %s 
-#                AND e.created_at > NOW() - INTERVAL '%s hours'
-#            GROUP BY e.mutator_type_id
-#        ),
-#        new_coverage_stats AS (
-#            SELECT 
-#                COALESCE(e.mutator_type_id, 'Unknown') as mutator_name,
-#                COUNT(DISTINCT e.execution_id) as new_coverage_executions
-#            FROM execution e
-#            JOIN program p ON e.program_hash = p.program_hash
-#            JOIN coverage_detail cd ON e.execution_id = cd.execution_id
-#            WHERE p.fuzzer_id = %s 
-#                AND e.created_at > NOW() - INTERVAL '%s hours'
-#                AND cd.is_new_edge = TRUE
-#            GROUP BY e.mutator_type_id
-#        )
-#        SELECT 
-#            mes.mutator_name,
-#            mes.total_executions,
-#            COALESCE(ncs.new_coverage_executions, 0) as new_coverage_discoveries,
-#            mes.crash_discoveries,
-#            mes.successful_executions,
-#            ROUND(COALESCE(ncs.new_coverage_executions, 0)::NUMERIC / NULLIF(mes.total_executions, 0) * 100, 2) as new_coverage_discovery_rate,
-#            ROUND(
-#                (COALESCE(ncs.new_coverage_executions, 0)::NUMERIC + mes.crash_discoveries::NUMERIC) / NULLIF(mes.total_executions, 0) * 100,
-#                2
-#            ) as effectiveness_score,
-#            ROUND(mes.avg_coverage::NUMERIC, 2) as avg_coverage,
-#            ROUND(mes.max_coverage::NUMERIC, 2) as max_coverage
-#        FROM mutator_execution_stats mes
-#        LEFT JOIN new_coverage_stats ncs ON mes.mutator_name = ncs.mutator_name
-#        ORDER BY effectiveness_score DESC NULLS LAST
-#        """
-#        
-#        params = [fuzzer_id, time_window_hours, fuzzer_id, time_window_hours]
-#        cursor.execute(query, params)
-#        rows = cursor.fetchall()
-#        result_json = json.dumps(rows, default=json_serial, indent=2)
-#        return result_json
-#        
-#    except psycopg2.Error as e:
-#        return f"Database error: {e}... maybe try again?"
-#    except Exception as e:
-#        return f"Unexpected error: {e}"
-#    finally:
-#        if conn:
-#            conn.close()
-
-# TODO: fix tracking for mutator types in corpus. the above 2 db_get_mutator_effectiveness functions are more so debugging "fixes" that don't address the underlying problem
 @tool
 def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) -> str:
     """
-    Rank mutators by effectiveness: how often their mutations led to new coverage or crashes.
-    
-    Args:
-        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-        time_window_hours (int): Time window for analysis in hours (default: 24).
-    
-    Returns:
-        str: A JSON string containing per-mutator effectiveness metrics.
+    Use database materialized view for mutator effectiveness, mutator_effectiveness_per_fuzzer limited to time_window_hours
     """
     conn = None
     try:
@@ -471,61 +244,35 @@ def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) ->
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        query = """
-        SELECT 
-            p.source_mutator as mutator_name,
-            COUNT(DISTINCT p.program_hash) as total_mutations,
-            COUNT(DISTINCT e.execution_id) as total_executions,
-            SUM(CASE WHEN cd.is_new_edge = TRUE THEN 1 ELSE 0 END) as new_coverage_discoveries,
-            SUM(CASE WHEN eo.outcome = 'Crashed' THEN 1 ELSE 0 END) as crash_discoveries,
-            COUNT(CASE WHEN eo.outcome = 'Succeeded' THEN 1 END) as successful_executions,
-            ROUND(AVG(CASE WHEN cd.is_new_edge = TRUE THEN 1 ELSE 0 END)::NUMERIC * 100, 2) as new_coverage_discovery_rate,
-            ROUND(
-                (
-                    SUM(CASE WHEN cd.is_new_edge = TRUE THEN 1 ELSE 0 END)::NUMERIC + 
-                    SUM(CASE WHEN eo.outcome = 'Crashed' THEN 1 ELSE 0 END)::NUMERIC
-                ) / NULLIF(COUNT(DISTINCT e.execution_id), 0) * 100,
-                2
-            ) as effectiveness_score
-        FROM program p
-        JOIN execution e ON p.program_hash = e.program_hash
-        LEFT JOIN coverage_detail cd ON e.execution_id = cd.execution_id
-        JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-        WHERE p.fuzzer_id = %s 
-            AND e.created_at > NOW() - INTERVAL '%s hours'
-            AND p.source_mutator IS NOT NULL
-        GROUP BY p.source_mutator
-        ORDER BY effectiveness_score DESC NULLS LAST
-        """
+        # Filter by fuzzer_id and time window using last_updated
+        cursor.execute("""
+            SELECT * FROM mutator_effectiveness_per_fuzzer 
+            WHERE fuzzer_id = %s 
+            AND last_updated > NOW() - INTERVAL '%s hours'
+        """, (fuzzer_id, time_window_hours))
         
-        params = [fuzzer_id, time_window_hours]
-        cursor.execute(query, params)
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
         
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
-
 
 @tool
 def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size_tolerance_bytes: int = 50) -> str:
     """
-    Detect if corpus is converging to similar programs (genetic drift).
-    Analyzes program size clustering and mutator diversity.
+    Analyzes program convergence patterns by grouping similar-sized programs and their outcomes.
+    Uses the program_convergence materialized view.
     
     Args:
-        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-        time_window_hours (int): Time window for analysis in hours (default: 24).
-        size_tolerance_bytes (int): Byte range for size clustering (default: 50).
-    
-    Returns:
-        str: A JSON string containing convergence metrics and clustering analysis.
+        fuzzer_id: The fuzzer instance to analyze
+        time_window_hours: How far back to look (default 24 hours)
+        size_tolerance_bytes: Group programs within this size range together (default 50 bytes)
     """
     conn = None
     try:
@@ -538,83 +285,33 @@ def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        query = """
-        WITH program_stats AS (
+        cursor.execute("""
             SELECT 
-                COUNT(DISTINCT program_hash) as total_programs,
-                COUNT(DISTINCT program_size) as unique_sizes,
-                MIN(program_size) as min_size,
-                MAX(program_size) as max_size,
-                ROUND(AVG(program_size)::NUMERIC, 2) as avg_size,
-                ROUND(STDDEV(program_size)::NUMERIC, 2) as size_stddev,
-                COUNT(DISTINCT source_mutator) as unique_mutators
-            FROM program
-            WHERE fuzzer_id = %s AND created_at > NOW() - INTERVAL '%s hours'
-        ),
-        size_clustering AS (
-            SELECT 
-                ROUND((program_size / %s)::NUMERIC) * %s as size_bucket,
-                COUNT(*) as programs_in_bucket,
-                COUNT(DISTINCT source_mutator) as mutators_in_bucket
-            FROM program
-            WHERE fuzzer_id = %s AND created_at > NOW() - INTERVAL '%s hours'
-            GROUP BY size_bucket
-        ),
-        mutator_distribution AS (
-            SELECT 
-                source_mutator,
-                COUNT(*) as programs_created,
-                ROUND((COUNT(*)::NUMERIC / SUM(COUNT(*)) OVER ())::NUMERIC * 100, 2) as percentage
-            FROM program
-            WHERE fuzzer_id = %s AND created_at > NOW() - INTERVAL '%s hours'
-            GROUP BY source_mutator
-            ORDER BY programs_created DESC
-        )
-        SELECT 
-            ps.total_programs,
-            ps.unique_sizes,
-            ps.min_size,
-            ps.max_size,
-            ps.avg_size,
-            ps.size_stddev,
-            ps.unique_mutators,
-            ROUND(
-                (1.0 - (ps.unique_sizes::NUMERIC / NULLIF(ps.total_programs, 0)))::NUMERIC,
-                3
-            ) as size_convergence_score,
-            ROUND(
-                (1.0 - (ps.unique_mutators::NUMERIC / 10.0))::NUMERIC,
-                3
-            ) as mutator_diversity_score,
-            json_agg(
-                json_build_object(
-                    'size_bucket', sc.size_bucket,
-                    'programs_in_bucket', sc.programs_in_bucket,
-                    'mutators_in_bucket', sc.mutators_in_bucket
-                )
-                ORDER BY sc.programs_in_bucket DESC
-            ) FILTER (WHERE sc.programs_in_bucket > 0) as size_distribution,
-            json_agg(
-                json_build_object(
-                    'mutator', md.source_mutator,
-                    'programs_created', md.programs_created,
-                    'percentage', md.percentage
-                )
-            ) FILTER (WHERE md.source_mutator IS NOT NULL) as mutator_distribution
-        FROM program_stats ps, size_clustering sc, mutator_distribution md
-        GROUP BY ps.total_programs, ps.unique_sizes, ps.min_size, ps.max_size, ps.avg_size, 
-                 ps.size_stddev, ps.unique_mutators
-        """
+                fuzzer_id,
+                time_bucket,
+                FLOOR(program_size / %s) * %s as size_bucket,
+                SUM(unique_programs) as total_unique_programs,
+                SUM(total_executions) as total_executions,
+                SUM(crashes) as total_crashes,
+                SUM(failures) as total_failures,
+                SUM(successes) as total_successes,
+                SUM(timeouts) as total_timeouts,
+                AVG(avg_coverage) as avg_coverage,
+                MAX(max_coverage) as max_coverage,
+                SUM(new_edges_found) as new_edges_found
+            FROM program_convergence
+            WHERE fuzzer_id = %s 
+            AND time_bucket > NOW() - INTERVAL '%s hours'
+            GROUP BY fuzzer_id, time_bucket, size_bucket
+            ORDER BY time_bucket DESC, size_bucket
+        """, (size_tolerance_bytes, size_tolerance_bytes, fuzzer_id, time_window_hours))
         
-        params = [fuzzer_id, time_window_hours, size_tolerance_bytes, size_tolerance_bytes, 
-                  fuzzer_id, time_window_hours, fuzzer_id, time_window_hours]
-        cursor.execute(query, params)
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
         
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
@@ -625,15 +322,13 @@ def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size
 @tool
 def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int = 24, sample_interval_minutes: int = 5) -> str:
     """
-    Track ratio of Succeeded vs TimedOut vs Crashed vs Failed executions over time.
+    Gets the distribution of execution outcomes over time for trend analysis.
+    Uses the execution_outcome_distribution materialized view.
     
     Args:
-        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-        time_window_hours (int): Time window for analysis in hours (default: 24).
-        sample_interval_minutes (int): Interval for time-series aggregation in minutes (default: 5).
-    
-    Returns:
-        str: A JSON string containing time-series outcome distribution.
+        fuzzer_id: The fuzzer instance to analyze
+        time_window_hours: How far back to look (default 24 hours)
+        sample_interval_minutes: Aggregate data into this time interval (default 5 minutes)
     """
     conn = None
     try:
@@ -646,60 +341,29 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        query = """
-        WITH time_buckets AS (
+        cursor.execute("""
             SELECT 
-                DATE_TRUNC('minutes', e.created_at - (EXTRACT(MINUTE FROM e.created_at)::INT %% %s) * INTERVAL '1 minute') as time_bucket,
-                eo.outcome,
-                COUNT(*) as outcome_count
-            FROM execution e
-            JOIN program p ON e.program_hash = p.program_hash
-            JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            WHERE p.fuzzer_id = %s AND e.created_at > NOW() - INTERVAL '%s hours'
-            GROUP BY time_bucket, eo.outcome
-        ),
-        bucket_totals AS (
-            SELECT 
-                time_bucket,
-                SUM(outcome_count) as total_executions
-            FROM time_buckets
-            GROUP BY time_bucket
-        ),
-        outcomes_pivot AS (
-            SELECT 
-                tb.time_bucket,
-                tb.total_executions,
-                SUM(CASE WHEN t.outcome = 'Succeeded' THEN t.outcome_count ELSE 0 END) as succeeded_count,
-                SUM(CASE WHEN t.outcome = 'TimedOut' THEN t.outcome_count ELSE 0 END) as timed_out_count,
-                SUM(CASE WHEN t.outcome = 'Crashed' THEN t.outcome_count ELSE 0 END) as crashed_count,
-                SUM(CASE WHEN t.outcome = 'Failed' THEN t.outcome_count ELSE 0 END) as failed_count
-            FROM bucket_totals tb
-            LEFT JOIN time_buckets t ON tb.time_bucket = t.time_bucket
-            GROUP BY tb.time_bucket, tb.total_executions
-        )
-        SELECT 
-            time_bucket,
-            total_executions,
-            succeeded_count,
-            timed_out_count,
-            crashed_count,
-            failed_count,
-            ROUND((succeeded_count::NUMERIC / NULLIF(total_executions, 0))::NUMERIC * 100, 2) as succeeded_percentage,
-            ROUND((timed_out_count::NUMERIC / NULLIF(total_executions, 0))::NUMERIC * 100, 2) as timed_out_percentage,
-            ROUND((crashed_count::NUMERIC / NULLIF(total_executions, 0))::NUMERIC * 100, 2) as crashed_percentage,
-            ROUND((failed_count::NUMERIC / NULLIF(total_executions, 0))::NUMERIC * 100, 2) as failed_percentage
-        FROM outcomes_pivot
-        ORDER BY time_bucket ASC
-        """
+                fuzzer_id,
+                DATE_TRUNC('minute', time_bucket) - 
+                    (EXTRACT(MINUTE FROM time_bucket)::INT % %s) * INTERVAL '1 minute' as sample_time,
+                outcome,
+                execution_outcome_id,
+                SUM(execution_count) as total_executions,
+                AVG(avg_coverage) as avg_coverage,
+                SUM(new_edges_count) as new_edges_discovered
+            FROM execution_outcome_distribution
+            WHERE fuzzer_id = %s 
+            AND time_bucket > NOW() - INTERVAL '%s hours'
+            GROUP BY fuzzer_id, sample_time, outcome, execution_outcome_id
+            ORDER BY sample_time DESC, outcome
+        """, (sample_interval_minutes, fuzzer_id, time_window_hours))
         
-        params = [sample_interval_minutes, fuzzer_id, time_window_hours]
-        cursor.execute(query, params)
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
         
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
@@ -708,21 +372,17 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
 
 
 @tool
-def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverage: float = None, sort_by: str = "coverage_total") -> str:
+def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverage: float = None, sort_by: str = "max_coverage") -> str:
     """
-    Maps programs to their coverage metrics and coverage increases.
-    Shows the relationship between generated programs and their code coverage impact.
-    Calculates coverage increase by comparing each program's max execution coverage to 
-    prior executions on the same program and parent program lineage.
+    Gets programs mapped to their coverage statistics and execution outcomes.
+    Uses the program_coverage_mapping materialized view.
     
     Args:
-        fuzzer_id (int): The ID of the fuzzer instance to analyze.
-        limit (int): Maximum number of programs to return (default: 50).
-        min_coverage (float): Optional filter for minimum coverage percentage (0-100).
-        sort_by (str): Sort order - "coverage_total", "coverage_increase", or "execution_count" (default: "coverage_total").
-    
-    Returns:
-        str: A JSON string containing program-to-coverage mappings with coverage increase tracking.
+        fuzzer_id: The fuzzer instance to analyze
+        limit: Maximum number of programs to return (default 50)
+        min_coverage: Filter programs with at least this coverage percentage (optional)
+        sort_by: Sort results by this column - options: max_coverage, new_edges_discovered, 
+                 max_edges_found, execution_count (default: max_coverage)
     """
     conn = None
     try:
@@ -735,75 +395,42 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        valid_sort_fields = ["coverage_total", "coverage_increase", "execution_count"]
-        if sort_by not in valid_sort_fields:
-            return f"Invalid sort_by parameter. Must be one of: {', '.join(valid_sort_fields)}"
+        # Validate sort_by to prevent SQL injection
+        valid_sort_columns = ['max_coverage', 'new_edges_discovered', 'max_edges_found', 'execution_count']
+        if sort_by not in valid_sort_columns:
+            sort_by = 'max_coverage'
         
-        query = """
-        WITH program_execution_stats AS (
+        # Build query with optional min_coverage filter
+        query = f"""
             SELECT 
-                p.program_hash,
-                p.fuzzer_id,
-                p.created_at as program_created_at,
-                p.program_size,
-                p.source_mutator,
-                p.parent_program_hash,
-                COUNT(DISTINCT e.execution_id) as execution_count,
-                MAX(e.coverage_total) as coverage_max,
-                MIN(e.coverage_total) as coverage_min,
-                AVG(e.coverage_total) as coverage_avg,
-                MAX(e.created_at) as last_execution_at,
-                ROW_NUMBER() OVER (PARTITION BY p.fuzzer_id ORDER BY p.created_at ASC) as program_sequence
-            FROM program p
-            LEFT JOIN execution e ON p.program_hash = e.program_hash
-            WHERE p.fuzzer_id = %s
-            GROUP BY p.program_hash, p.fuzzer_id, p.created_at, p.program_size, p.source_mutator, p.parent_program_hash
-        ),
-        program_with_prior_max AS (
-            SELECT 
-                pes.*,
-                MAX(pes.coverage_max) FILTER (WHERE pes.program_sequence < p1.program_sequence) 
-                    OVER (PARTITION BY pes.fuzzer_id) as prior_max_coverage
-            FROM program_execution_stats pes
-            JOIN program_execution_stats p1 ON pes.fuzzer_id = p1.fuzzer_id
-            WHERE pes.fuzzer_id = %s
-            GROUP BY pes.program_hash, pes.fuzzer_id, pes.program_created_at, pes.program_size, 
-                     pes.source_mutator, pes.parent_program_hash, pes.execution_count, pes.coverage_max, 
-                     pes.coverage_min, pes.coverage_avg, pes.last_execution_at, pes.program_sequence, p1.program_sequence
-        )
-        SELECT 
-            program_hash,
-            program_created_at,
-            program_size,
-            source_mutator,
-            parent_program_hash,
-            execution_count,
-            ROUND(coverage_max::NUMERIC, 2) as coverage_total,
-            ROUND(coverage_avg::NUMERIC, 2) as avg_coverage,
-            ROUND(coverage_min::NUMERIC, 2) as min_coverage,
-            ROUND(COALESCE(coverage_max - prior_max_coverage, coverage_max)::NUMERIC, 2) as coverage_increase,
-            ROUND(COALESCE(prior_max_coverage, 0)::NUMERIC, 2) as prior_max_coverage,
-            last_execution_at,
-            program_sequence
-        FROM program_with_prior_max
-        WHERE fuzzer_id = %s
-        """ 
+                fuzzer_id,
+                program_hash,
+                created_at,
+                source_mutators,
+                contributors,
+                execution_count,
+                max_coverage,
+                avg_coverage,
+                max_edges_found,
+                avg_edges_found,
+                new_edges_discovered,
+                crash_count,
+                success_count,
+                timeout_count,
+                program_size,
+                first_execution,
+                last_execution
+            FROM program_coverage_mapping
+            WHERE fuzzer_id = %s
+        """
         
-        params = [fuzzer_id, fuzzer_id, fuzzer_id]
+        params = [fuzzer_id]
         
         if min_coverage is not None:
-            query += " AND coverage_max >= %s"
+            query += " AND max_coverage >= %s"
             params.append(min_coverage)
         
-        # Determine order based on sort_by
-        if sort_by == "coverage_increase":
-            query += " ORDER BY coverage_increase DESC NULLS LAST"
-        elif sort_by == "execution_count":
-            query += " ORDER BY execution_count DESC"
-        else:  # coverage_total (default)
-            query += " ORDER BY coverage_max DESC NULLS LAST"
-        
-        query += " LIMIT %s"
+        query += f" ORDER BY {sort_by} DESC NULLS LAST LIMIT %s"
         params.append(limit)
         
         cursor.execute(query, params)
@@ -812,9 +439,11 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         return result_json
         
     except psycopg2.Error as e:
-        return f"Database error: {e}... maybe try again?"
+        return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
+    
+    

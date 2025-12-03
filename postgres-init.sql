@@ -278,6 +278,83 @@ CREATE INDEX idx_crash_analysis_fuzzer ON crash_analysis(fuzzer_id);
 CREATE INDEX idx_crash_analysis_count ON crash_analysis(crash_count DESC);
 CREATE UNIQUE INDEX idx_crash_analysis_unique ON crash_analysis(fuzzer_id, program_hash);
 
+-- Materialized view: Program convergence analysis
+-- Tracks similar program sizes and their outcomes to detect convergence patterns
+CREATE MATERIALIZED VIEW IF NOT EXISTS program_convergence AS
+SELECT 
+    p.fuzzer_id,
+    DATE_TRUNC('hour', p.created_at) as time_bucket,
+    LENGTH(f.program_base64) as program_size,
+    COUNT(DISTINCT p.program_hash) as unique_programs,
+    COUNT(e.execution_id) as total_executions,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) as crashes,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 2) as failures,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3) as successes,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4) as timeouts,
+    AVG(e.coverage_total) as avg_coverage,
+    MAX(e.coverage_total) as max_coverage,
+    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_found
+FROM program p
+JOIN fuzzer f ON p.program_hash = f.program_hash
+LEFT JOIN execution e ON p.program_hash = e.program_hash
+GROUP BY p.fuzzer_id, DATE_TRUNC('hour', p.created_at), LENGTH(f.program_base64);
+
+CREATE INDEX idx_program_convergence_fuzzer ON program_convergence(fuzzer_id, time_bucket DESC);
+CREATE INDEX idx_program_convergence_size ON program_convergence(program_size);
+CREATE UNIQUE INDEX idx_program_convergence_unique ON program_convergence(fuzzer_id, time_bucket, program_size);
+
+-- Materialized view: Execution outcome distribution over time
+-- Provides time-series data on execution outcomes for trend analysis
+CREATE MATERIALIZED VIEW IF NOT EXISTS execution_outcome_distribution AS
+SELECT 
+    p.fuzzer_id,
+    DATE_TRUNC('minute', e.created_at) as time_bucket,
+    eo.outcome,
+    e.execution_outcome_id,
+    COUNT(e.execution_id) as execution_count,
+    AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL) as avg_coverage,
+    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_count
+FROM execution e
+JOIN program p ON e.program_hash = p.program_hash
+JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
+GROUP BY p.fuzzer_id, DATE_TRUNC('minute', e.created_at), eo.outcome, e.execution_outcome_id;
+
+CREATE INDEX idx_execution_outcome_dist_fuzzer ON execution_outcome_distribution(fuzzer_id, time_bucket DESC);
+CREATE INDEX idx_execution_outcome_dist_outcome ON execution_outcome_distribution(execution_outcome_id);
+CREATE UNIQUE INDEX idx_execution_outcome_dist_unique ON execution_outcome_distribution(fuzzer_id, time_bucket, execution_outcome_id);
+
+-- Materialized view: Program coverage mapping
+-- Maps programs to their best coverage and execution stats
+CREATE MATERIALIZED VIEW IF NOT EXISTS program_coverage_mapping AS
+SELECT 
+    p.fuzzer_id,
+    p.program_hash,
+    p.created_at,
+    p.source_mutators,
+    p.contributors,
+    COUNT(e.execution_id) as execution_count,
+    MAX(e.coverage_total) as max_coverage,
+    AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL) as avg_coverage,
+    MAX(e.edges_found) as max_edges_found,
+    AVG(e.edges_found) FILTER (WHERE e.edges_found IS NOT NULL) as avg_edges_found,
+    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_discovered,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) as crash_count,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3) as success_count,
+    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4) as timeout_count,
+    LENGTH(f.program_base64) as program_size,
+    MIN(e.created_at) as first_execution,
+    MAX(e.created_at) as last_execution
+FROM program p
+JOIN fuzzer f ON p.program_hash = f.program_hash
+LEFT JOIN execution e ON p.program_hash = e.program_hash
+GROUP BY p.fuzzer_id, p.program_hash, p.created_at, p.source_mutators, p.contributors, f.program_base64;
+
+CREATE INDEX idx_program_coverage_mapping_fuzzer ON program_coverage_mapping(fuzzer_id);
+CREATE INDEX idx_program_coverage_mapping_coverage ON program_coverage_mapping(max_coverage DESC NULLS LAST);
+CREATE INDEX idx_program_coverage_mapping_edges ON program_coverage_mapping(max_edges_found DESC NULLS LAST);
+CREATE INDEX idx_program_coverage_mapping_new_edges ON program_coverage_mapping(new_edges_discovered DESC);
+CREATE UNIQUE INDEX idx_program_coverage_mapping_unique ON program_coverage_mapping(program_hash);
+
 -- Materialized view: Program lineage (mutation tree)
 CREATE MATERIALIZED VIEW IF NOT EXISTS program_lineage AS
 WITH RECURSIVE lineage AS (

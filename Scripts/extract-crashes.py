@@ -122,7 +122,7 @@ class CrashExtractor:
                 e.execution_id,
                 e.program_hash,
                 p.fuzzer_id,
-                p.source_mutator,
+                p.source_mutators,
                 p.created_at as program_created_at,
                 e.created_at as crash_time,
                 e.coverage_total,
@@ -133,14 +133,11 @@ class CrashExtractor:
                 e.feedback_nexus_count,
                 e.stdout,
                 e.stderr,
-                e.fuzzout,
-                mt.name as mutator_name,
-                mt.category as mutator_category
+                e.fuzzout
                 {program_field}
             FROM execution e
             JOIN program p ON e.program_hash = p.program_hash
             JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            LEFT JOIN mutator_type mt ON e.mutator_type_id = mt.id
             LEFT JOIN fuzzer f ON e.program_hash = f.program_hash
             {where_clause}
             ORDER BY e.created_at DESC
@@ -171,7 +168,6 @@ class CrashExtractor:
                 ca.crash_count,
                 ca.first_crash,
                 ca.last_crash,
-                ca.mutators_involved,
                 ca.max_coverage_before_crash,
                 ca.found_new_edges
                 {program_field}
@@ -315,12 +311,11 @@ def main():
                        action='store_true',
                        help='Save each program base64 to a separate file (excludes from main output)')
     parser.add_argument('--unique', 
-                       action='store_true', 
-                       default=True,
-                       help='Extract only unique crashes (default)')
+                       action='store_true',
+                       help='Extract only unique crashes (deduplicated by program hash)')
     parser.add_argument('--all', 
                        action='store_true',
-                       help='Extract all crash executions')
+                       help='Extract all crash executions (may include duplicates)')
     parser.add_argument('--stats', 
                        action='store_true',
                        help='Show crash statistics only')
@@ -371,6 +366,7 @@ def main():
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # Fixed logic: --all flag should extract all, otherwise default to unique
         if args.all:
             print("\033[92mExtracting all crash executions...\033[0m")
             crashes = extractor.extract_all_crashes(
@@ -379,7 +375,7 @@ def main():
                 include_program=args.include_program,
                 save_programs=args.save_programs
             )
-            filename_prefix = "crashes"
+            filename_prefix = "crashes_all"
         else:
             print("\033[92mExtracting unique crashes...\033[0m")
             crashes = extractor.extract_unique_crashes(
@@ -388,7 +384,7 @@ def main():
                 include_program=args.include_program,
                 save_programs=args.save_programs
             )
-            filename_prefix = "unique_crashes"
+            filename_prefix = "crashes_unique"
         
         print(f"Found {len(crashes)} crashes")
         

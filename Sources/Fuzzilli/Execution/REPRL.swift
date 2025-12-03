@@ -142,7 +142,11 @@ public class REPRL: ComponentBase, ScriptRunner {
         }
         recentlyFailedExecutions = 0
 
-        if RIFEXITED(status) != 0 {
+        // Check timeout first before checking for signals
+        // to avoid misclassifying timeouts as crashes
+        if RIFTIMEDOUT(status) != 0 {
+            execution.outcome = .timedOut
+        } else if RIFEXITED(status) != 0 {
             let code = REXITSTATUS(status)
             if code == 0 {
                 execution.outcome = .succeeded
@@ -151,8 +155,6 @@ public class REPRL: ComponentBase, ScriptRunner {
             }
         } else if RIFSIGNALED(status) != 0 {
             execution.outcome = .crashed(Int(RTERMSIG(status)))
-        } else if RIFTIMEDOUT(status) != 0 {
-            execution.outcome = .timedOut
         } else {
             fatalError("Unknown REPRL exit status \(status)")
         }

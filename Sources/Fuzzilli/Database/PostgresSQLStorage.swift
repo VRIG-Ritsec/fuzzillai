@@ -370,7 +370,6 @@ public actor PostgresSQLStorage {
         }
         
         // Skip if we've already added this program to the batch
-        // TODO Aleksi: This isn't a full solution bc the seen hashes get reset when the batch is flushed. Proably good enough though?
         guard !seenProgramHashes.contains(programHash) else {
             //if self.enableLogging {
             //    self.logger.verbose("Skipping duplicate program with hash: \(programHash)")
@@ -394,7 +393,24 @@ public actor PostgresSQLStorage {
         executionsToStore = pendingExecutions
         pendingPrograms = []
         pendingExecutions = []
-        seenProgramHashes = []
+        
+        // Cleanup seenProgramHashes if it grows too large (prevent unbounded memory growth)
+        // Keep the most recent hashes by removing oldest entries when we exceed threshold
+        if seenProgramHashes.count > 10000 {
+            // Remove approximately 20% of the oldest hashes
+            // Since Set doesn't maintain order, we'll just remove arbitrary elements
+            // This is acceptable since we're just trying to prevent memory growth
+            // TODO Aleksi: Could update seenProgramHashes track ordering to be able to remove the oldest entries 
+            let countToRemove = seenProgramHashes.count / 5
+            let hashesToRemove = Array(seenProgramHashes.prefix(countToRemove))
+            for hash in hashesToRemove {
+                seenProgramHashes.remove(hash)
+            }
+            
+            if self.enableLogging {
+                self.logger.info("Cleaned up seenProgramHashes: removed \(countToRemove) entries, \(seenProgramHashes.count) remaining")
+            }
+        }
         
         if !programsToStore.isEmpty {
             // Group by fuzzerId to use storeProgramsBatch
@@ -828,6 +844,7 @@ public actor PostgresSQLStorage {
                 if self.enableLogging {
                     self.logger.info("Refreshed \(rows.count) materialized views:")
                     for row in rows {
+                        // TODO Aleksi: refreshTime doesn't work this way. Pull it directly from swift.
                         if let (viewName, refreshTime) = try? row.decode((String, String).self, context: .default) {
                             self.logger.info("  - \(viewName): \(refreshTime)")
                         }

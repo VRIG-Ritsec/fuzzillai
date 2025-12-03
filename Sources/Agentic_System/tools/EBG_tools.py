@@ -126,7 +126,15 @@ def db_list_programs(limit: int = 10, offset: int = 0, fuzzer_id: int = None, in
         
 @tool
 def db_get_fuzzer_performance_summary(fuzzer_id: int) -> str:
-    """Get performance from fuzzer_dashboard materialized view using index idx_fuzzer_dashboard_id"""
+    """
+    Get performance from fuzzer_dashboard materialized view using index idx_fuzzer_dashboard_id
+    
+    Args:
+        fuzzer_id (int): The ID of the fuzzer to get performance for.
+    
+    Returns:
+        str: A JSON string containing the performance data.
+    """
     conn = None
     try:
         conn = psycopg2.connect(
@@ -156,6 +164,12 @@ def db_get_fuzzer_performance_summary(fuzzer_id: int) -> str:
 def base64_program_to_js(base64_program: str) -> str:
     """
     Converts a base64 string using base64 decode -> FZIL Tool and returns the JS code
+
+    Args:
+        base64_program (str): The base64 string to convert.
+    
+    Returns:
+        str: The JS code.
     """
     try:
         decoded_program = base64.b64decode(base64_program)
@@ -177,6 +191,12 @@ def base64_program_to_js(base64_program: str) -> str:
 
 @tool
 def db_list_fuzzers() -> str:
+    """
+    List all fuzzers in the database
+    
+    Returns:
+        str: A JSON string containing the list of fuzzers.
+    """
     conn = None
     try:
         conn = psycopg2.connect(
@@ -204,6 +224,12 @@ def db_list_fuzzers() -> str:
 def db_get_crash_diversity(fuzzer_id: int) -> str:
     """
     Use crash_analysis materialized view to get crash diversity for a specific fuzzer
+
+    Args:
+        fuzzer_id (int): The ID of the fuzzer to get crash diversity for.
+    
+    Returns:
+        str: A JSON string containing the crash diversity data.
     """
     conn = None
     try:
@@ -232,6 +258,13 @@ def db_get_crash_diversity(fuzzer_id: int) -> str:
 def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 1) -> str:
     """
     Use database materialized view for mutator effectiveness, mutator_effectiveness_per_fuzzer limited to time_window_hours
+
+    Args:
+        fuzzer_id (int): The ID of the fuzzer to get mutator effectiveness for.
+        time_window_hours (int): The time window in hours to limit the mutator effectiveness to.
+    
+    Returns:
+        str: A JSON string containing the mutator effectiveness data.
     """
     conn = None
     try:
@@ -273,6 +306,9 @@ def db_get_program_grouping(fuzzer_id: int, time_window_hours: int = 1, size_tol
         fuzzer_id: The fuzzer instance to analyze
         time_window_hours: How far back to look (default 1 hours)
         size_tolerance_bytes: Group programs within this size range together (default 50 bytes)
+
+    Returns:
+        str: A JSON string containing the program convergence data.
     """
     conn = None
     try:
@@ -329,6 +365,9 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
         fuzzer_id: The fuzzer instance to analyze
         time_window_hours: How far back to look (default 1 hours)
         sample_interval_minutes: Aggregate data into this time interval (default 5 minutes)
+
+    Returns:
+        str: A JSON string containing the execution outcome distribution data.
     """
     conn = None
     try:
@@ -383,6 +422,9 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         min_coverage: Filter programs with at least this coverage percentage (optional)
         sort_by: Sort results by this column - options: max_coverage, new_edges_discovered, 
                  max_edges_found, execution_count (default: max_coverage)
+
+    Returns:
+        str: A JSON string containing the program coverage mapping data.
     """
     conn = None
     try:

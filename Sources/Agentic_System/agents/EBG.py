@@ -83,7 +83,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
                 tools=[
                     base64_program_to_js,
-                    db_query,
+                    #db_query,
                     db_list_programs,
                     db_get_fuzzer_performance_summary,
                     db_list_fuzzers,
@@ -188,7 +188,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
                 tools=[
                     base64_program_to_js,
-                    db_query,
+                    #db_query,
                     db_list_programs,
                     db_get_fuzzer_performance_summary,
                     db_list_fuzzers,

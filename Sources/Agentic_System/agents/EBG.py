@@ -71,7 +71,7 @@ class EBG(Agent):
                     get_realpath,
                     get_runtime_db_ids,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),  
                 max_steps=50,
                 planning_interval=20,
             )
@@ -89,10 +89,10 @@ class EBG(Agent):
                     db_list_fuzzers,
                     db_get_crash_diversity,
                     db_get_mutator_effectiveness,
-                    db_get_program_convergence,
+                    db_get_program_grouping,
                     db_get_execution_outcome_distribution,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -104,7 +104,7 @@ class EBG(Agent):
                 name="Debugger",
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -115,7 +115,7 @@ class EBG(Agent):
                 name="JSGenerator",
                 description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -131,7 +131,7 @@ class EBG(Agent):
                 tools=[
 
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['db_analyzer'],
@@ -176,7 +176,7 @@ class EBG(Agent):
                     get_realpath,
                     get_runtime_db_ids,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),  
                 max_steps=50,
                 planning_interval=20,
             )
@@ -194,10 +194,10 @@ class EBG(Agent):
                     db_list_fuzzers,
                     db_get_crash_diversity,
                     db_get_mutator_effectiveness,
-                    db_get_program_convergence,
+                    db_get_program_grouping,
                     db_get_execution_outcome_distribution,
                     ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -207,7 +207,7 @@ class EBG(Agent):
                 name="Debugger",
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -218,7 +218,7 @@ class EBG(Agent):
                 name="JSGenerator",
                 description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -232,7 +232,7 @@ class EBG(Agent):
                     execute_javascript_program,
                     list_d8_flags,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['db_analyzer'],
@@ -250,7 +250,7 @@ class EBG(Agent):
                 tools=[
 
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['debugger'],
@@ -284,7 +284,7 @@ class EBG(Agent):
             tools=[
 
             ],
-            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
             managed_agents=root_managed_agents,
             max_steps=10,
             planning_interval=None,
@@ -324,7 +324,7 @@ def main():
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
     
     model = LiteLLMModel(
-        model_id="deepseek",
+        model_id="deepseek-reasoner",
         api_key=deepseek_key
     )
 

@@ -229,7 +229,7 @@ def db_get_crash_diversity(fuzzer_id: int) -> str:
    
 
 @tool
-def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) -> str:
+def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 1) -> str:
     """
     Use database materialized view for mutator effectiveness, mutator_effectiveness_per_fuzzer limited to time_window_hours
     """
@@ -264,14 +264,14 @@ def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) ->
             conn.close()
 
 @tool
-def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size_tolerance_bytes: int = 50) -> str:
+def db_get_program_grouping(fuzzer_id: int, time_window_hours: int = 1, size_tolerance_bytes: int = 50) -> str:
     """
     Analyzes program convergence patterns by grouping similar-sized programs and their outcomes.
     Uses the program_convergence materialized view.
     
     Args:
         fuzzer_id: The fuzzer instance to analyze
-        time_window_hours: How far back to look (default 24 hours)
+        time_window_hours: How far back to look (default 1 hours)
         size_tolerance_bytes: Group programs within this size range together (default 50 bytes)
     """
     conn = None
@@ -320,14 +320,14 @@ def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size
 
 
 @tool
-def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int = 24, sample_interval_minutes: int = 5) -> str:
+def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int = 1, sample_interval_minutes: int = 5) -> str:
     """
     Gets the distribution of execution outcomes over time for trend analysis.
     Uses the execution_outcome_distribution materialized view.
     
     Args:
         fuzzer_id: The fuzzer instance to analyze
-        time_window_hours: How far back to look (default 24 hours)
+        time_window_hours: How far back to look (default 1 hours)
         sample_interval_minutes: Aggregate data into this time interval (default 5 minutes)
     """
     conn = None

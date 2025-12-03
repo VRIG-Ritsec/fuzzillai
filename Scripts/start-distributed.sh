@@ -207,7 +207,7 @@ EOF
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 10G
         reservations:
           memory: 1G
 

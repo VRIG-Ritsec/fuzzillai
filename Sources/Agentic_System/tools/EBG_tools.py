@@ -265,18 +265,185 @@ def db_get_mutator_effectiveness(fuzzer_id: int, time_window_hours: int = 24) ->
 
 @tool
 def db_get_program_convergence(fuzzer_id: int, time_window_hours: int = 24, size_tolerance_bytes: int = 50) -> str:
-    return ""
+    """
+    Analyzes program convergence patterns by grouping similar-sized programs and their outcomes.
+    Uses the program_convergence materialized view.
     
+    Args:
+        fuzzer_id: The fuzzer instance to analyze
+        time_window_hours: How far back to look (default 24 hours)
+        size_tolerance_bytes: Group programs within this size range together (default 50 bytes)
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                fuzzer_id,
+                time_bucket,
+                FLOOR(program_size / %s) * %s as size_bucket,
+                SUM(unique_programs) as total_unique_programs,
+                SUM(total_executions) as total_executions,
+                SUM(crashes) as total_crashes,
+                SUM(failures) as total_failures,
+                SUM(successes) as total_successes,
+                SUM(timeouts) as total_timeouts,
+                AVG(avg_coverage) as avg_coverage,
+                MAX(max_coverage) as max_coverage,
+                SUM(new_edges_found) as new_edges_found
+            FROM program_convergence
+            WHERE fuzzer_id = %s 
+            AND time_bucket > NOW() - INTERVAL '%s hours'
+            GROUP BY fuzzer_id, time_bucket, size_bucket
+            ORDER BY time_bucket DESC, size_bucket
+        """, (size_tolerance_bytes, size_tolerance_bytes, fuzzer_id, time_window_hours))
+        
+        rows = cursor.fetchall()
+        result_json = json.dumps(rows, default=json_serial, indent=2)
+        return result_json
+        
+    except psycopg2.Error as e:
+        return f"Database error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
 @tool
 def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int = 24, sample_interval_minutes: int = 5) -> str:
     """
-
-    """  
-    return ""    
+    Gets the distribution of execution outcomes over time for trend analysis.
+    Uses the execution_outcome_distribution materialized view.
+    
+    Args:
+        fuzzer_id: The fuzzer instance to analyze
+        time_window_hours: How far back to look (default 24 hours)
+        sample_interval_minutes: Aggregate data into this time interval (default 5 minutes)
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                fuzzer_id,
+                DATE_TRUNC('minute', time_bucket) - 
+                    (EXTRACT(MINUTE FROM time_bucket)::INT % %s) * INTERVAL '1 minute' as sample_time,
+                outcome,
+                execution_outcome_id,
+                SUM(execution_count) as total_executions,
+                AVG(avg_coverage) as avg_coverage,
+                SUM(new_edges_count) as new_edges_discovered
+            FROM execution_outcome_distribution
+            WHERE fuzzer_id = %s 
+            AND time_bucket > NOW() - INTERVAL '%s hours'
+            GROUP BY fuzzer_id, sample_time, outcome, execution_outcome_id
+            ORDER BY sample_time DESC, outcome
+        """, (sample_interval_minutes, fuzzer_id, time_window_hours))
+        
+        rows = cursor.fetchall()
+        result_json = json.dumps(rows, default=json_serial, indent=2)
+        return result_json
+        
+    except psycopg2.Error as e:
+        return f"Database error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
 
 
 @tool
-def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverage: float = None, sort_by: str = "coverage_total") -> str:
-    return ""
+def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverage: float = None, sort_by: str = "max_coverage") -> str:
+    """
+    Gets programs mapped to their coverage statistics and execution outcomes.
+    Uses the program_coverage_mapping materialized view.
+    
+    Args:
+        fuzzer_id: The fuzzer instance to analyze
+        limit: Maximum number of programs to return (default 50)
+        min_coverage: Filter programs with at least this coverage percentage (optional)
+        sort_by: Sort results by this column - options: max_coverage, new_edges_discovered, 
+                 max_edges_found, execution_count (default: max_coverage)
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Validate sort_by to prevent SQL injection
+        valid_sort_columns = ['max_coverage', 'new_edges_discovered', 'max_edges_found', 'execution_count']
+        if sort_by not in valid_sort_columns:
+            sort_by = 'max_coverage'
+        
+        # Build query with optional min_coverage filter
+        query = f"""
+            SELECT 
+                fuzzer_id,
+                program_hash,
+                created_at,
+                source_mutators,
+                contributors,
+                execution_count,
+                max_coverage,
+                avg_coverage,
+                max_edges_found,
+                avg_edges_found,
+                new_edges_discovered,
+                crash_count,
+                success_count,
+                timeout_count,
+                program_size,
+                first_execution,
+                last_execution
+            FROM program_coverage_mapping
+            WHERE fuzzer_id = %s
+        """
+        
+        params = [fuzzer_id]
+        
+        if min_coverage is not None:
+            query += " AND max_coverage >= %s"
+            params.append(min_coverage)
+        
+        query += f" ORDER BY {sort_by} DESC NULLS LAST LIMIT %s"
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        result_json = json.dumps(rows, default=json_serial, indent=2)
+        return result_json
+        
+    except psycopg2.Error as e:
+        return f"Database error: {e}"
+    except Exception as e:
+        return f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
     
     

@@ -35,7 +35,10 @@ global root_manager_prompt
 root_manager_prompt = None
 
 class EBG(Agent): 
-    """Verify and test seeds."""
+    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, root_manager_version: int=1):
+        super().__init__(model, api_key, anthropic_api_key)
+        self.root_manager_version = root_manager_version
+        self.setup_agents(root_manager_version)
     
     def setup_agents(self,root_manager_version: int=1):
         """

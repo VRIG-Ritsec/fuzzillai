@@ -305,6 +305,11 @@ public actor PostgresSQLStorage {
 
             do {
                 for stat in stats {
+                    let correctnessRateValue = stat.correctnessRate != nil ? String(format: "%.2f", stat.correctnessRate! * 100) : "NULL"
+                    let failureRateValue = stat.failureRate != nil ? String(format: "%.2f", stat.failureRate! * 100) : "NULL"
+                    let timeoutRateValue = stat.timeoutRate != nil ? String(format: "%.2f", stat.timeoutRate! * 100) : "NULL"
+                    let interestingSamplesRateValue = stat.interestingSamplesRate != nil ? String(format: "%.2f", stat.interestingSamplesRate! * 100) : "NULL"
+                    
                     let query: PostgresQuery = """
                         INSERT INTO mutator_stats (
                             fuzzer_id, mutator_type_id, 
@@ -319,8 +324,8 @@ public actor PostgresSQLStorage {
                             \(stat.totalSamples), \(stat.crashesFound), \(stat.timeouts),
                             \(stat.interestingSamples), \(stat.invalidSamples), \(stat.validSamples),
                             \(stat.totalInstructionsAdded),
-                            \(stat.correctnessRate), \(stat.failureRate), \(stat.timeoutRate),
-                            \(stat.interestingSamplesRate), \(stat.avgInstructionsAdded),
+                            \(correctnessRateValue), \(failureRateValue), \(timeoutRateValue),
+                            \(interestingSamplesRateValue), \(stat.avgInstructionsAdded),
                             NOW()
                         )
                         ON CONFLICT (fuzzer_id, mutator_type_id) 
@@ -722,7 +727,7 @@ public actor PostgresSQLStorage {
             totalFetched += batch.count
             
             if self.enableLogging {
-                self.logger.info("Corpus sync progress: \(allPrograms.count) unique programs (\(totalFetched) total fetched)")
+                self.logger.info("Corpus sync fetching progress: \(allPrograms.count) unique programs (\(totalFetched) total fetched)")
             }
             
             offset += batchSize
@@ -734,7 +739,7 @@ public actor PostgresSQLStorage {
         }
         
         if self.enableLogging {
-            self.logger.info("Corpus sync complete: \(allPrograms.count) unique programs from \(totalFetched) total")
+            self.logger.info("Corpus sync fetching complete: \(allPrograms.count) unique programs from \(totalFetched) total")
         }
         
         return allPrograms

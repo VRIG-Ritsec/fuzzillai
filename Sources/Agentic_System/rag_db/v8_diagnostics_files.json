@@ -1,0 +1,10 @@
+{
+  "body": "// The diagnostics/ directory contains debugging and diagnostic utilities,\n// not crash handling code. Key files:\n\n// diagnostics/disasm.h - Disassembler for machine code\n// diagnostics/disassembler.h - Higher-level disassembler interface\n// diagnostics/gdb-jit.h - GDB JIT interface for debugging\n// diagnostics/perf-jit.h - Perf JIT profiling interface\n// diagnostics/eh-frame.h - Exception handling frame information\n// diagnostics/unwinder.h - Stack unwinding utilities\n// diagnostics/code-tracer.h - Code tracing utilities\n// diagnostics/basic-block-profiler.h - Basic block profiling\n// diagnostics/compilation-statistics.h - Compilation statistics\n// diagnostics/etw-jit-win.h - ETW (Event Tracing for Windows) JIT logging\n\n// Note: The diagnostics directory does NOT contain crash handling code.\n// Crash handling is primarily in:\n// - base/logging.h/.cc (CHECK macros, V8_Fatal)\n// - base/abort-mode.h/.cc (abort behavior control)\n// - base/platform/platform-*.cc (OS::Abort implementations)\n// - api/api.cc (FatalProcessOutOfMemory)\n// - init/v8.cc (abort mode selection)\n\n// The file src/utils/abort-message.cc mentioned in the task does not exist.\n// Error message formatting for crashes is handled in:\n// - base/logging.cc (FailureMessage class in V8_Fatal)\n// - runtime/runtime-test.cc (abort message printing for testing)",
+  "context": [
+    "v8_check_macros",
+    "v8_fatal_errors",
+    "v8_abort_functions"
+  ],
+  "explanation": "This clarifies that the diagnostics directory contains debugging and profiling utilities, not crash handling code. The actual crash handling is in base/logging, base/abort-mode, and platform implementations. The requested file src/utils/abort-message.cc doesn't exist - abort message handling is integrated into V8_Fatal in logging.cc. This is important for understanding where to look for crash-related code.",
+  "file_line": "diagnostics/ directory listing"
+}

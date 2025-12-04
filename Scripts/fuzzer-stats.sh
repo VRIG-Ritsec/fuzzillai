@@ -166,7 +166,10 @@ display_stats() {
             mutator_name,
             total_interesting_samples,
             ROUND((total_interesting_samples::NUMERIC / NULLIF(SUM(total_interesting_samples) OVER (), 0) * 100), 1) as percentage,
-            ROUND(avg_correctness_rate, 1) as correctness
+            CASE 
+                WHEN avg_correctness_rate < 1.0 THEN ROUND(avg_correctness_rate * 100, 1)
+                ELSE ROUND(avg_correctness_rate, 1)
+            END as correctness
         FROM mutator_effectiveness_aggregate
         WHERE total_interesting_samples > 0
         ORDER BY total_interesting_samples DESC

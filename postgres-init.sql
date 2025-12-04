@@ -230,8 +230,14 @@ SELECT
     SUM(ms.total_samples) as total_samples,
     SUM(ms.crashes_found) as total_crashes_found,
     SUM(ms.interesting_samples) as total_interesting_samples,
-    AVG(ms.correctness_rate) as avg_correctness_rate,
-    AVG(ms.failure_rate) as avg_failure_rate,
+    AVG(CASE 
+        WHEN ms.correctness_rate < 1.0 THEN ms.correctness_rate * 100
+        ELSE ms.correctness_rate
+    END) as avg_correctness_rate,
+    AVG(CASE 
+        WHEN ms.failure_rate < 1.0 THEN ms.failure_rate * 100
+        ELSE ms.failure_rate
+    END) as avg_failure_rate,
     AVG(ms.avg_instructions_added) as avg_instructions_added,
     COUNT(DISTINCT ms.fuzzer_id) as active_fuzzers_using_mutator,
     NOW() as refreshed_at

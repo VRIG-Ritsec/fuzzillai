@@ -319,7 +319,11 @@ int cov_evaluate_feedback_nexus(struct cov_context* context) {
         return 0;
     }
     
-    if (context->current_feedback_nexus->count != context->previous_feedback_nexus->count) {
+    // printf("Current->count: %d\n", context->current_feedback_nexus->count);
+    // printf("Previous->count: %d\n", context->previous_feedback_nexus->count);
+
+    if (context->current_feedback_nexus->count != context->previous_feedback_nexus->count &&
+        context->current_feedback_nexus->count != 0) {
         return 1; // delta in # of feedback nexus
     }
     
@@ -327,7 +331,12 @@ int cov_evaluate_feedback_nexus(struct cov_context* context) {
     for (uint32_t i = 0; i < context->current_feedback_nexus->count; i++) {
         struct feedback_nexus_data* current = &context->current_feedback_nexus->nexus_data[i];
         struct feedback_nexus_data* previous = &context->previous_feedback_nexus->nexus_data[i];
-        
+
+        //printf("Current->vector_address: %u\n", current->vector_address);
+        //printf("Previous->vector_address: %u\n", previous->vector_address);
+        //printf("Current->ic_state: %u\n", current->ic_state);
+        //printf("Previous->ic_state: %u\n", previous->ic_state);
+
         if (current->vector_address != previous->vector_address ||
             current->ic_state != previous->ic_state) {
             return 1;
@@ -372,7 +381,8 @@ int cov_evaluate_optimization_bits(struct cov_context* context) {
     // Only check for a delta if current is not 0 and previous is "something"
     // Otherwise if previous is 0, then there is no delta anyway
     if (context->turbofan_optimization_bits_current != 0)
-        delta = (uint8_t)(context->turbofan_optimization_bits_current != context->turbofan_optimization_bits_previous);
+        // Look for positive delta
+        delta = (uint8_t)(context->turbofan_optimization_bits_current > context->turbofan_optimization_bits_previous);
     return delta;
 }
 

@@ -47,8 +47,9 @@ class EthiopianBoiledEgg:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
         
         self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
-        self.system = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
-        
+        print("starting the system with the variant manager version")
+        self.system = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, root_manager_version=2)
+        # test the varaint manager version
 
 def run(force_logging: bool = True):
 

@@ -10,7 +10,7 @@ MASTER_COMPOSE="${PROJECT_ROOT}/docker-compose.master.yml"
 WORKER_COMPOSE="${PROJECT_ROOT}/docker-compose.workers.yml"
 
 # Kill FuzzilliCli processes on the host
-sudo pkill -f FuzzilliCli -SIGTERM
+sudo pkill -f FuzzilliCli -QUIT
 
 # Stop docker containers
 docker compose -f "${MASTER_COMPOSE}" -f "${WORKER_COMPOSE}" down

@@ -60,7 +60,7 @@ class Father(Agent):
                 search_v8_source_rag,
                 get_v8_source_rag_doc, 
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[],
             max_steps=20,
             planning_interval=None
@@ -87,7 +87,7 @@ class Father(Agent):
                 remove_old_javascript_programs,
                 list_d8_flags,
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[],
             max_steps=100,
             planning_interval=25,
@@ -113,7 +113,7 @@ class Father(Agent):
                 delete_rag_db,
                 list_rag_db,
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             max_steps=20,
             planning_interval=None,
         )
@@ -134,7 +134,7 @@ class Father(Agent):
                 get_realpath,
                 get_runtime_db_ids,
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),  
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
             max_steps=50,
             planning_interval=20,
         )
@@ -165,7 +165,7 @@ class Father(Agent):
                 get_runtime_db_ids,
                  
                 ], # add rag db tools here aswell
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['reviewer_of_code'], 
                 self.agents['v8_search']
@@ -191,7 +191,7 @@ class Father(Agent):
                 similar_template_swift,
                 similar_template_fuzzil,
             ], # add rag db stuff here aswell
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['george_foreman'],
                 self.agents['compiler']
@@ -215,7 +215,7 @@ class Father(Agent):
                 list_program_templates,
                 list_d8_flags,
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             max_steps=30,
             planning_interval=None,
         )
@@ -255,7 +255,7 @@ class Father(Agent):
                 get_v8_source_rag_doc, 
                 web_search, # testing only
             ],
-            model=LiteLLMModel(model_id="deepseek-reasoner", api_key=self.api_key),
+            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
             managed_agents=[
                 self.agents['code_analyzer'],
                 self.agents['program_builder'],
@@ -311,7 +311,7 @@ def main():
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
     
     model = LiteLLMModel(
-        model_id="deepseek-reasoner",
+        model_id="deepseek",
         api_key=deepseek_key
     )
     

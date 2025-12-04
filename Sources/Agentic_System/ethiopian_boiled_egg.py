@@ -21,7 +21,7 @@ logger.propagate = False
 logger.disabled = True
 est_timezone = pytz.timezone('US/Eastern')
 
-BASE_MODEL_ID = "deepseek-reasoner"
+BASE_MODEL_ID = "deepseek"
 
 import site
 from pathlib import Path

@@ -1,0 +1,32 @@
+diff --git a/src/maglev/maglev-graph-builder.h b/src/maglev/maglev-graph-builder.h
+index 96e4a82464c..ee30d296288 100644
+--- a/src/maglev/maglev-graph-builder.h
++++ b/src/maglev/maglev-graph-builder.h
+@@ -38,6 +38,7 @@
+ #include "src/objects/bytecode-array.h"
+ #include "src/objects/elements-kind.h"
+ #include "src/objects/string.h"
++#include "src/fuzzilli/cov.h"
+ 
+ namespace v8 {
+ namespace internal {
+@@ -1863,13 +1864,17 @@ class MaglevGraphBuilder {
+     return compilation_unit_->feedback();
+   }
+   const FeedbackNexus FeedbackNexusForOperand(int slot_operand_index) const {
+-    return FeedbackNexus(feedback().object(),
++    FeedbackNexus nexus = FeedbackNexus(feedback().object(),
+                          GetSlotOperand(slot_operand_index),
+                          broker()->feedback_nexus_config());
++    cov_add_feedback_nexus(&nexus);
++    return nexus;
+   }
+   const FeedbackNexus FeedbackNexusForSlot(FeedbackSlot slot) const {
+-    return FeedbackNexus(feedback().object(), slot,
++    FeedbackNexus nexus = FeedbackNexus(feedback().object(), slot,
+                          broker()->feedback_nexus_config());
++    cov_add_feedback_nexus(&nexus);
++    return nexus;
+   }
+   compiler::BytecodeArrayRef bytecode() const {
+     return compilation_unit_->bytecode();

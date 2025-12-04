@@ -305,10 +305,12 @@ public actor PostgresSQLStorage {
 
             do {
                 for stat in stats {
-                    let correctnessRateValue = stat.correctnessRate != nil ? String(format: "%.2f", stat.correctnessRate! * 100) : "NULL"
-                    let failureRateValue = stat.failureRate != nil ? String(format: "%.2f", stat.failureRate! * 100) : "NULL"
-                    let timeoutRateValue = stat.timeoutRate != nil ? String(format: "%.2f", stat.timeoutRate! * 100) : "NULL"
-                    let interestingSamplesRateValue = stat.interestingSamplesRate != nil ? String(format: "%.2f", stat.interestingSamplesRate! * 100) : "NULL"
+                    // Convert rates to percentages (0.0-1.0 -> 0.00-100.00)
+                    // Use Optional<Double> to properly handle NULL values
+                    let correctnessRateValue = stat.correctnessRate.map { $0 * 100 }
+                    let failureRateValue = stat.failureRate.map { $0 * 100 }
+                    let timeoutRateValue = stat.timeoutRate.map { $0 * 100 }
+                    let interestingSamplesRateValue = stat.interestingSamplesRate.map { $0 * 100 }
                     
                     let query: PostgresQuery = """
                         INSERT INTO mutator_stats (
@@ -841,17 +843,21 @@ public actor PostgresSQLStorage {
     public func refreshMaterializedViews() async throws {
         try await databasePool.withConnection { connection in
             do {
+                let startTime = Date()
+                
                 // Call the PostgreSQL function that refreshes all materialized views
                 let query = PostgresQuery(stringLiteral: "SELECT * FROM refresh_all_stats()")
                 let result = try await connection.query(query, logger: self.logger)
                 let rows = try await result.collect()
                 
+                // Calculate elapsed time in Swift
+                let elapsedTime = Date().timeIntervalSince(startTime)
+                
                 if self.enableLogging {
                     self.logger.info("Refreshed \(rows.count) materialized views:")
                     for row in rows {
-                        // TODO Aleksi: refreshTime doesn't work this way. Pull it directly from swift.
-                        if let (viewName, refreshTime) = try? row.decode((String, String).self, context: .default) {
-                            self.logger.info("  - \(viewName): \(refreshTime)")
+                        if let viewName = try? row.decode(String.self, context: .default) {
+                            self.logger.info("  - \(viewName): \(String(format: "%.2f", elapsedTime))s")
                         }
                     }
                 }

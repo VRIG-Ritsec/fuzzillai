@@ -48,7 +48,7 @@ class EthiopianBoiledEgg:
         
         self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
         print("starting the system with the variant manager version")
-        self.system = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, root_manager_version=2)
+        self.system = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, root_manager_version=1,fuzzer_id="fuzzer-1")
         # test the varaint manager version
 
 def run(force_logging: bool = True):

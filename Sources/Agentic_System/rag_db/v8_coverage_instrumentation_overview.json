@@ -1,0 +1,10 @@
+{
+  "body": "// V8 Coverage Instrumentation Overview\n// ====================================\n// V8 implements code coverage instrumentation through multiple mechanisms:\n// 1. JavaScript function coverage (invocation counts)\n// 2. Block/edge coverage for JavaScript (basic block execution)\n// 3. WebAssembly basic block coverage\n// 4. Basic block profiling for compiler optimization\n\n// Coverage Modes:\n// --------------\n// debug::CoverageMode::kBestEffort       - Function-level, no instrumentation\n// debug::CoverageMode::kPreciseCount     - Function-level with precise counts\n// debug::CoverageMode::kPreciseBinary    - Function-level binary (0/1)\n// debug::CoverageMode::kBlockCount       - Block-level with counts\n// debug::CoverageMode::kBlockBinary      - Block-level binary (0/1)\n\n// Key Data Structures:\n// -------------------\n// CoverageInfo: Stores block coverage data attached to DebugInfo\n//   - slot_count: number of coverage slots\n//   - slots[slot_count]: CoverageInfoSlot array\n// CoverageInfoSlot: {start_source_position, end_source_position, block_count}\n// DebugInfo: Contains coverage_info field pointing to CoverageInfo\n// SharedFunctionInfo: Has DebugInfo for coverage instrumentation\n// FeedbackVector: Stores function invocation counts",
+  "context": [
+    "v8_coverage_modes",
+    "v8_coverage_data_structures",
+    "v8_block_coverage_mechanism"
+  ],
+  "explanation": "This provides a high-level overview of V8's coverage instrumentation system, showing the different coverage modes, key data structures, and how they relate to each other. It establishes the foundation for understanding edge/block coverage mechanisms.",
+  "file_line": "debug/debug-coverage.h:1-50, objects/debug-objects.tq:1-50"
+}

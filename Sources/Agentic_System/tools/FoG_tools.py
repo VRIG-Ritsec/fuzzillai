@@ -184,6 +184,7 @@ def tree(options: str = "") -> str:
         str: Tree structure showing directories and files in the v8 code base.
     """
     # If a trailing non-flag token looks like a path but does not exist under V8_PATH, fallback to '.'
+    # TODO: If the agent passes in "-L 3" as opts, this converts it to "-L ." and errors as invalid level
     opts = options or ""
     parts = opts.split()
     if parts:

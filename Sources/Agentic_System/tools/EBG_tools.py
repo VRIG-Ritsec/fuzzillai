@@ -111,7 +111,7 @@ def db_list_programs(limit: int = 10, offset: int = 0, fuzzer_id: int = None, in
         cursor.execute("SELECT program_hash, fuzzer_id, inserted_at FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
         rows = cursor.fetchall()
         if include_source:
-            cursor.execute("SELECT program_hash, fuzzer_id, inserted_at, program_source FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
+            cursor.execute("SELECT program_hash, fuzzer_id, inserted_at, program_base64 FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
             rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json

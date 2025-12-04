@@ -29,18 +29,28 @@ import sys
 import os
 import yaml 
 import importlib.resources
+from typing import Optional
+
+MANAGER_MODEL = "deepseek"
+WORKER_MODEL = "deepseek"
+ANALYZER_MODEL = "deepseek"
 
 sys.path.append(str(Path(__file__).parent.parent))
 global root_manager_prompt
 root_manager_prompt = None
 
 class EBG(Agent): 
-    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, root_manager_version: int=1):
+    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, root_manager_version: int=1, fuzzer_id: Optional[str] = None, program_varaint: Optional[str] = None ):
         super().__init__(model, api_key, anthropic_api_key)
         self.root_manager_version = root_manager_version
-        self.setup_agents(root_manager_version)
+        if root_manager_version ==1:
+            assert program_varaint is None and fuzzer_id is not None 
+        elif root_manager_version ==2:
+            assert fuzzer_id is None and program_varaint is not None 
+        self.setup_agents(root_manager_version, fuzzer_id, program_varaint)
     
-    def setup_agents(self,root_manager_version: int=1):
+    
+    def setup_agents(self,root_manager_version: int=1, fuzzer_id: Optional[str] = None, program_varaint: Optional[str] = None ):
         """
         Version 1: Plateau Manager
 
@@ -57,8 +67,16 @@ class EBG(Agent):
             └── Corpus Validator (L2)
         """
         global root_manager_prompt
+        # If called from BaseAgent.__init__ before we have the right identifiers,
+        # do nothing and let the explicit call from EBG.__init__ handle setup.
+        if root_manager_version == 1 and fuzzer_id is None:
+            return
+        if root_manager_version == 2 and program_varaint is None:
+            return
+
         if root_manager_version == 1:
             root_manager_prompt = self.get_prompt("plateau_manager.txt")
+            root_manager_prompt = root_manager_prompt.replace("[ENTER THE PLATEAUED FUZZER]", fuzzer_id)
 
             # L2 Worker: V8 Search 
             self.agents['v8_search'] = ToolCallingAgent(
@@ -74,7 +92,7 @@ class EBG(Agent):
                     get_realpath,
                     get_runtime_db_ids,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),  
                 max_steps=50,
                 planning_interval=20,
             )
@@ -86,7 +104,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
                 tools=[
                     base64_program_to_js,
-                    #db_query,
+                    db_query,
                     db_list_programs,
                     db_get_fuzzer_performance_summary,
                     db_list_fuzzers,
@@ -95,7 +113,7 @@ class EBG(Agent):
                     db_get_program_grouping,
                     db_get_execution_outcome_distribution,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -107,7 +125,7 @@ class EBG(Agent):
                 name="Debugger",
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -118,7 +136,7 @@ class EBG(Agent):
                 name="JSGenerator",
                 description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -134,7 +152,7 @@ class EBG(Agent):
                 tools=[
 
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['db_analyzer'],
@@ -165,6 +183,8 @@ class EBG(Agent):
             """
             root_manager_prompt = self.get_prompt("variant_manager.txt")
 
+            root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", program_varaint)
+
             # L2 Worker: V8 Search 
             self.agents['v8_search'] = ToolCallingAgent(
                 name="V8Search",
@@ -179,7 +199,7 @@ class EBG(Agent):
                     get_realpath,
                     get_runtime_db_ids,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),  
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),  
                 max_steps=50,
                 planning_interval=20,
             )
@@ -191,7 +211,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for analyzing PostgreSQL database for corpus, flags, coverage, and execution state",
                 tools=[
                     base64_program_to_js,
-                    #db_query,
+                    db_query,
                     db_list_programs,
                     db_get_fuzzer_performance_summary,
                     db_list_fuzzers,
@@ -200,7 +220,7 @@ class EBG(Agent):
                     db_get_program_grouping,
                     db_get_execution_outcome_distribution,
                     ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -210,7 +230,7 @@ class EBG(Agent):
                 name="Debugger",
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -221,7 +241,7 @@ class EBG(Agent):
                 name="JSGenerator",
                 description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
                 max_steps=8,
                 planning_interval=None,
             )
@@ -235,7 +255,7 @@ class EBG(Agent):
                     execute_javascript_program,
                     list_d8_flags,
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['db_analyzer'],
@@ -253,7 +273,7 @@ class EBG(Agent):
                 tools=[
 
                 ],
-                model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+                model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
                     self.agents['v8_search'],
                     self.agents['debugger'],
@@ -287,7 +307,7 @@ class EBG(Agent):
             tools=[
 
             ],
-            model=LiteLLMModel(model_id="deepseek", api_key=self.api_key),
+            model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
             managed_agents=root_managed_agents,
             max_steps=10,
             planning_interval=None,
@@ -327,7 +347,7 @@ def main():
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
     
     model = LiteLLMModel(
-        model_id="deepseek",
+        model_id=MANAGER_MODEL,
         api_key=deepseek_key
     )
 

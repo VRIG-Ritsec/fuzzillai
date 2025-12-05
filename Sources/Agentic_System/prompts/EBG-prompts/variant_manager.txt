@@ -9,8 +9,8 @@ responsible for performing variant analysis on the crash to hopefully trigger mo
 ## CRITICAL RULES:
 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
-NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME ! 
-
+- NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME ! 
+- YOU ARE RUNNING FUZZILI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILI
 ## STAGE 0
 Select the crash you deem most interesting and use the `read_file` tool call for analysis in stage 1.
 

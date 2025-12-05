@@ -488,4 +488,360 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         if conn:
             conn.close()
     
+
+
+V8_TRACE_PRESETS = {
+    "tiering": [
+        "--trace-opt",
+        "--trace-opt-status",
+        "--trace-deopt",
+        "--trace-osr",
+        "--trace-file-names"
+    ],
+    "tiering_verbose": [
+        "--trace-opt-verbose",
+        "--trace-opt-status",
+        "--trace-deopt-verbose",
+        "--trace-osr",
+        "--trace-file-names"
+    ],
+    "turbofan": [
+        "--trace-turbo-graph",
+        "--trace-turbo-types"
+    ],
+    "turbofan_full": [
+        "--trace-turbo",
+        "--trace-turbo-graph",
+        "--trace-turbo-scheduled",
+        "--trace-turbo-types",
+        "--trace-turbo-reduction",
+        "--trace-turbo-inlining",
+        "--trace-turbo-alloc"
+    ],
+    "maglev": [
+        "--trace-maglev-graph-building",
+        "--maglev-print-feedback",
+        "--maglev-print-provenance"
+    ],
+    "maglev_full": [
+        "--trace-maglev-graph-building",
+        "--trace-maglev-inlining",
+        "--trace-maglev-regalloc",
+        "--print-maglev-graph",
+        "--print-maglev-code",
+        "--maglev-print-bytecode",
+        "--maglev-print-feedback",
+        "--maglev-print-inlined",
+        "--maglev-print-provenance"
+    ],
+    "ignition": [
+        "--print-bytecode"
+    ],
+    "ignition_full": [
+        "--print-bytecode",
+        "--trace-ignition-codegen"
+    ],
+    "gc": [
+        "--trace-gc",
+        "--trace-gc-nvp",
+        "--trace-incremental-marking"
+    ],
+    "gc_full": [
+        "--trace-gc",
+        "--trace-gc-nvp",
+        "--trace-gc-verbose",
+        "--trace-gc-freelists",
+        "--trace-gc-heap-layout",
+        "--trace-incremental-marking",
+        "--trace-concurrent-marking",
+        "--trace-fragmentation"
+    ],
+    "ic_maps": [
+        "--log-ic",
+        "--log-maps",
+        "--trace-generalization",
+        "--trace-prototype-users"
+    ],
+    "ic_maps_full": [
+        "--log-ic",
+        "--log-maps",
+        "--log-maps-details",
+        "--trace-generalization",
+        "--trace-prototype-users"
+    ],
+    "wasm": [
+        "--trace-wasm",
+        "--trace-wasm-decoder",
+        "--trace-wasm-compiler",
+        "--trace-liftoff"
+    ],
+    "regexp": [
+        "--trace-regexp-bytecodes",
+        "--trace-regexp-parser",
+        "--trace-regexp-tier-up"
+    ],
+    "serialization": [
+        "--trace-serializer",
+        "--trace-deserialization",
+        "--profile-deserialization"
+    ]
+}
+
+V8_AVAILABLE_FLAGS = [
+    "--trace-opt", "--trace-opt-verbose", "--trace-opt-status",
+    "--trace-deopt", "--trace-deopt-verbose",
+    "--trace-osr", "--trace-file-names",
+    "--trace-turbo", "--trace-turbo-graph", "--trace-turbo-scheduled",
+    "--trace-turbo-types", "--trace-turbo-reduction", "--trace-turbo-inlining",
+    "--trace-turbo-alloc",
+    "--trace-maglev-graph-building", "--trace-maglev-inlining", "--trace-maglev-regalloc",
+    "--print-maglev-graph", "--print-maglev-graphs", "--print-maglev-code",
+    "--maglev-print-bytecode", "--maglev-print-feedback", "--maglev-print-inlined",
+    "--maglev-print-provenance",
+    "--print-bytecode", "--trace-ignition-codegen",
+    "--trace-gc", "--trace-gc-nvp", "--trace-gc-verbose",
+    "--trace-gc-freelists", "--trace-gc-freelists-verbose", "--trace-gc-heap-layout",
+    "--trace-incremental-marking", "--trace-concurrent-marking",
+    "--trace-fragmentation", "--trace-fragmentation-verbose",
+    "--log-ic", "--log-maps", "--log-maps-details",
+    "--trace-generalization", "--trace-prototype-users",
+    "--trace-wasm", "--trace-wasm-decoder", "--trace-wasm-compiler", "--trace-liftoff",
+    "--trace-regexp-bytecodes", "--trace-regexp-parser", "--trace-regexp-tier-up",
+    "--trace-serializer", "--trace-deserialization", "--profile-deserialization"
+]
+
+
+def fetch_program_js_from_db(program_hash: str) -> str:
+    """Fetch program from database and convert to JS using FuzzILTool"""
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cursor.execute(
+            "SELECT program_base64 FROM fuzzer WHERE program_hash = %s LIMIT 1",
+            (program_hash,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        program_b64 = row['program_base64']
+        decoded = base64.b64decode(program_b64)
+        
+        with open(TEMP_FUZZIL_PATH, "wb") as f:
+            f.write(decoded)
+        
+        cmd = f"{FUZZILLI_TOOL_BIN} --liftToJS {TEMP_FUZZIL_PATH}"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return get_output(result)
+        
+    except Exception as e:
+        return f"Error fetching program: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+@tool
+def trace_v8_analysis(
+    program_hash: str,
+    presets: list = None,
+    custom_flags: list = None,
+    function_filter: str = None,
+    turbo_path: str = "/tmp/turbofan_ir",
+    timeout_seconds: int = 60
+) -> str:
+    """
+    Unified V8 tracing tool supporting all trace/log flags for deep analysis.
+    Fetches program from database by hash, converts to JS, and runs d8 with selected flags.
+
+    If your input here is empty = {"",[]}, the tool will run with the default flags for the following options:
+        presets: list = None,
+        custom_flags: list = None,
+        function_filter: str = None,
+        turbo_path: str = "/tmp/turbofan_ir"
     
+    Available presets:
+        - tiering: trace-opt, trace-opt-status, trace-deopt, trace-osr, trace-file-names
+        - tiering_verbose: verbose versions of tiering flags
+        - turbofan: trace-turbo-graph, trace-turbo-types
+        - turbofan_full: all turbofan tracing flags
+        - maglev: trace-maglev-graph-building, maglev-print-feedback, maglev-print-provenance
+        - maglev_full: all maglev tracing and print flags
+        - ignition: print-bytecode
+        - ignition_full: print-bytecode + trace-ignition-codegen
+        - gc: trace-gc, trace-gc-nvp, trace-incremental-marking
+        - gc_full: all gc tracing flags
+        - ic_maps: log-ic, log-maps, trace-generalization, trace-prototype-users
+        - ic_maps_full: all IC and maps flags with details
+        - wasm: trace-wasm, trace-wasm-decoder, trace-wasm-compiler, trace-liftoff
+        - regexp: trace-regexp-bytecodes, trace-regexp-parser, trace-regexp-tier-up
+        - serialization: trace-serializer, trace-deserialization, profile-deserialization
+    
+    Args:
+        program_hash: The hash of the program to analyze (from fuzzer table)
+        presets: List of preset names to enable (e.g. ["tiering", "maglev"])
+        custom_flags: List of individual flags to add (e.g. ["--trace-turbo-inlining"])
+        function_filter: Filter pattern for function-specific tracing (applied to turbo/maglev/bytecode filters)
+        turbo_path: Directory path for turbofan IR dumps (enables --trace-turbo-path)
+        timeout_seconds: Max execution time in seconds (default 60)
+    
+    Returns:
+        JSON string with trace output, any errors, and metadata about flags used
+    """
+    if len(presets) == 0:
+        presets = None
+    if len(custom_flags) == 0:
+        custom_flags = None
+    if function_filter == "":
+        function_filter = None
+    if turbo_path == "":
+        turbo_path = "/tmp/turbofan_ir"
+
+
+    js_code = fetch_program_js_from_db(program_hash)
+    if js_code is None:
+        return json.dumps({"error": f"Program with hash {program_hash} not found in database"})
+    if js_code.startswith("Error"):
+        return json.dumps({"error": js_code})
+    
+    filepath_js = f"/tmp/{program_hash}.js"
+    with open(filepath_js, "w") as f:
+        f.write(js_code)
+    
+    flags = ["--allow-natives-syntax"]
+    
+    if presets:
+        for preset in presets:
+            if preset in V8_TRACE_PRESETS:
+                flags.extend(V8_TRACE_PRESETS[preset])
+            else:
+                return json.dumps({"error": f"Unknown preset: {preset}", "available_presets": list(V8_TRACE_PRESETS.keys())})
+    
+    if custom_flags:
+        for flag in custom_flags:
+            if flag.startswith("--"):
+                flags.append(flag)
+            else:
+                flags.append(f"--{flag}")
+    
+    if function_filter:
+        filter_flags = [
+            f"--trace-turbo-filter={function_filter}",
+            f"--maglev-filter={function_filter}",
+            f"--maglev-print-filter={function_filter}",
+            f"--print-bytecode-filter={function_filter}"
+        ]
+        flags.extend(filter_flags)
+    
+    if turbo_path:
+        os.makedirs(turbo_path, exist_ok=True)
+        flags.append(f"--trace-turbo-path={turbo_path}")
+    
+    flags = list(dict.fromkeys(flags))
+    
+    cmd_parts = [D8_PATH] + flags + [filepath_js]
+    cmd = " ".join(cmd_parts)
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds
+        )
+        
+        output_data = {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.returncode,
+            "flags_used": flags,
+            "presets_applied": presets or [],
+            "custom_flags_applied": custom_flags or [],
+            "function_filter": function_filter,
+            "program_hash": program_hash,
+            "js_file": filepath_js
+        }
+        
+        if turbo_path and os.path.isdir(turbo_path):
+            turbo_files = os.listdir(turbo_path)
+            output_data["turbo_ir_files"] = turbo_files
+            if turbo_files:
+                output_data["turbo_ir_contents"] = {}
+                for tf in turbo_files[:5]:
+                    tf_path = os.path.join(turbo_path, tf)
+                    if os.path.isfile(tf_path):
+                        with open(tf_path, "r") as f:
+                            content = f.read()
+                            if len(content) > 50000:
+                                content = content[:50000] + "\n... [truncated]"
+                            output_data["turbo_ir_contents"][tf] = content
+        
+        return json.dumps(output_data, default=json_serial)
+        
+    except subprocess.TimeoutExpired:
+        return json.dumps({
+            "error": f"Execution timed out after {timeout_seconds} seconds",
+            "flags_used": flags,
+            "program_hash": program_hash
+        })
+    except Exception as e:
+        return json.dumps({"error": f"Execution error: {e}", "flags_used": flags})
+    finally:
+        if os.path.exists(filepath_js):
+            os.remove(filepath_js)
+
+
+@tool
+def list_v8_trace_options() -> str:
+    """
+    List all available V8 trace presets and individual flags for trace_v8_analysis tool.
+    Use this to understand what tracing options are available before calling trace_v8_analysis.
+    
+    Returns:
+        JSON string with all presets, their flags, and available individual flags
+    """
+    return json.dumps({
+        "presets": V8_TRACE_PRESETS,
+        "available_individual_flags": V8_AVAILABLE_FLAGS,
+        "usage_examples": {
+            "tiering_deopt_analysis": {
+                "presets": ["tiering"],
+                "description": "Track tier-ups, optimization status, and deopts"
+            },
+            "turbofan_deep_dive": {
+                "presets": ["turbofan"],
+                "custom_flags": ["--trace-turbo-reduction"],
+                "function_filter": "target*",
+                "description": "Analyze TurboFan IR for specific functions"
+            },
+            "maglev_analysis": {
+                "presets": ["maglev"],
+                "description": "Modern tier graph building and feedback analysis"
+            },
+            "bytecode_inspection": {
+                "presets": ["ignition"],
+                "function_filter": "f*",
+                "description": "View Ignition bytecode for specific functions"
+            },
+            "gc_investigation": {
+                "presets": ["gc"],
+                "description": "Track GC events and memory behavior"
+            },
+            "hidden_class_churn": {
+                "presets": ["ic_maps"],
+                "description": "Track inline caches and map transitions"
+            },
+            "full_jit_analysis": {
+                "presets": ["tiering", "maglev", "turbofan"],
+                "description": "Comprehensive JIT pipeline visibility"
+            }
+        }
+    }, indent=2)

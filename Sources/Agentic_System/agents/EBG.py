@@ -117,7 +117,13 @@ class EBG(Agent):
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
+            prompt= self.get_prompt("db_analyzer.txt")
+            f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
+            sql_file = f.read()
+            f.close()
+            prompt + "\n Here is the latest programs from the database: " + sql_file
+            self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
+
 
 
             # L2 Worker: Debugger 
@@ -150,7 +156,9 @@ class EBG(Agent):
                 name="RuntimeAnalyzer",
                 description="L1 Manager responsible for analyzing program runtime, coverage, and execution state",
                 tools=[
-
+                    execute_javascript_program,
+                    list_d8_flags,
+                    list_v8_trace_options,
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
@@ -225,7 +233,14 @@ class EBG(Agent):
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
+            prompt= self.get_prompt("db_analyzer.txt")
+            f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
+            sql_file = f.read()
+            f.close()
+            prompt + "\n Here is the latest programs from the database: " + sql_file
+            self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
+
+
 
             self.agents['debugger'] = ToolCallingAgent(
                 name="Debugger",
@@ -255,6 +270,8 @@ class EBG(Agent):
                 tools=[
                     execute_javascript_program,
                     list_d8_flags,
+                    list_v8_trace_options,
+
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[

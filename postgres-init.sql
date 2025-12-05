@@ -12,33 +12,23 @@ CREATE TABLE IF NOT EXISTS main (
 CREATE INDEX idx_main_status ON main(status) WHERE status = 'active';
 CREATE INDEX idx_main_last_activity ON main(last_activity DESC);
 
--- Fuzzer programs table (corpus) - reduced storage
-CREATE TABLE IF NOT EXISTS fuzzer (
+-- Programs table (corpus) - unified table combining program data and metadata
+-- Previously split between 'fuzzer' and 'program' tables, now consolidated
+CREATE TABLE IF NOT EXISTS program (
     program_hash VARCHAR(64) PRIMARY KEY,
     fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
     inserted_at TIMESTAMP DEFAULT NOW(),
-    -- program_size INT NOT NULL, don't need this make sure to remove 
-    program_base64 TEXT NOT NULL
-);
-
-CREATE INDEX idx_fuzzer_id ON fuzzer(fuzzer_id);
-CREATE INDEX idx_fuzzer_inserted ON fuzzer(inserted_at DESC);
-CREATE INDEX idx_fuzzer_composite ON fuzzer(fuzzer_id, inserted_at DESC);
-
-
-
--- Programs table (executed data about a program) - no duplicate storage
-CREATE TABLE IF NOT EXISTS program (
-    program_hash VARCHAR(64) PRIMARY KEY REFERENCES fuzzer(program_hash) ON DELETE CASCADE,
-    fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
-    -- TODO ALeksi: Merge the below 4 field int fuzzer table above and rename fuzzer table to program. Update PostgresSQLStorage/Sync then as well.
+    program_base64 TEXT NOT NULL,
+    -- Metadata fields (previously in separate program table)
     created_at TIMESTAMP DEFAULT NOW(),
     source_mutators VARCHAR(50)[],  -- Array of mutator names that contributed to this program
     contributors VARCHAR(50)[],      -- Array of all contributor names (mutators + other sources)
     parent_program_hash VARCHAR(64) REFERENCES program(program_hash) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_program_fuzzer ON program(fuzzer_id);
+CREATE INDEX idx_program_fuzzer_id ON program(fuzzer_id);
+CREATE INDEX idx_program_inserted ON program(inserted_at DESC);
+CREATE INDEX idx_program_composite ON program(fuzzer_id, inserted_at DESC);
 CREATE INDEX idx_program_created ON program(created_at DESC);
 CREATE INDEX idx_program_mutators ON program USING GIN(source_mutators);  -- GIN index for array searching
 CREATE INDEX idx_program_contributors ON program USING GIN(contributors);  -- GIN index for array searching
@@ -291,7 +281,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS program_convergence AS
 SELECT 
     p.fuzzer_id,
     DATE_TRUNC('hour', p.created_at) as time_bucket,
-    LENGTH(f.program_base64) as program_size,
+    LENGTH(p.program_base64) as program_size,
     COUNT(DISTINCT p.program_hash) as unique_programs,
     COUNT(e.execution_id) as total_executions,
     COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) as crashes,
@@ -302,9 +292,8 @@ SELECT
     MAX(e.coverage_total) as max_coverage,
     COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) as new_edges_found
 FROM program p
-JOIN fuzzer f ON p.program_hash = f.program_hash
 LEFT JOIN execution e ON p.program_hash = e.program_hash
-GROUP BY p.fuzzer_id, DATE_TRUNC('hour', p.created_at), LENGTH(f.program_base64);
+GROUP BY p.fuzzer_id, DATE_TRUNC('hour', p.created_at), LENGTH(p.program_base64);
 
 CREATE INDEX idx_program_convergence_fuzzer ON program_convergence(fuzzer_id, time_bucket DESC);
 CREATE INDEX idx_program_convergence_size ON program_convergence(program_size);
@@ -348,13 +337,12 @@ SELECT
     COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) as crash_count,
     COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3) as success_count,
     COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4) as timeout_count,
-    LENGTH(f.program_base64) as program_size,
+    LENGTH(p.program_base64) as program_size,
     MIN(e.created_at) as first_execution,
     MAX(e.created_at) as last_execution
 FROM program p
-JOIN fuzzer f ON p.program_hash = f.program_hash
 LEFT JOIN execution e ON p.program_hash = e.program_hash
-GROUP BY p.fuzzer_id, p.program_hash, p.created_at, p.source_mutators, p.contributors, f.program_base64;
+GROUP BY p.fuzzer_id, p.program_hash, p.created_at, p.source_mutators, p.contributors, p.program_base64;
 
 CREATE INDEX idx_program_coverage_mapping_fuzzer ON program_coverage_mapping(fuzzer_id);
 CREATE INDEX idx_program_coverage_mapping_coverage ON program_coverage_mapping(max_coverage DESC NULLS LAST);

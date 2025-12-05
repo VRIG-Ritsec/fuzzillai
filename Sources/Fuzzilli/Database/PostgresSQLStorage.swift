@@ -536,27 +536,10 @@ public actor PostgresSQLStorage {
 
                     // Use ON CONFLICT DO NOTHING with RETURNING to detect if insert succeeded
                     // First worker to insert wins, others skip gracefully
-                    let fuzzerQuery: PostgresQuery = """
-                        INSERT INTO fuzzer (program_hash, fuzzer_id, inserted_at, program_base64) 
-                        VALUES (\(programHash), \(fuzzerId), NOW(), \(prepared.programData))
-                        ON CONFLICT (program_hash) DO NOTHING
-                        RETURNING program_hash
-                    """
-
-                    // TODO Aleksi: collecting the result is more for debugging so probably remove later
-                    let fuzzerResult = try await connection.query(fuzzerQuery, logger:self.logger)
-                    let fuzzerRows = try await fuzzerResult.collect()
-                    
-                    // If RETURNING gave us a row, the insert succeeded
-                    // If no rows, it was skipped due to conflict
-                    if fuzzerRows.isEmpty {
-                        skippedCount += 1
-                        continue  // Skip to next program
-                    }
-
+                    // Single unified INSERT into the program table (previously split between fuzzer and program tables)
                     let programQuery = PostgresQuery(stringLiteral: """
-                        INSERT INTO program (program_hash, fuzzer_id, created_at, source_mutators, contributors, parent_program_hash) 
-                        VALUES ('\(programHash)', \(fuzzerId), NOW(), \(mutatorsArray), \(contributorsArray), \(prepared.parentHash != nil ? "'\(prepared.parentHash!)'" : "NULL"))
+                        INSERT INTO program (program_hash, fuzzer_id, inserted_at, program_base64, created_at, source_mutators, contributors, parent_program_hash) 
+                        VALUES ('\(programHash)', \(fuzzerId), NOW(), '\(prepared.programData)', NOW(), \(mutatorsArray), \(contributorsArray), \(prepared.parentHash != nil ? "'\(prepared.parentHash!)'" : "NULL"))
                         ON CONFLICT (program_hash) DO NOTHING
                         RETURNING program_hash
                     """)
@@ -564,6 +547,8 @@ public actor PostgresSQLStorage {
                     let programResult = try await connection.query(programQuery, logger:self.logger)
                     let programRows = try await programResult.collect()
                     
+                    // If RETURNING gave us a row, the insert succeeded
+                    // If no rows, it was skipped due to conflict
                     if !programRows.isEmpty {
                         programHashes.append(programHash)
                         insertedCount += 1
@@ -752,7 +737,7 @@ public actor PostgresSQLStorage {
         return try await databasePool.withConnection { connection in 
             let query = PostgresQuery(stringLiteral: """
                 SELECT program_hash, program_base64 
-                FROM fuzzer 
+                FROM program 
                 ORDER BY inserted_at DESC
                 LIMIT \(limit) OFFSET \(offset)
             """)
@@ -797,7 +782,7 @@ public actor PostgresSQLStorage {
         
             let query = PostgresQuery(stringLiteral: """
                 SELECT program_hash, program_base64 
-                FROM fuzzer 
+                FROM program 
                 WHERE inserted_at > '\(sinceString)'
                 ORDER BY inserted_at ASC
                 LIMIT \(limit)

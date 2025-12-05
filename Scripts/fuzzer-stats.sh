@@ -71,21 +71,18 @@ display_stats() {
     # Aggregate Corpus & Execution
     echo -e "${BOLD}${YELLOW}Aggregate Corpus & Execution:${NC}"
     
-    local total_programs=$(query_db "SELECT COUNT(*) FROM program;")
-    local corpus_size=$(query_db "SELECT COUNT(*) FROM fuzzer;")
+    local corpus_size=$(query_db "SELECT COUNT(*) FROM program;")
     local total_executions=$(query_db "SELECT COUNT(*) FROM execution;")
     local valid_samples=$(query_db "SELECT COUNT(DISTINCT e.program_hash) FROM execution e WHERE e.execution_outcome_id = 3;")
     local interesting_samples=$(query_db "SELECT COUNT(DISTINCT e.program_hash) FROM execution e WHERE e.is_new_edge = TRUE;")
     
     if [ "$total_executions" -eq 0 ]; then
         echo -e "  ${YELLOW}⚠ Status: Building initial corpus (no executions yet)${NC}"
-        echo -e "  Programs Generated:          $(format_number $total_programs)"
         echo -e "  Corpus Size:                 $(format_number $corpus_size)"
         echo -e "  ${CYAN}ℹ Fuzzing will start once corpus generation completes${NC}"
     else
         echo -e "  Total Samples:               $(format_number $total_executions)"
         echo -e "  Total Executions:            $(format_number $total_executions)"
-        echo -e "  Unique Programs:             $(format_number $total_programs)"
         echo -e "  Corpus Size (all fuzzers):   $(format_number $corpus_size)"
         echo -e "  Interesting Samples Found:   $(format_number $interesting_samples)"
         echo -e "  Valid Samples Found:         $(format_number $valid_samples)"

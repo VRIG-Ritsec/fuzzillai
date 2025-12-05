@@ -14,7 +14,7 @@ from openai import OpenAI
 import subprocess
 import os
 import json
-import pathlib
+from pathlib import *
 import sys
 import re
 
@@ -55,6 +55,13 @@ try:
     from tools.cfg_tool import *
     cfg_builder = CFGBuilder(V8_PATH)
     cfg_builder.parse_directory(V8_PATH, pattern='*.cc')
+    # Ensure call graph parents are populated once parsing completes.
+    try:
+        if not hasattr(cfg_builder, "_finalized") or not cfg_builder._finalized:
+            cfg_builder.finalize_call_graph()
+            cfg_builder._finalized = True
+    except Exception as e:
+        print(f"[CFG] finalize_call_graph failed: {e}")
 except Exception as e:
     # Define fallback functions if CFG tools can't be imported
     def find_function_cfg(function_name: str) -> str:
@@ -184,27 +191,6 @@ def write_rag_db(content: str, metadata_json: str = "") -> str:
         return f"Error writing to RAG DB: {e}"
 
 
-@tool
-def find_function_cfg(function_name: str) -> str:
-    """
-        Retrieve and return a specific function's CFG as a tree structure.
-        
-        Args:
-            function_name: Name of the function to search for (partial match supported)
-        
-        Tree structure:
-            Each node in the tree contains:
-                - id: Unique node identifier
-                - kind: Type of node (ENTRY, IF_STMT, WHILE_STMT, etc.)
-                - content: Code snippet
-                - location: Source location (file, line, column)
-                - children: List of successor nodes
-                - is_cycle: True if this node creates a cycle (loop backedge)
-                - is_backedge: True if already visited (prevents infinite recursion)
-    """
-    if cfg_builder is None:
-        return "CFG analysis not available - clang library not found"
-    return cfg_builder.get_function_cfg(function_name)
 
 
 @tool
@@ -322,3 +308,167 @@ def git_show(commit_hash: str) -> str:
 
     cmd =  f'cd {V8_PATH} && git show {commit_hash}'
     return get_output(run_command(cmd))
+
+
+
+
+# ---------------------------------------------------------------------------
+# In-memory call graph hashmap (rebuilt on startup)
+# ---------------------------------------------------------------------------
+# Desired structure:
+# call_graph = {
+#     "v8::internal::func1": {
+#         "entry_nodes": ["F1", "F2", "F3"],
+#         "exit_nodes": ["F4", "F5", "F6"],
+#         "file_path": "v8/src/heap/heap.cc",
+#         "line_number": 100
+#     },
+#     ...
+# }
+# We map entry/exit to the CFG entry/exit node IDs (as strings) when available.
+# ---------------------------------------------------------------------------
+
+
+def _build_call_graph_hashmap():
+    """
+    Build the call graph hashmap from the cfg_builder's call graph
+    representing the call graph of the V8 engine.
+    
+    Args:
+        None
+    Returns:
+        dict: The call graph hashmap.
+    """
+    cg = {}
+    if cfg_builder is None:
+        return cg
+        
+    for full_name, info in cfg_builder.call_graph.items():
+        cfg = cfg_builder.cfgs.get(full_name)
+        entry_id = str(info.get("entry")) if info.get("entry") is not None else None
+        exit_id = str(info.get("exit")) if info.get("exit") is not None else None
+        file_path = None
+        line_number = None
+        if info.get("location"):
+            file_path = info["location"].get("file")
+            line_number = info["location"].get("line")
+
+        cg[full_name] = {
+            "entry_nodes": [entry_id] if entry_id else [],
+            "exit_nodes": [exit_id] if exit_id else [],
+            "file_path": file_path,
+            "line_number": line_number,
+        }
+    return cg
+
+CALL_GRAPH_HASHMAP = _build_call_graph_hashmap()
+
+
+@tool
+def get_call_graph_hashmap() -> str:
+    """
+    Return the in-memory call graph hashmap with entry/exit nodes and locations.
+
+    Args:
+        None
+    Returns:
+        str: The call graph hashmap in JSON format.
+    """
+    try:
+        return json.dumps(CALL_GRAPH_HASHMAP, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to serialize call graph hashmap: {e}"})
+
+DEFAULT_CFG_JSON = Path(__file__).resolve().parent / "cfg" / "v8_cfg_output.json"
+CFG_JSON_PATH = Path(os.getenv("V8_CFG_JSON_PATH", default=DEFAULT_CFG_JSON))
+
+
+def _load_cfg_json():
+    """
+    Load precomputed CFGs from JSON representing the CFGs of the V8 engine.
+
+    Args:
+        None
+    Returns:
+        dict: The CFG hashmap in JSON format.
+    """
+    if not CFG_JSON_PATH.exists():
+        print(f"[CFG] CFG JSON not found at {CFG_JSON_PATH}; CFG cache not loaded")
+        return {}
+
+    try:
+        with open(CFG_JSON_PATH, "r") as f:
+            data = json.load(f)
+        cfg_map = data.get("cfgs", {})
+        print(f"[CFG] Loaded {len(cfg_map)} CFGs from {CFG_JSON_PATH}")
+        return cfg_map
+    except Exception as e:
+        print(f"[CFG] Error loading CFG JSON {CFG_JSON_PATH}: {e}")
+        return {}
+
+
+# Global, in-memory maps for fast access during this process' lifetime.
+# CFG_HASHMAP = cfg_builder.cfgs if cfg_builder else {}
+CFG_JSON_MAP = _load_cfg_json()
+
+# Preferred lookup: hashmaps if present, else in-memory json.
+CFG_MAP = CFG_JSON_MAP     # CFG_HASHMAP if CFG_HASHMAP else CFG_JSON_MAP
+CALL_GRAPH_MAP = CALL_GRAPH_HASHMAP
+
+@tool
+def get_cfg_for(function_name: str) -> dict:
+    """
+    Get the Control Flow Graph (CFG) for a fully qualified function name of the V8 engine.
+
+    Args:
+        function_name (str): The name of the function to get the CFG for.
+    Returns:
+        dict: The CFG for the function in JSON format.
+    """
+    return json.dumps(CFG_MAP.get(function_name), indent=2)
+
+
+@tool
+def find_functions_by_simple_name(simple_name: str) -> list[str]:
+    """
+    Find all fully qualified functions matching a simple function name.
+    Useful when you only know the spelling and want to map to the call graph keys of the V8 engine.
+
+    Args:
+        simple_name (str): The name of the function to find.
+    Returns:
+        list: A list of fully qualified function names that match the simple name.
+    """
+    matches = []
+    for full_name, info in CALL_GRAPH_MAP.items():
+        if info.get("function_name") == simple_name or simple_name in full_name:
+            matches.append(full_name)
+    return matches
+
+@tool
+def find_functions_by_fully_qualified_name(fully_qualified_name: str) -> list[str]:
+    """
+    Find all fully qualified functions matching a fully qualified name of the V8 engine.
+
+    Args:
+        fully_qualified_name (str): The fully qualified name of the function to find.
+    Returns:
+        list: A list of fully qualified function names that match the fully qualified name.
+    """
+    matches = []
+    for full_name, info in CALL_GRAPH_MAP.items():
+        if full_name == fully_qualified_name:
+            matches.append(full_name)
+    return matches
+
+@tool
+def get_call_graph_node(function_name: str) -> dict:
+    """
+    Get the call graph node for a fully qualified function name of the V8 engine.
+
+    Args:
+        function_name (str): The fully qualified name of the function to get the call graph node for.
+    Returns:
+        dict: The call graph node for the function.
+    """
+    return CALL_GRAPH_MAP.get(function_name)

@@ -10,7 +10,6 @@ import logging
 from datetime import datetime
 import pytz
 import config_loader as config_loader 
-#from agents.FoG import Father
 from agents.EBG_crash import EBG_Crash
 from agents.EBG_plateau import EBG_Plateau
 from smolagents import LiteLLMModel
@@ -38,7 +37,7 @@ except Exception:
 
 
 class EthiopianBoiledEgg:
-    def __init__(self, mode: str = "Crash", fuzzer_id: str = "fuzzer-1", crash_name: str = "test_crash"):
+    def __init__(self, mode: str = "Crash", fuzzer_id: str = "fuzzer-1", crash_program_hash: str = None):
         logger.info("Initializing EthiopianBoiledEgg")
         self.openai_api_key = get_openai_api_key()
         self.anthropic_api_key = get_anthropic_api_key()
@@ -50,7 +49,7 @@ class EthiopianBoiledEgg:
         self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
         print("System is running in " + mode + " mode")
         if mode == "Crash":
-            self.system = EBG_Crash(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, crash_name=crash_name)
+            self.system = EBG_Crash(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, crash_program_hash=crash_program_hash)
         elif mode == "Plateau":
             self.system = EBG_Plateau(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, fuzzer_id=fuzzer_id)
 
@@ -120,7 +119,7 @@ def run(force_logging: bool = True):
 
     logger.info("something funny")
     logger.info(f"time: {datetime.now(est_timezone)}")
-    a = EthiopianBoiledEgg(mode="Crash")
+    a = EthiopianBoiledEgg(mode="Plateau")
     path = os.path.join(os.getenv('FUZZILLI_PATH', ''), "Sources", "Agentic_System")
     if (not os.path.exists(os.path.join(path, "regressions.json"))):
         try:

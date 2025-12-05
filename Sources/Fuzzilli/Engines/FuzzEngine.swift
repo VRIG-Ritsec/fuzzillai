@@ -69,10 +69,12 @@ public class FuzzEngine: ComponentBase {
                     program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
                 }
                 fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
+                fuzzer.adjustMutatorWeightsForInvalid()
                 program.contributors.generatedInvalidSample()
 
             case .timedOut:
                 fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
+                fuzzer.adjustMutatorWeightsForTimeout()
                 program.contributors.generatedTimeOutSample()
         }
 

@@ -41,16 +41,16 @@ global root_manager_prompt
 root_manager_prompt = None
 
 class EBG_Crash(Agent): 
-    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, crash_name: Optional[str] = None):
-        if crash_name is None:
-            raise ValueError("crash_name must be provided for EBG_Crash")
-        self.crash_name = crash_name
+    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, crash_program_hash: Optional[str] = None):
+        if crash_program_hash is None:
+            raise ValueError("crash_program_hash must be provided for EBG_Crash")
+        self.crash_program_hash = crash_program_hash
         super().__init__(model, api_key, anthropic_api_key)
     
-    def setup_agents(self, crash_name: Optional[str] = None):
-        if crash_name is None:
-            crash_name = getattr(self, 'crash_name', None)
-        if crash_name is None:
+    def setup_agents(self, crash_program_hash: Optional[str] = None):
+        if crash_program_hash is None:
+            crash_program_hash = getattr(self, 'crash_program_hash', None)
+        if crash_program_hash is None:
             return
         """
         Crash Manager
@@ -71,7 +71,7 @@ class EBG_Crash(Agent):
         """
         global root_manager_prompt
         root_manager_prompt = self.get_prompt("variant_manager.txt")
-        root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", crash_name)
+        root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", crash_program_hash)
 
         # L2 Worker: V8 Search 
         self.agents['v8_search'] = ToolCallingAgent(

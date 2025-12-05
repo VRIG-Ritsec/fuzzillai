@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC
+/// Copyright 2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -479,6 +479,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
             (runtimeMutationEngine, 1),
             (runtimeHybridEngine, 1),
         ])
+        // this returns -NaN or MAX for some weird reasons
         mutators = RuntimeWeightedList(from: mutators)
         engine = MultiEngine(engines: engines, initialActive: runtimeMutationEngine, iterationsPerEngine: 10000)
     default:

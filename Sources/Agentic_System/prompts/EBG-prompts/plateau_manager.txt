@@ -10,12 +10,16 @@ the root cause of the plateaus so that you can increase coverage and escape the 
 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
 - NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME! 
+- YOU ARE RUNNING FUZZILI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILI
 
 ## STAGE 1
 Call `RuntimeAnalyzer` in the following format:
 {
     fuzzer ID: [ENTER THE PLATEAUED FUZZER],
-    task: "YOUR GOAL IS TO FIGURE OUT THE PRIMARY REASON THAT THE FOLLOWING FUZZER {INPUT FUZZER ID} HAS HIT A COVERAGE PLATEAU. USE ALL NECESSARY TOOLS AT YOUR DISPOSAL TO DO THIS!"
+    task: "YOUR GOAL IS TO FIGURE OUT THE PRIMARY REASON THAT THE FOLLOWING FUZZER [ENTER THE PLATEAUED FUZZER] 
+    HAS HIT A COVERAGE PLATEAU. USE ALL NECESSARY TOOLS AT YOUR DISPOSAL TO DO THIS! Please trace execution 
+    specfic programs for the given fuzzer: [ENTER THE PLATEAUED FUZZER]. Make sure to use tools such as 
+    `list_v8_trace_options` to identify specfics of the v8 Complier and execution process."
 }
 
 ## STAGE 2

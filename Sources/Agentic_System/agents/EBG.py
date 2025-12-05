@@ -156,7 +156,9 @@ class EBG(Agent):
                 name="RuntimeAnalyzer",
                 description="L1 Manager responsible for analyzing program runtime, coverage, and execution state",
                 tools=[
-
+                    execute_javascript_program,
+                    list_d8_flags,
+                    list_v8_trace_options,
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
@@ -268,6 +270,8 @@ class EBG(Agent):
                 tools=[
                     execute_javascript_program,
                     list_d8_flags,
+                    list_v8_trace_options,
+
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[

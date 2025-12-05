@@ -24,6 +24,12 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
         cumulativeRuntimeWeight: Float
     )]()
     private(set) var totalRuntimeWeight: Float = 0.0
+    
+    /// The learning rate (alpha) for EWMA.
+    /// Controls how much recent results influence the weight.
+    /// Higher values = faster adaptation but more noise.
+    /// Lower values = smoother but slower adaptation.
+    private let learningRate: Float = 0.1
     // cache of most recently selected mutators
     private var lastElements: [Element] = []
 
@@ -41,36 +47,60 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
     }
 
     public var description: String {
-        return String(format: "%.2f", totalRuntimeWeight)
+        var str = "Total: \(String(format: "%.2f", totalRuntimeWeight)) ["
+        for (i, e) in elements.enumerated() {
+            if i > 0 { str += ", " }
+            str += "\(e.elem): \(String(format: "%.2f", e.runtimeWeight))"
+        }
+        str += "]"
+        return str
     }
 
-    // When applying the factor to the elements runtimeWeight, floating point imprecision is introduced.
-    // This can cause floating point drift for the last element's cumulativeRuntimeWeight and the totalRuntimeWeight
-    // which may have an impact when choosing a weighted mutation. 
-    public func adjustWeight(_ elem: Element, _ factor: Float) {
-        var hitElement = false;
-        var diffWeight: Float = 0.0
+    /// Updates the weight of an element using Exponential Weighted Moving Average (EWMA).
+    ///
+    /// Formula: NewWeight = (1 - alpha) * OldWeight + alpha * Reward
+    ///
+    /// - Parameters:
+    ///   - elem: The element to update.
+    ///   - reward: The reward signal (e.g., 1.0 for success, 0.0 for failure).
+    public func update(_ elem: Element, reward: Float) {
         for i in 0..<elements.count {
-            if (hitElement) {
-                elements[i].cumulativeRuntimeWeight += diffWeight
-            } else if elements[i].elem == elem {
-                let ogRuntimeWeight = elements[i].runtimeWeight
-                elements[i].runtimeWeight *= factor 
-                diffWeight = elements[i].runtimeWeight - ogRuntimeWeight
-                totalRuntimeWeight += diffWeight 
-                hitElement = true;
+            if elements[i].elem == elem {
+                let oldWeight = elements[i].runtimeWeight
+                
+                // EWMA update
+                var newWeight = (1.0 - learningRate) * oldWeight + learningRate * reward
+                
+                // Clamp weights to keep them reasonable (e.g., never exactly 0)
+                // We use a base weight of 0.01 to ensure every mutator has a non-zero chance.
+                if newWeight < 0.01 {
+                    newWeight = 0.01
+                } else if newWeight > 100.0 {
+                    newWeight = 100.0
+                }
+                
+                elements[i].runtimeWeight = newWeight
+                break
             }
         }
+        
+        // Recompute cumulative weights
+        var currentCumulative: Float = 0.0
+        for i in 0..<elements.count {
+            currentCumulative += elements[i].runtimeWeight
+            elements[i].cumulativeRuntimeWeight = currentCumulative
+        }
+        totalRuntimeWeight = currentCumulative
     }
 
-    public func adjustBatchWeight(_ hitElements: [Element], _ factorHit: Float?, _ factorNotHit: Float?) {
-        for element in elements {
-            let elem: Element = element.elem
-            if hitElements.contains(elem) {
-                adjustWeight(elem, factorHit ?? 1.1)
-            } else {
-                adjustWeight(elem, factorNotHit ?? 0.9)
-            }
+    /// Updates weights for a batch of elements.
+    ///
+    /// - Parameters:
+    ///   - activeElements: The elements that were active.
+    ///   - reward: The reward to assign to these elements.
+    public func updateBatch(_ activeElements: [Element], reward: Float) {
+        for elem in activeElements {
+            update(elem, reward: reward)
         }
     }
 
@@ -84,16 +114,16 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
     
     public func append(_ elem: Element, withWeight weight: Int, runtimeWeight: Float) {
         assert(weight > 0)
+        let previousCumulativeWeight = totalRuntimeWeight
         totalRuntimeWeight += runtimeWeight
+        totalWeight += weight
         elements.append((elem, weight, totalWeight, runtimeWeight, totalRuntimeWeight))
     }
 
     public func weightedElement() -> Element {
-        let k = Float.random(in: 0.0...totalRuntimeWeight - elements.last!.runtimeWeight)
-        //print("elements.count == \(elements.count); elements.last.cumulativeRuntimeWeight == \(elements.last!.cumulativeRuntimeWeight)")
+        let k = Float.random(in: 0.0..<totalRuntimeWeight)
         for i in 0..<elements.count {
-            //print("k: \(k), elements[\(i)].cumulativeRuntimeWeight \(elements[i].cumulativeRuntimeWeight) totalRuntimeWeight \(totalRuntimeWeight)")
-            if elements[i].cumulativeRuntimeWeight >= k {
+            if elements[i].cumulativeRuntimeWeight > k {
                 lastElements.append(elements[i].elem)
                 return elements[i].elem
             }
@@ -111,5 +141,10 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
 
     public func flushLastElements() -> Void {
         lastElements = []
+    }
+
+    // Override to use our own elements array (the parent class's is shadowed and empty)
+    public override func makeIterator() -> Array<Element>.Iterator {
+        return elements.map({ $0.elem }).makeIterator()
     }
 }

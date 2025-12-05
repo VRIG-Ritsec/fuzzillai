@@ -54,7 +54,7 @@ class EBG(Agent):
         """
         Version 1: Plateau Manager
 
-        This is the verison of ebg that gets called after a fuzzing instance has hit a plateau in coverage
+        This is the verison of EBG that gets called after a fuzzing instance has hit a plateau in coverage
         its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
 
 
@@ -167,8 +167,9 @@ class EBG(Agent):
             """
             Version 2: Variant Manager
 
-            This is the verison of ebg that gets called after a fuzzing instance has hit a plateau in coverage
-            its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus
+            This is the version of EBG that will get called when a there is a crash populating the crashes/ directory.
+            it is responsible for figuring out why the crash is happening and trying to find code similar to the crashing 
+            code across the codebase. It will then attempt to generate variants of the initial poc that crashes on these similar paths.
 
 
             Root Manager (L0)

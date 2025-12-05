@@ -306,7 +306,7 @@ def db_get_program_grouping(fuzzer_id: int, time_window_hours: int = 1, size_tol
     Analyzes program convergence patterns by grouping similar-sized programs and their outcomes.
     Uses the program_convergence materialized view.
     
-    Args:
+    Args:Specific
         fuzzer_id: The fuzzer instance to analyze
         time_window_hours: How far back to look (default 1 hours)
         size_tolerance_bytes: Group programs within this size range together (default 50 bytes)
@@ -491,8 +491,6 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
     finally:
         if conn:
             conn.close()
-    
-
 
 @tool
 def create_generate_folder() -> str:
@@ -920,3 +918,89 @@ def list_v8_trace_options() -> str:
             }
         }
     }, indent=2)
+
+# TODO Finish this generic program storage tool call. 
+# Programs need to be compiled to FuzzIL, serialized to protobuf, then base64 encoded before storage.
+# This means we need to either use the FoG tool call (subprocess to FuzzILTool) to compile 
+# Sources/Agentic_System/tools/FoG_tools.py:330
+# or you can FFI the swift directly :shrug:
+#
+# This can then be inserted into a generated programs database table
+# Then the table can be appending to the main queue corpus table, and flushed after.
+@tool
+def db_store_generated_program(js_program: str, fuzzer_id: int) -> str:
+    """
+    Store a generated JavaScript program in the fuzzer table (corpus) for execution.
+    The program is base64 encoded and hashed (SHA-256) before storage.
+    
+    Args:
+        js_program (str): The JavaScript program to store in the database.
+        fuzzer_id (int): The fuzzer instance ID to associate this program with.
+    
+    Returns:
+        str: A JSON string containing the program ID.
+             Format: {
+                 "program_id": "[64 character SHA-256 hash]"
+             }
+    """
+    conn = None
+    try:
+        # Validate input
+        if not js_program or not js_program.strip():
+            return json.dumps({"error": "js_program is required and cannot be empty"}, indent=2)
+        
+        if not fuzzer_id or fuzzer_id <= 0:
+            return json.dumps({"error": "fuzzer_id is required and must be a positive integer"}, indent=2)
+        
+        # Base64 encode the JavaScript program
+        js_program_bytes = js_program.encode('utf-8')
+        js_program_base64 = base64.b64encode(js_program_bytes).decode('utf-8')
+        
+        # Calculate SHA-256 hash of the base64 encoded program (64 character hex string)
+        program_hash = hashlib.sha256(js_program_base64.encode('utf-8')).hexdigest()
+        
+        # Connect to database
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Insert into fuzzer table (corpus)
+        # Use ON CONFLICT DO NOTHING to handle duplicate programs gracefully
+        insert_query = """
+            INSERT INTO fuzzer (program_hash, fuzzer_id, program_base64)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (program_hash) DO NOTHING
+            RETURNING program_hash
+        """
+        cursor.execute(insert_query, (program_hash, fuzzer_id, js_program_base64))
+        
+        # Fetch the inserted row
+        row = cursor.fetchone()
+        conn.commit()
+        
+        # If row is None, the program already existed (conflict)
+        if row is None:
+            result = {
+                "program_id": program_hash,
+                "message": "Program already exists in database"
+            }
+        else:
+            result = {
+                "program_id": row['program_hash']
+            }
+        
+        return json.dumps(result, default=json_serial, indent=2)
+        
+    except psycopg2.Error as e:
+        return json.dumps({"error": f"Database error: {e}"}, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Error storing JavaScript program: {e}"}, indent=2)
+    finally:
+        if conn:
+            conn.close()
+    

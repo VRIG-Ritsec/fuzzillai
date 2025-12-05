@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
-EBG Variant
-L0 Manager Agent - Variant analysis for crashes
+EBG Plateau
+L0 Manager Agent - Plateau analysis
 '''
 
 from smolagents import LiteLLMModel, ToolCallingAgent
@@ -40,35 +40,35 @@ sys.path.append(str(Path(__file__).parent.parent))
 global root_manager_prompt
 root_manager_prompt = None
 
-class EBG_Variant(Agent): 
-    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, program_variant: Optional[str] = None):
+class EBG_Plateau(Agent): 
+    def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, fuzzer_id: Optional[str] = None):
+        if fuzzer_id is None:
+            raise ValueError("fuzzer_id must be provided for EBG_Plateau")
+        self.fuzzer_id = fuzzer_id
         super().__init__(model, api_key, anthropic_api_key)
-        if program_variant is None:
-            raise ValueError("program_variant must be provided for EBG_Variant")
-        self.program_variant = program_variant
-        self.setup_agents(program_variant)
     
-    def setup_agents(self, program_variant: str):
+    def setup_agents(self, fuzzer_id: Optional[str] = None):
+        if fuzzer_id is None:
+            fuzzer_id = getattr(self, 'fuzzer_id', None)
+        if fuzzer_id is None:
+            return
         """
-        Variant Manager
+        Plateau Manager
 
-        This is the version of EBG that will get called when there is a crash populating the crashes/ directory.
-        It is responsible for figuring out why the crash is happening and trying to find code similar to the crashing 
-        code across the codebase. It will then attempt to generate variants of the initial poc that crashes on these similar paths.
+        This is the version of EBG that gets called after a fuzzing instance has hit a plateau in coverage.
+        Its call is to figure out why the plateau is happening and how to escape it by finding new variants of the code that are not already in the corpus.
 
         Root Manager (L0)
         ├── Runtime Analyzer (L1)
         │   ├── V8 Search (L2)
         │   ├── DB Analyzer (L2)
         │   └── Debugger (L2)
-        └── Variant Analysis (L1)
-            ├── V8 Search (L2)
-            ├── Debugger (L2)
-            └── JS Generator (L2)
+        └── JS Generator (L1)
+            └── Corpus Validator (L2)
         """
         global root_manager_prompt
-        root_manager_prompt = self.get_prompt("variant_manager.txt")
-        root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", program_variant)
+        root_manager_prompt = self.get_prompt("plateau_manager.txt")
+        root_manager_prompt = root_manager_prompt.replace("[ENTER THE PLATEAUED FUZZER]", fuzzer_id)
 
         # L2 Worker: V8 Search 
         self.agents['v8_search'] = ToolCallingAgent(
@@ -108,7 +108,6 @@ class EBG_Variant(Agent):
                 write_to_generate_folder,
                 delete_files_from_generate_folder,
                 list_generate_folder,
-                create_generate_folder,
             ],
             model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
             max_steps=30,
@@ -132,16 +131,17 @@ class EBG_Variant(Agent):
         )
         self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
 
-        # L2 Worker: JS Generator 
+        # L1 Manager: JS Generator
         self.agents['JS_Generator'] = ToolCallingAgent(
             name="JSGenerator",
-            description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
+            description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
             tools=[],
-            model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
+            model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
             max_steps=30,
             planning_interval=None,
         )
         self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
+        self.agents['JS_Generator'].managed_agents = []
 
         # L1 Manager: Runtime Analyzer  
         self.agents['runtime_analyzer'] = ToolCallingAgent(
@@ -151,6 +151,7 @@ class EBG_Variant(Agent):
                 execute_javascript_program,
                 list_d8_flags,
                 list_v8_trace_options,
+                trace_v8_analysis,
                 read_from_generate_folder,
                 list_generate_folder,
             ],
@@ -165,33 +166,10 @@ class EBG_Variant(Agent):
         )
         self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
 
-        # L1 Manager: Variant Analysis
-        self.agents['variant_analysis'] = ToolCallingAgent(
-            name="VariantAnalysis",
-            description="L1 Manager responsible for performing variant analysis on crashes",
-            tools=[
-                execute_javascript_program,
-                list_d8_flags,
-                list_v8_trace_options,
-                trace_v8_analysis,
-                read_from_generate_folder,
-                list_generate_folder,
-            ],
-            model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
-            managed_agents=[
-                self.agents['v8_search'],
-                self.agents['debugger'],
-                self.agents['JS_Generator']
-            ],
-            max_steps=30,
-            planning_interval=None,
-        )
-        self.agents['variant_analysis'].prompt_templates["system_prompt"] = self.get_prompt("variant_analysis.txt")
-
         # L0 Root Manager
         root_managed_agents = [
             self.agents['runtime_analyzer'],
-            self.agents['variant_analysis']
+            self.agents['JS_Generator']
         ]
 
         self.agents['root_manager'] = ToolCallingAgent(
@@ -208,21 +186,21 @@ class EBG_Variant(Agent):
         self.agents['root_manager'].prompt_templates["system_prompt"] = root_manager_prompt
 
     def get_prompt(self, prompt_name: str) -> str:
-        f = open(Path(__file__).parent.parent / "prompts" / "EBG-variant-prompts" / prompt_name, 'r')
+        f = open(Path(__file__).parent.parent / "prompts" / "EBG-plateau-prompts" / prompt_name, 'r')
         prompt = f.read()
         f.close()
         return prompt
 
     def start_system(self):
         result = self.run_task(
-            task_description="Initialize EBG Variant orchestration for crash variant analysis",
+            task_description="Initialize EBG Plateau orchestration for runtime analysis and seed verification",
             context={
                 "RuntimeAnalyzer": "Analyze program runtime, coverage, and execution state",
-                "VariantAnalysis": "Perform variant analysis on crashes",
+                "CorpusValidator": "Validate corpus quality and integrity",
                 "DBAnalyzer": "Analyze PostgreSQL database for execution information"
             }
         )
-        print("EBG Variant start result:")
+        print("EBG Plateau start result:")
         print(f"Completed: {result['completed']}")
         if result['output']:
             print(f"Output: {result['output']}")
@@ -244,13 +222,13 @@ def main():
         api_key=deepseek_key
     )
 
-    system = EBG_Variant(model, api_key=deepseek_key, anthropic_api_key=anthropic_key, program_variant="test_crash")
+    system = EBG_Plateau(model, api_key=deepseek_key, anthropic_api_key=anthropic_key, fuzzer_id="fuzzer-1")
     
     result = system.run_task(
-        task_description="Perform variant analysis on crash",
+        task_description="Verify and test JavaScript program seeds",
         context={
-            "VariantAnalysis": "Perform variant analysis on crashes",
             "RuntimeAnalyzer": "Analyze program execution and coverage",
+            "CorpusValidator": "Validate corpus quality and integrity",
             "DBAnalyzer": "Analyze database for execution information"
         }
     )

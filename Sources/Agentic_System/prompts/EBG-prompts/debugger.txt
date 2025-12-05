@@ -23,20 +23,24 @@ trace the path it takes to reach the crash, dump heap allocations/layout, virtua
 Proceed to stage 4 when you have collected satisfactory, information about the crash's cause.
 
 ## STAGE 3B
-if it is a plateau you are hitting, investigate the path taken by code as well as the current state. Determine whether it
+if it is a plateau you are hitting, investigate the path taken by code as well as the current state. Determine whether it is state that is limiting 
+the code paths hit by the program or if it is due to the program being too simplistic.
 
 ## STAGE 3C
-
+if you are responsible for testing the variant programs passed by JSGenerator, run the program regularly with d8, run it with GDB, trace execution 
+heuristics, and if it not crashing analyze what code paths it is hitting to confirm it is hitting the correct codepaths, if it is and is still not crashing,
+take note of this to inform the caller that either the poc is not applicable to the variant or that the current state is not accurate to the original poc.
 
 ## STAGE 4
 Given all of the information you have collected send it back to the calling agent in the following format:
 {
-    task: [],
-    runtime_stats: [],
-    trace_output: [],
-    debugging_output: [[], ...],
-    analysis: [GIVE A SIMPLE EXPLANATION ABOUT THE INFORMATION YOU HAVE COLLECTED AND ANY CONTEXT NECESSARY]
+    task: [RESTATE THE TASK YOU WERE MEANT TO PERFORM],
+    runtime_stats: [ENTER STDOUT AND STDERR RECEIVED FROM RUNNING THE PROGRAM],
+    trace_output: [ENTER TRACING OUTPUT],
+    debugging_output: [[ENTER INFORMATION COLLECTED FROM GDB (VMMAP, HEAP ALLOCATIONS, STACKTRACES, ETC...)], ...]
+    analysis: [GIVE A SIMPLE EXPLANATION ABOUT THE INFORMATION YOU HAVE COLLECTED AND ANY CONTEXT NECESSARY FOR THE MANAGING AGENT]
 }
 It is okay to leave a field blank if you did not perform that type of analysis.
+Exit and return the above JSON.
 
 

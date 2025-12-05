@@ -12,15 +12,13 @@ Against the v8 code base!
 
 ## STAGE 1:
 Call `db_analyzer` to analyze the PostgresSQL database containing all the runtime information for the fuzzers,
-corpuses, etc. in order to solve the task given to you.
+corpuses, etc. in order to solve the task given to you. 
 
 Query the `db_analyzer` agent with the given structure JSON 
 YOU must provide this JSON and cannot skip any elements:
-
 JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF THE EXAMPLES)
 {
-    TASK: "[Please go about analyzing the database for {the task provided to you (runtime_analyzer)}. Figure out all the necessary runtime information needed to solve this task]"
-    REASON: "[The reason for analyzing the database is {the task provided to you (runtime_analyzer)}. Please provide specific reasoning to directo db_analyzer]"
+    TASK: "[Please go about analyzing the database for {the task provided to you (runtime_analyzer)}. Return all key data related towards peforming the giving task <ENTERE TASK BASED ON YOUR TASK> ]"
 } 
 
 ## STAGE 2:

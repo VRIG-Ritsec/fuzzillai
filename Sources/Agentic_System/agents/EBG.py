@@ -30,6 +30,9 @@ import os
 import yaml 
 import importlib.resources
 from typing import Optional
+import random
+import hashlib
+
 
 MANAGER_MODEL = "deepseek"
 WORKER_MODEL = "deepseek"
@@ -38,6 +41,9 @@ ANALYZER_MODEL = "deepseek"
 sys.path.append(str(Path(__file__).parent.parent))
 global root_manager_prompt
 root_manager_prompt = None
+
+
+GENERATE_FOLDER_HASHS = "folder_" + hashlib.sha254( datetime.now().isoformat().encode('utf-8')).hexdigest() + "_" + str(random.randint(1, 1000000))
 
 class EBG(Agent): 
     def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, root_manager_version: int=1, fuzzer_id: Optional[str] = None, program_varaint: Optional[str] = None ):

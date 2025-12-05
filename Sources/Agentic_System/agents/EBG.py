@@ -117,7 +117,13 @@ class EBG(Agent):
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
+            prompt= self.get_prompt("db_analyzer.txt")
+            f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
+            sql_file = f.read()
+            f.close()
+            prompt + "\n Here is the latest programs from the database: " + sql_file
+            self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
+
 
 
             # L2 Worker: Debugger 
@@ -224,7 +230,14 @@ class EBG(Agent):
                 max_steps=8,
                 planning_interval=None,
             )
-            self.agents['db_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("db_analyzer.txt")
+            prompt= self.get_prompt("db_analyzer.txt")
+            f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
+            sql_file = f.read()
+            f.close()
+            prompt + "\n Here is the latest programs from the database: " + sql_file
+            self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
+
+
 
             self.agents['debugger'] = ToolCallingAgent(
                 name="Debugger",

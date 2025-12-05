@@ -306,7 +306,7 @@ def db_get_program_grouping(fuzzer_id: int, time_window_hours: int = 1, size_tol
     Analyzes program convergence patterns by grouping similar-sized programs and their outcomes.
     Uses the program_convergence materialized view.
     
-    Args:Specific
+    Args:
         fuzzer_id: The fuzzer instance to analyze
         time_window_hours: How far back to look (default 1 hours)
         size_tolerance_bytes: Group programs within this size range together (default 50 bytes)

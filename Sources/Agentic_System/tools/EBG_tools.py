@@ -11,6 +11,8 @@ import psycopg2.extras
 import datetime
 import base64
 
+from agents.EBG import GENERATE_FOLDER_HASHS
+
 # Environment variables (optional, for remote PostgreSQL):
 #   - POSTGRES_HOST: Remote PostgreSQL host/IP (if set, connects to remote instead of local container)
 #   - POSTGRES_PORT: PostgreSQL port (default: 5432)
@@ -488,6 +490,77 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
         if conn:
             conn.close()
     
+
+
+@tool
+def create_generate_folder() -> str:
+    """
+    Create a folder for the generate folder hash
+
+    Returns:
+        str: A JSON string containing the message that the folder was created
+    """
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    return json.dumps({"message": f"Folder {GENERATE_FOLDER_HASHS} created"})
+
+@tool
+def write_to_generate_folder(file_name: str, content: str) -> str:
+    """
+    Write to a file in the generate folder. This will be used to store the results of the analysis.
+    Use this to insert any data you found interesting in the Database!
+
+    Args:
+        file_name: The name of the file to write to
+        content: The content to write to the file
+    
+    Returns:
+        str: A JSON string containing the message that the file was written to the folder
+    """
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    with open(os.path.join(GENERATE_FOLDER_HASHS, file_name), "w") as f:
+        f.write(content)
+    return json.dumps({"message": f"File {file_name} written to folder {GENERATE_FOLDER_HASHS} with content:\n\n {content[:500]}..."})
+
+@tool
+def read_from_generate_folder(file_name: str) -> str:
+    """
+    Read from a file in the generate folder.
+
+    Args:
+        file_name: The name of the file to read from the folder
+    
+    Returns:
+        str: The content of the file
+    """
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    with open(os.path.join(GENERATE_FOLDER_HASHS, file_name), "r") as f:
+        return f.read()
+    return json.dumps({"message": f"File {file_name} read from folder {GENERATE_FOLDER_HASHS} with content:\n\n {content[:500]}..."})
+
+@tool 
+def list_generate_folder() -> str:
+    """
+    List all files in the generate folder.
+
+    Returns:
+        str: A JSON string containing the list of files in the folder
+    """
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    return json.dumps({"message": f"Files in folder {GENERATE_FOLDER_HASHS}: {os.listdir(GENERATE_FOLDER_HASHS)}"})
+@tool
+def delete_files_from_generate_folder(file_name: str) -> str:
+    """
+    Delete the files from the generate folder. Make sure to only delete files that you are sure you want to delete!
+
+    Args:
+        file_name: The name of the file to delete from the folder
+
+    Returns:
+        str: A JSON string containing the message that the file was deleted from the folder
+    """
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    os.remove(os.path.join(GENERATE_FOLDER_HASHS, file_name))
+    return json.dumps({"message": f"File {file_name} deleted from folder {GENERATE_FOLDER_HASHS}"})
 
 
 V8_TRACE_PRESETS = {

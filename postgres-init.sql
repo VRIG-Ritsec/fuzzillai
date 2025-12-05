@@ -31,6 +31,7 @@ CREATE INDEX idx_fuzzer_composite ON fuzzer(fuzzer_id, inserted_at DESC);
 CREATE TABLE IF NOT EXISTS program (
     program_hash VARCHAR(64) PRIMARY KEY REFERENCES fuzzer(program_hash) ON DELETE CASCADE,
     fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
+    -- TODO ALeksi: Merge the below 4 field int fuzzer table above and rename fuzzer table to program
     created_at TIMESTAMP DEFAULT NOW(),
     source_mutators VARCHAR(50)[],  -- Array of mutator names that contributed to this program
     contributors VARCHAR(50)[],      -- Array of all contributor names (mutators + other sources)

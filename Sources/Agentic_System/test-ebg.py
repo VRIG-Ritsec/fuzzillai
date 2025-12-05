@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from agents.EBG import *
+from tools.EBG_tools import *
 
 import time
 

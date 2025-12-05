@@ -30,8 +30,6 @@ import os
 import yaml 
 import importlib.resources
 from typing import Optional
-import random
-import hashlib
 
 
 MANAGER_MODEL = "deepseek"
@@ -41,9 +39,6 @@ ANALYZER_MODEL = "deepseek"
 sys.path.append(str(Path(__file__).parent.parent))
 global root_manager_prompt
 root_manager_prompt = None
-
-
-GENERATE_FOLDER_HASHS = "folder_" + hashlib.sha254( datetime.now().isoformat().encode('utf-8')).hexdigest() + "_" + str(random.randint(1, 1000000))
 
 class EBG(Agent): 
     def __init__(self, model: LiteLLMModel, api_key: str = None, anthropic_api_key: str = None, root_manager_version: int=1, fuzzer_id: Optional[str] = None, program_varaint: Optional[str] = None ):
@@ -118,16 +113,20 @@ class EBG(Agent):
                     db_get_mutator_effectiveness,
                     db_get_program_grouping,
                     db_get_execution_outcome_distribution,
+                    read_from_generate_folder,
+                    write_to_generate_folder,
+                    delete_files_from_generate_folder,
+                    list_generate_folder,
                 ],
                 model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
             prompt= self.get_prompt("db_analyzer.txt")
             f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
             sql_file = f.read()
             f.close()
-            prompt + "\n Here is the latest programs from the database: " + sql_file
+            prompt = prompt + "\n Here is the latest programs from the database: " + sql_file
             self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
 
 
@@ -138,7 +137,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
                 model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
@@ -149,7 +148,7 @@ class EBG(Agent):
                 description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
@@ -165,6 +164,9 @@ class EBG(Agent):
                     execute_javascript_program,
                     list_d8_flags,
                     list_v8_trace_options,
+                    trace_v8_analysis,
+                    read_from_generate_folder,
+                    list_generate_folder,
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
                 managed_agents=[
@@ -172,7 +174,7 @@ class EBG(Agent):
                     self.agents['db_analyzer'],
                     self.agents['debugger']
                 ],
-                max_steps=10,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
@@ -234,16 +236,22 @@ class EBG(Agent):
                     db_get_mutator_effectiveness,
                     db_get_program_grouping,
                     db_get_execution_outcome_distribution,
+                    read_from_generate_folder,
+                    write_to_generate_folder,
+                    delete_files_from_generate_folder,
+                    list_generate_folder,
+                    create_generate_folder,
                     ],
                 model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
+            #/home/aleksi/fuzzillai/postgres-init.sql
             prompt= self.get_prompt("db_analyzer.txt")
             f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
             sql_file = f.read()
             f.close()
-            prompt + "\n Here is the latest programs from the database: " + sql_file
+            prompt = prompt + "\n Here is the latest programs from the database: " + sql_file
             self.agents['db_analyzer'].prompt_templates["system_prompt"] = prompt
 
 
@@ -253,7 +261,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for debugging a crash",
                 tools=[],
                 model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
@@ -264,7 +272,7 @@ class EBG(Agent):
                 description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
                 tools=[],
                 model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
-                max_steps=8,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
@@ -277,6 +285,8 @@ class EBG(Agent):
                     execute_javascript_program,
                     list_d8_flags,
                     list_v8_trace_options,
+                    read_from_generate_folder,
+                    list_generate_folder,
 
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
@@ -285,7 +295,7 @@ class EBG(Agent):
                     self.agents['db_analyzer'],
                     self.agents['debugger']
                 ],
-                max_steps=10,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
@@ -295,6 +305,12 @@ class EBG(Agent):
                 name="VariantAnalysis",
                 description="L1 Manager responsible for performing variant analysis on crashes",
                 tools=[
+                    execute_javascript_program,
+                    list_d8_flags,
+                    list_v8_trace_options,
+                    trace_v8_analysis,
+                    read_from_generate_folder,
+                    list_generate_folder,
 
                 ],
                 model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
@@ -303,7 +319,7 @@ class EBG(Agent):
                     self.agents['debugger'],
                     self.agents['JS_Generator']
                 ],
-                max_steps=10,
+                max_steps=30,
                 planning_interval=None,
             )
             self.agents['variant_analysis'].prompt_templates["system_prompt"] = self.get_prompt("variant_analysis.txt")
@@ -333,7 +349,7 @@ class EBG(Agent):
             ],
             model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
             managed_agents=root_managed_agents,
-            max_steps=10,
+            max_steps=30,
             planning_interval=None,
         )
         self.agents['root_manager'].prompt_templates["system_prompt"] = root_manager_prompt

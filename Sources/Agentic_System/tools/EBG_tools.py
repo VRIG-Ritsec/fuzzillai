@@ -10,8 +10,8 @@ import psycopg2
 import psycopg2.extras
 import datetime
 import base64
-
-from agents.EBG import GENERATE_FOLDER_HASHS
+import hashlib
+import random
 
 # Environment variables (optional, for remote PostgreSQL):
 #   - POSTGRES_HOST: Remote PostgreSQL host/IP (if set, connects to remote instead of local container)
@@ -42,6 +42,8 @@ POSTGRES_PASSWORD = 'fuzzilli123' if not os.getenv('POSTGRES_PASSWORD') else os.
 DB_CONTAINER = 'fuzzilli-postgres-master' if not os.getenv('DB_CONTAIER') else os.getenv('DB_CONTAINER')
 
 TEMP_FUZZIL_PATH = "/tmp/temp-base64-fuzzil.fzil"
+
+GENERATE_FOLDER_HASHS = "folder_" + hashlib.sha256(datetime.datetime.now().isoformat().encode('utf-8')).hexdigest() + "_" + str(random.randint(1, 1000000))
 
 def json_serial(obj):
     if isinstance(obj, Decimal):

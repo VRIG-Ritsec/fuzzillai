@@ -12,8 +12,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /mnt/vdc/new-postgres-data/:/var/lib/postgresql/data
-      - /home/aleksi/fuzzillai/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /home/tropic/postgres:/var/lib/postgresql/data
+      - /home/tropic/vrig/fuzzilli-vrig-proj/fuzzillai/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fuzzilli -d fuzzilli_master"]
       interval: 10s

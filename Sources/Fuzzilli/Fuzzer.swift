@@ -1110,17 +1110,33 @@ public class Fuzzer {
 
     public func adjustMutatorWeightsForCrash() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 1.1, 0.9)
+        // Crashes are highly interesting - reward with 1.0
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
     }
     
     public func adjustMutatorWeightsForInteresting() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 1.1, 0.9)
+        // Found new coverage/edges/feedback nexus - reward with 1.0
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
     }
     
     public func adjustMutatorWeightsForValid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.adjustBatchWeight(runtimeMutators.getLastElements(), 0.9, 1.1)
+        // Valid but NOT interesting - neutral/low reward (0.3)
+        // This is better than invalid (0.0) but worse than interesting (1.0)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.3)
+    }
+    
+    public func adjustMutatorWeightsForInvalid() {
+        guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
+        // Invalid program - penalize with 0.0
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0)
+    }
+    
+    public func adjustMutatorWeightsForTimeout() {
+        guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
+        // Timeout - penalize with 0.0
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0)
     }
 
     /// A pending corpus import job together with some statistics.

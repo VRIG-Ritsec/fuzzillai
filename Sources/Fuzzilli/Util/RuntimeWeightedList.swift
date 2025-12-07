@@ -13,91 +13,98 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A list where each element also has a weight, which determines how frequently it is selected by randomElement().
-/// For example, an element with weight 10 is 2x more likely to be selected by randomElement() than an element with weight 5.
+import Foundation
+
+/// A list where each element is selected using Thompson Sampling.
+/// Each element maintains Beta distribution parameters (alpha, beta) representing
+/// successes and failures. Selection samples from each element's Beta distribution
+/// and picks the one with the highest sampled value.
 public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
     private var elements = [(
         elem: Element,
         weight: Int,
         cumulativeWeight: Int,
-        runtimeWeight: Float,
-        cumulativeRuntimeWeight: Float
+        alpha: Double,  // successes + 1 (Beta prior)
+        beta: Double    // failures + 1 (Beta prior)
     )]()
+    
+    // For compatibility with existing code
     private(set) var totalRuntimeWeight: Float = 0.0
     
-    /// The learning rate (alpha) for EWMA.
-    /// Controls how much recent results influence the weight.
-    /// Higher values = faster adaptation but more noise.
-    /// Lower values = smoother but slower adaptation.
-    private let learningRate: Float = 0.1
     // cache of most recently selected mutators
     private var lastElements: [Element] = []
 
     public override init(_ values: [(Element, Int)]) {
         super.init()
-        totalWeight = values.count
-        for (e, _) in values {
-            append(e, withWeight: 1, runtimeWeight: 1.0)
+        totalWeight = 0
+        for (e, w) in values {
+            // Initialize alpha with the configured weight, beta=1
+            // So a mutator with weight 30 starts with alpha=30, beta=1
+            append(e, withWeight: w, alpha: Double(w), beta: 1.0)
         }
     }
 
     public convenience init(from weightedList: WeightedList<Element>) {
-        let values = weightedList.map { ($0, 1) }
+        // Use iteratorWithWeights to preserve the original weights
+        var values: [(Element, Int)] = []
+        for (elem, weight) in weightedList.iteratorWithWeights() {
+            values.append((elem, weight))
+        }
         self.init(values)
     }
 
     public var description: String {
-        var str = "Total: \(String(format: "%.2f", totalRuntimeWeight)) ["
+        // Calculate total weight across all elements using Beta distribution mean
+        var totalWeight: Double = 0.0
+        for e in elements {
+            // Mean of Beta(alpha, beta) = alpha / (alpha + beta)
+            // This is always positive and represents the expected success rate
+            totalWeight += e.alpha / (e.alpha + e.beta)
+        }
+        
+        var str = "Total: \(String(format: "%.7f", totalWeight)) ["
         for (i, e) in elements.enumerated() {
             if i > 0 { str += ", " }
-            str += "\(e.elem): \(String(format: "%.2f", e.runtimeWeight))"
+            // Use Beta mean as the weight display
+            let weight = e.alpha / (e.alpha + e.beta)
+            str += "\(e.elem): \(String(format: "%.7f", weight))"
         }
         str += "]"
         return str
     }
 
-    /// Updates the weight of an element using Exponential Weighted Moving Average (EWMA).
-    ///
-    /// Formula: NewWeight = (1 - alpha) * OldWeight + alpha * Reward
-    ///
+    /// Updates the Beta distribution parameters for an element.
+    /// 
     /// - Parameters:
     ///   - elem: The element to update.
-    ///   - reward: The reward signal (e.g., 1.0 for success, 0.0 for failure).
+    ///   - reward: The reward signal. Positive values increment alpha (success),
+    ///             values close to zero increment beta (failure).
     public func update(_ elem: Element, reward: Float) {
         for i in 0..<elements.count {
             if elements[i].elem == elem {
-                let oldWeight = elements[i].runtimeWeight
-                
-                // EWMA update
-                var newWeight = (1.0 - learningRate) * oldWeight + learningRate * reward
-                
-                // Clamp weights to keep them reasonable (e.g., never exactly 0)
-                // We use a base weight of 0.01 to ensure every mutator has a non-zero chance.
-                if newWeight < 0.01 {
-                    newWeight = 0.01
-                } else if newWeight > 100.0 {
-                    newWeight = 100.0
+                // Reward > 1.0 means success (found interesting/crash) - add to alpha
+                // Reward <= 1.0 means failure - add the reward value to beta
+                // This allows tiny penalties (0.000001) to barely affect beta
+                if reward > 1.0 {
+                    // Big success - add proportionally to alpha
+                    elements[i].alpha += Double(reward)
+                } else {
+                    // Failure - add reward value to beta (smaller = less penalty)
+                    // e.g., 0.000001 adds only 0.000001 to beta per execution
+                    elements[i].beta += Double(reward)
                 }
-                
-                elements[i].runtimeWeight = newWeight
                 break
             }
         }
         
-        // Recompute cumulative weights
-        var currentCumulative: Float = 0.0
-        for i in 0..<elements.count {
-            currentCumulative += elements[i].runtimeWeight
-            elements[i].cumulativeRuntimeWeight = currentCumulative
+        // Update totalRuntimeWeight for compatibility (use mean of Beta)
+        totalRuntimeWeight = 0.0
+        for e in elements {
+            totalRuntimeWeight += Float(e.alpha / (e.alpha + e.beta))
         }
-        totalRuntimeWeight = currentCumulative
     }
 
-    /// Updates weights for a batch of elements.
-    ///
-    /// - Parameters:
-    ///   - activeElements: The elements that were active.
-    ///   - reward: The reward to assign to these elements.
+    /// Updates parameters for a batch of elements.
     public func updateBatch(_ activeElements: [Element], reward: Float) {
         for elem in activeElements {
             update(elem, reward: reward)
@@ -105,30 +112,86 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
     }
 
     public override func filter(_ isIncluded: (Element) -> Bool) -> RuntimeWeightedList<Element> {
-        //var r: RuntimeWeightedList<Element> = RuntimeWeightedList()
-        //for (e, w, cw, rw, crw) in elements where isIncluded(e) {
-        //    append(e, withWeight: w)
-        //}
         return self
     }
     
-    public func append(_ elem: Element, withWeight weight: Int, runtimeWeight: Float) {
+    public func append(_ elem: Element, withWeight weight: Int, alpha: Double, beta: Double) {
         assert(weight > 0)
-        let previousCumulativeWeight = totalRuntimeWeight
-        totalRuntimeWeight += runtimeWeight
         totalWeight += weight
-        elements.append((elem, weight, totalWeight, runtimeWeight, totalRuntimeWeight))
+        elements.append((elem, weight, totalWeight, alpha, beta))
+        totalRuntimeWeight += Float(alpha / (alpha + beta))
+    }
+    
+    // For compatibility - redirect to new append
+    public func append(_ elem: Element, withWeight weight: Int, runtimeWeight: Float) {
+        append(elem, withWeight: weight, alpha: 1.0, beta: 1.0)
     }
 
+    /// Selects an element using Thompson Sampling.
+    /// Samples from each element's Beta distribution and returns the one with highest sample.
     public func weightedElement() -> Element {
-        let k = Float.random(in: 0.0..<totalRuntimeWeight)
+        var bestIndex = 0
+        var bestSample: Double = -1.0
+        
         for i in 0..<elements.count {
-            if elements[i].cumulativeRuntimeWeight > k {
-                lastElements.append(elements[i].elem)
-                return elements[i].elem
+            // Sample from Beta(alpha, beta) distribution
+            let sample = sampleBeta(alpha: elements[i].alpha, beta: elements[i].beta)
+            if sample > bestSample {
+                bestSample = sample
+                bestIndex = i
             }
         }
-        return elements.last!.elem 
+        
+        lastElements.append(elements[bestIndex].elem)
+        return elements[bestIndex].elem
+    }
+    
+    /// Sample from Beta distribution using the gamma distribution method.
+    /// Beta(a, b) = Gamma(a, 1) / (Gamma(a, 1) + Gamma(b, 1))
+    private func sampleBeta(alpha: Double, beta: Double) -> Double {
+        let x = sampleGamma(shape: alpha)
+        let y = sampleGamma(shape: beta)
+        return x / (x + y)
+    }
+    
+    /// Sample from Gamma distribution using Marsaglia and Tsang's method.
+    private func sampleGamma(shape: Double) -> Double {
+        if shape < 1.0 {
+            // For shape < 1, use: Gamma(shape) = Gamma(shape + 1) * U^(1/shape)
+            let u = Double.random(in: 0.0..<1.0)
+            return sampleGamma(shape: shape + 1.0) * pow(u, 1.0 / shape)
+        }
+        
+        let d = shape - 1.0 / 3.0
+        let c = 1.0 / sqrt(9.0 * d)
+        
+        while true {
+            var x: Double
+            var v: Double
+            
+            repeat {
+                x = sampleStandardNormal()
+                v = 1.0 + c * x
+            } while v <= 0.0
+            
+            v = v * v * v
+            let u = Double.random(in: 0.0..<1.0)
+            
+            if u < 1.0 - 0.0331 * x * x * x * x {
+                return d * v
+            }
+            
+            if log(u) < 0.5 * x * x + d * (1.0 - v + log(v)) {
+                return d * v
+            }
+        }
+    }
+    
+    /// Sample from standard normal distribution using Box-Muller transform.
+    private func sampleStandardNormal() -> Double {
+        let u1 = Double.random(in: Double.leastNonzeroMagnitude..<1.0)
+        let u2 = Double.random(in: 0.0..<1.0)
+        return sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
     }
 
     public func getLastElements() -> [Element] {

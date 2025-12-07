@@ -1110,33 +1110,35 @@ public class Fuzzer {
 
     public func adjustMutatorWeightsForCrash() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Crashes are highly interesting - reward with 1.0
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
+        // Crashes are highly interesting - reward with 50.0 (50x multiplier)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 50000.0)
     }
     
     public func adjustMutatorWeightsForInteresting() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Found new coverage/edges/feedback nexus - reward with 1.0
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
+        // Found new coverage/edges/feedback nexus - reward with 50.0 (50x multiplier)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 500.0)
     }
     
     public func adjustMutatorWeightsForValid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Valid but NOT interesting - neutral/low reward (0.3)
-        // This is better than invalid (0.0) but worse than interesting (1.0)
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.3)
+        // Valid but NOT interesting - ultra-tiny penalty (0.000001)
+        // Decimated to handle millions of execs without tanking mutators
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000001)
     }
     
     public func adjustMutatorWeightsForInvalid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Invalid program - penalize with 0.0
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0)
+        // Invalid (syntax incorrect) - small penalty (0.000004)
+        // 4x worse than valid but still ultra-decimated
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000027)
     }
     
     public func adjustMutatorWeightsForTimeout() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Timeout - penalize with 0.0
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0)
+        // Timeout - same as invalid (0.000004)
+        // Ultra-decimated penalty for millions of execs
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000027)
     }
 
     /// A pending corpus import job together with some statistics.

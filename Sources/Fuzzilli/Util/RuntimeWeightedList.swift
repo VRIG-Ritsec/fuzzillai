@@ -54,20 +54,18 @@ public class RuntimeWeightedList<Element: Equatable>: WeightedList<Element> {
     }
 
     public var description: String {
-        // Calculate total weight across all elements using Beta distribution mean
-        var totalWeight: Double = 0.0
+        // Calculate total alpha across all elements (represents accumulated successes)
+        var totalAlpha: Double = 0.0
         for e in elements {
-            // Mean of Beta(alpha, beta) = alpha / (alpha + beta)
-            // This is always positive and represents the expected success rate
-            totalWeight += e.alpha / (e.alpha + e.beta)
+            totalAlpha += e.alpha
         }
         
-        var str = "Total: \(String(format: "%.7f", totalWeight)) ["
+        var str = "Total α(successes): \(String(format: "%.1f", totalAlpha)) ["
         for (i, e) in elements.enumerated() {
             if i > 0 { str += ", " }
-            // Use Beta mean as the weight display
-            let weight = e.alpha / (e.alpha + e.beta)
-            str += "\(e.elem): \(String(format: "%.7f", weight))"
+            // Show alpha (successes), beta (failures), and the Beta mean (expected success rate)
+            let mean = e.alpha / (e.alpha + e.beta)
+            str += "\(e.elem): [α(successes)=\(String(format: "%.1f", e.alpha)), β(failures)=\(String(format: "%.1f", e.beta)), μ(mean)=\(String(format: "%.4f", mean))]"
         }
         str += "]"
         return str

@@ -1110,35 +1110,27 @@ public class Fuzzer {
 
     public func adjustMutatorWeightsForCrash() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Crashes are highly interesting - reward with 50.0 (50x multiplier)
         runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 50000.0)
     }
     
     public func adjustMutatorWeightsForInteresting() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Found new coverage/edges/feedback nexus - reward with 50.0 (50x multiplier)
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 500.0)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 50.0)
     }
     
     public func adjustMutatorWeightsForValid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Valid but NOT interesting - ultra-tiny penalty (0.000001)
-        // Decimated to handle millions of execs without tanking mutators
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000001)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0125)
     }
     
     public func adjustMutatorWeightsForInvalid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Invalid (syntax incorrect) - small penalty (0.000004)
-        // 4x worse than valid but still ultra-decimated
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000027)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.045)
     }
     
     public func adjustMutatorWeightsForTimeout() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        // Timeout - same as invalid (0.000004)
-        // Ultra-decimated penalty for millions of execs
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.000027)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.045)
     }
 
     /// A pending corpus import job together with some statistics.

@@ -1,0 +1,9 @@
+{
+  "body": "extern class JSGeneratorObject extends JSObject {\n  function: JSFunction;\n  context: Context;\n  receiver: JSAny;\n\n  // For executing generators: the most recent input value.\n  // For suspended generators: debug information (bytecode offset).\n  // There is currently no need to remember the most recent input value for a\n  // suspended generator.\n  input_or_debug_pos: Object;\n\n  // The most recent resume mode.\n  resume_mode: Smi;\n\n  // A positive value indicates a suspended generator.  The special\n  // kGeneratorExecuting and kGeneratorClosed values indicate that a generator\n  // cannot be resumed.\n  continuation: Smi;\n\n  // Saved interpreter register file.\n  parameters_and_registers: FixedArray;\n}\n\nextern class JSAsyncFunctionObject extends JSGeneratorObject {\n  promise: JSPromise;\n}\n\nextern class JSAsyncGeneratorObject extends JSGeneratorObject {\n  // Pointer to the head of a singly linked list of AsyncGeneratorRequest, or\n  // undefined.\n  queue: HeapObject;\n  // Whether or not the generator is currently awaiting.\n  is_awaiting: Smi;\n}\n\nextern class AsyncGeneratorRequest extends Struct {\n  next: AsyncGeneratorRequest|Undefined;\n  resume_mode: Smi;\n  value: Object;\n  promise: JSPromise;\n}",
+  "context": [
+    "jsgenerator_class_definition",
+    "v8_torque_language"
+  ],
+  "explanation": "This is the Torque definition of JSGeneratorObject from objects/js-generator.tq, showing the actual fields and their types. This is the source-of-truth for the object layout. Key fields include: function (the generator function), context (execution context), receiver (this value), input_or_debug_pos (input value or bytecode offset), resume_mode (kNext/kReturn/kThrow/kRethrow), continuation (state), and parameters_and_registers (saved register file). Async variants add promise and queue fields.",
+  "file_line": "objects/js-generator.tq:5-38"
+}

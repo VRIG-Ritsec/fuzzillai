@@ -112,10 +112,10 @@ def db_list_programs(limit: int = 10, offset: int = 0, fuzzer_id: int = None, in
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute("SELECT program_hash, fuzzer_id, inserted_at FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
+        cursor.execute("SELECT program_hash, fuzzer_id, inserted_at FROM program WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
         rows = cursor.fetchall()
         if include_source:
-            cursor.execute("SELECT program_hash, fuzzer_id, inserted_at, program_base64 FROM fuzzer WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
+            cursor.execute("SELECT program_hash, fuzzer_id, inserted_at, program_base64 FROM program WHERE fuzzer_id = %s LIMIT %s OFFSET %s", (fuzzer_id, limit, offset))
             rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
@@ -697,7 +697,7 @@ def fetch_program_js_from_db(program_hash: str) -> str:
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cursor.execute(
-            "SELECT program_base64 FROM fuzzer WHERE program_hash = %s LIMIT 1",
+            "SELECT program_base64 FROM program WHERE program_hash = %s LIMIT 1",
             (program_hash,)
         )
         row = cursor.fetchone()
@@ -758,7 +758,7 @@ def trace_v8_analysis(
         - serialization: trace-serializer, trace-deserialization, profile-deserialization
     
     Args:
-        program_hash: The hash of the program to analyze (from fuzzer table)
+        program_hash: The hash of the program to analyze (from program table)
         presets: List of preset names to enable (e.g. ["tiering", "maglev"])
         custom_flags: List of individual flags to add (e.g. ["--trace-turbo-inlining"])
         function_filter: Filter pattern for function-specific tracing (applied to turbo/maglev/bytecode filters)

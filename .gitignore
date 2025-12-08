@@ -19,6 +19,7 @@ fog_logs/
 ebg_logs/
 .gemini/
 crashes/
+folder*/
 # custom GCE configuration
 Cloud/GCE/config.sh
 

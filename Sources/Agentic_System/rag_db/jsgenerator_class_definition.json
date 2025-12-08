@@ -1,0 +1,9 @@
+{
+  "body": "class JSGeneratorObject\n    : public TorqueGeneratedJSGeneratorObject<JSGeneratorObject, JSObject> {\n public:\n  enum ResumeMode { kNext, kReturn, kThrow, kRethrow };\n\n  inline bool is_closed() const;\n  inline bool is_executing() const;\n  inline bool is_suspended() const;\n\n  // For suspended generators: the source position at which the generator\n  // is suspended.\n  int source_position() const;\n  int code_offset() const;\n\n  // Dispatched behavior.\n  DECL_PRINTER(JSGeneratorObject)\n\n  // Magic sentinel values for the continuation.\n  static const int kGeneratorExecuting = -2;\n  static const int kGeneratorClosed = -1;\n\n  TQ_OBJECT_CONSTRUCTORS(JSGeneratorObject)\n};\n\nclass JSAsyncFunctionObject\n    : public TorqueGeneratedJSAsyncFunctionObject<JSAsyncFunctionObject,\n                                                  JSGeneratorObject> {\n public:\n  // Dispatched behavior.\n  DECL_VERIFIER(JSAsyncFunctionObject)\n  DECL_PRINTER(JSAsyncFunctionObject)\n\n  TQ_OBJECT_CONSTRUCTORS(JSAsyncFunctionObject)\n};\n\nclass JSAsyncGeneratorObject\n    : public TorqueGeneratedJSAsyncGeneratorObject<JSAsyncGeneratorObject,\n                                                   JSGeneratorObject> {\n public:\n  // Dispatched behavior.\n  DECL_VERIFIER(JSAsyncGeneratorObject)\n  DECL_PRINTER(JSAsyncGeneratorObject)\n\n  TQ_OBJECT_CONSTRUCTORS(JSAsyncGeneratorObject)\n};",
+  "context": [
+    "fuzzilli_integration",
+    "v8_objects_structure"
+  ],
+  "explanation": "This is the main JSGeneratorObject class definition from V8's objects/js-generator.h file. It shows the inheritance hierarchy, resume modes, and special continuation values. The class is part of V8's internal object system and is used for implementing JavaScript generator functions. It extends TorqueGeneratedJSGeneratorObject which provides the field accessors.",
+  "file_line": "objects/js-generator.h:23-60"
+}

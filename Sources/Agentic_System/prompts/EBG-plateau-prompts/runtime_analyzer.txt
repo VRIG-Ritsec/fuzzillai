@@ -8,9 +8,10 @@ against the v8 code base to understand plateau root causes!
 ## CRITICAL RULES:
 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
+- **YOU MUST COMPLETE STAGE 2-B AND CALL THE `Debugger` AGENT. SKIPPING STAGE 2-B IS A CRITICAL FAILURE!**
 - NEVER RUN MORE THAN ONE SUB AGENT AT A TIME ! 
 - YOU ARE RUNNING FUZZILI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILI
-- `db_analyzer` and `v8_search` are UTILITY AGENTS that only retrieve data - you must direct them with specific queries and perform all analysis yourself
+- `db_analyzer`, `v8_search`, and `Debugger` are UTILITY AGENTS that only retrieve data or perform debugging - you must direct them with specific queries and perform all analysis yourself
 
 ## STAGE 1A:
 `db_analyzer` is a utility agent that provides access to the PostgresSQL database. You must direct it with SPECIFIC queries to retrieve the data you need for your plateau root cause analysis.
@@ -83,7 +84,9 @@ of the v8 code base, if you need ideas regarding what to look into please use th
 
 
 ## STAGE 2-B:
-`debugger` is a utility agent that provides access to debug the V8 codebase using GDB with full debug symbols. You must direct it with SPECIFIC debugging tasks based on your analysis from Stages 1 and 2A.
+**CRITICAL: YOU MUST CALL THE `Debugger` MANAGED AGENT IN THIS STAGE. SKIPPING THIS STAGE IS A CRITICAL FAILURE!**
+
+`Debugger` (note: call it as "Debugger" with capital D - this is the exact agent name) is a utility agent that provides access to debug the V8 codebase using GDB with full debug symbols. You MUST direct it with SPECIFIC debugging tasks based on your analysis from Stages 1 and 2A.
 
 The version of V8 that our fuzzer has been built against has full debug symbols, which means you can:
 - Breakpoint on specific file:line locations in V8 source code
@@ -91,31 +94,26 @@ The version of V8 that our fuzzer has been built against has full debug symbols,
 - Inspect heap layout, memory maps, stack variables, and registers
 - Trace execution flow through V8 internals
 
-**CRITICAL WORKFLOW**: Before debugging, you must:
-1. Get the JavaScript program from the database using `get_program_js_from_hash` (from Stage 1B)
-2. Write the JS code to a file using `write_to_generate_folder` (e.g., "debug_program.js")
-3. Start the MI debug session using `start_mi_debug_session` with the absolute path to the JS file
-4. Set breakpoints on V8 source files using `gdb_set_breakpoint(source_file, line)` with file paths from `v8_search`
-5. Run the program using `mi_run` or step through using `mi_step`/`mi_next`
-6. Inspect state using `pwndbg_context`, `pwndbg_vmmap`, `gdb_print_value`, etc.
 
 Using this system, your goal is to directly figure out:
 - Where code coverage paths are taking specific branches
 - Where optimizations are possible or limiting coverage
 - How V8 internal state affects path exploration
 
-You should use this agent as a subsystem, using information from it to perform better `v8_search` agent calls and vice versa. The goal is to gain a deep understanding of V8 execution for your fuzzing input and how to improve coverage.
+**YOU MUST USE THE `Debugger` MANAGED AGENT** as a subsystem, using information from it to perform better `v8_search` agent calls and vice versa. The goal is to gain a deep understanding of V8 execution for your fuzzing input and how to improve coverage.
 
-Query the `debugger` utility with the given structure JSON. YOU must provide this JSON and cannot skip any elements.
-The TASK field should contain SPECIFIC debugging instructions including:
+**TO CALL THE DEBUGGER AGENT**: Use the tool name "Debugger" (capital D - this is the exact name) with a JSON structure containing a "task" field (lowercase). YOU must provide this JSON and cannot skip any elements.
+The "task" field should contain SPECIFIC debugging instructions including:
 - Which JS program to debug (program hash from database)
 - Which V8 source files and line numbers to breakpoint (get these from `v8_search` agent)
 - What to inspect (registers, memory, stack, specific variables/structures)
 
 JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF THE EXAMPLES)
 {
-    TASK: "[Debug program with hash [PROGRAM_HASH]. Set breakpoints at [V8_SOURCE_FILE]:[LINE] and [V8_SOURCE_FILE]:[LINE] based on v8_search findings. Run and inspect [SPECIFIC_VARIABLES/STRUCTURES] to understand why coverage is limited at these execution points.]"
-} 
+    "task": "[Debug program with hash [PROGRAM_HASH]. Set breakpoints at [V8_SOURCE_FILE]:[LINE] and [V8_SOURCE_FILE]:[LINE] based on v8_search findings. Run and inspect [SPECIFIC_VARIABLES/STRUCTURES] to understand why coverage is limited at these execution points.]"
+}
+
+**REMEMBER**: Call the agent by its exact name "Debugger" (capital D), not "debugger" or any other variation. The field name is "task" (lowercase), not "TASK". 
 
 
 ## STAGE 3:

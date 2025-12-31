@@ -64,7 +64,7 @@ class EBG_Plateau(Agent):
         │   ├── DB Analyzer (L2)
         │   └── Debugger (L2)
         └── JS Generator (L1)
-            └── Corpus Validator (L2)
+            └── Validator (L2)
         """
         global root_manager_prompt
         root_manager_prompt = self.get_prompt("plateau_manager.txt")
@@ -95,6 +95,53 @@ class EBG_Plateau(Agent):
             max_context_tokens=120000,
         )
         self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
+
+
+
+        # L2 Worker: Validator
+        self.agents['validator'] = ToolCallingAgent(
+            name="Validator",
+            description="L2 Worker responsible for validating generated program seeds actually hit target V8 code paths through execution tracing and debugging",
+            tools=[
+                # execution and tracing tools
+                execute_javascript_program,
+                list_d8_flags,
+                list_v8_trace_options,
+                trace_v8_analysis,
+                write_to_generate_folder,
+                read_from_generate_folder,
+                list_generate_folder,
+                # debugging tools
+                start_mi_debug_session,
+                stop_mi_debug_session,
+                mi_exec,
+                mi_run,
+                mi_step,
+                mi_next,
+                mi_continue,
+                gdb_run_command,
+                gdb_set_breakpoint,
+                gdb_print_value,
+                pwndbg_context,
+                pwndbg_vmmap,
+                pwndbg_regs,
+                pwndbg_nearpc,
+                # file read and path tools
+                read_file,
+                get_realpath,
+                # V8 source search tools
+                fuzzy_finder,
+                ripgrep,
+                tree,
+                search_v8_source_rag,
+                get_v8_source_rag_doc,
+            ],
+            model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
+            max_steps=30,
+            planning_interval=None,
+            max_context_tokens=120000,
+        )
+        self.agents['validator'].prompt_templates["system_prompt"] = self.get_prompt("validator.txt")
 
         # L2 Worker: DB Analyzer  
         self.agents['db_analyzer'] = ToolCallingAgent(
@@ -180,29 +227,6 @@ class EBG_Plateau(Agent):
                 read_from_generate_folder,
                 list_generate_folder,
                 write_and_execute_js,
-                start_mi_debug_session,
-                stop_mi_debug_session,
-                mi_exec,
-                mi_run,
-                mi_step,
-                mi_next,
-                mi_continue,
-                gdb_run_command,
-                gdb_set_breakpoint,
-                gdb_print_value,
-                pwndbg_context,
-                pwndbg_vmmap,
-                pwndbg_regs,
-                pwndbg_nearpc,
-                # file read and path tools
-                read_file,
-                get_realpath,
-                # V8 source search tools
-                fuzzy_finder,
-                ripgrep,
-                tree,
-                search_v8_source_rag,
-                get_v8_source_rag_doc,
             ],
             model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
             max_steps=100,
@@ -210,7 +234,9 @@ class EBG_Plateau(Agent):
             max_context_tokens=120000,
         )
         self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
-        self.agents['JS_Generator'].managed_agents = []
+        self.agents['JS_Generator'].managed_agents = [
+            self.agents['validator'],
+        ]
 
         # L1 Manager: Runtime Analyzer  
         self.agents['runtime_analyzer'] = ToolCallingAgent(
@@ -243,7 +269,8 @@ class EBG_Plateau(Agent):
         # L0 Root Manager
         root_managed_agents = [
             self.agents['runtime_analyzer'],
-            self.agents['JS_Generator']
+            self.agents['JS_Generator'],
+            self.agents['v8_search']
         ]
 
         self.agents['root_manager'] = ToolCallingAgent(

@@ -23,7 +23,7 @@ from tools.rag_tools import (
     FAISSKnowledgeBase,
 )
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
-from tools.FoG_tools import get_v8_path
+from tools.FoG_tools import get_v8_path, fuzzy_finder, ripgrep, tree, get_realpath
 
 import sys
 import os
@@ -92,6 +92,7 @@ class EBG_Plateau(Agent):
             model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),  
             max_steps=50,
             planning_interval=20,
+            max_context_tokens=120000,
         )
         self.agents['v8_search'].prompt_templates["system_prompt"] = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
@@ -117,6 +118,7 @@ class EBG_Plateau(Agent):
             model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
             max_steps=30,
             planning_interval=None,
+            max_context_tokens=120000,
         )
         prompt = self.get_prompt("db_analyzer.txt")
         f = open(FUZZILLI_PATH + "/postgres-init.sql", "r")
@@ -129,10 +131,34 @@ class EBG_Plateau(Agent):
         self.agents['debugger'] = ToolCallingAgent(
             name="Debugger",
             description="L2 Worker responsible for debugging a crash",
-            tools=[],
+            tools=[
+                execute_javascript_program,
+                list_d8_flags,
+                list_v8_trace_options,
+                trace_v8_analysis,
+                get_program_js_from_hash,
+                read_from_generate_folder,
+                write_to_generate_folder,
+                list_generate_folder,
+                start_mi_debug_session,
+                stop_mi_debug_session,
+                mi_exec,
+                mi_run,
+                mi_step,
+                mi_next,
+                mi_continue,
+                gdb_run_command,
+                gdb_set_breakpoint,
+                gdb_print_value,
+                pwndbg_context,
+                pwndbg_vmmap,
+                pwndbg_regs,
+                pwndbg_nearpc,
+            ],
             model=LiteLLMModel(model_id=WORKER_MODEL, api_key=self.api_key),
             max_steps=30,
             planning_interval=None,
+            max_context_tokens=120000,
         )
         self.agents['debugger'].prompt_templates["system_prompt"] = self.get_prompt("debugger.txt")
 
@@ -140,10 +166,48 @@ class EBG_Plateau(Agent):
         self.agents['JS_Generator'] = ToolCallingAgent(
             name="JSGenerator",
             description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
-            tools=[],
+            tools=[
+                # database tools
+                db_store_generated_program,
+                db_list_programs,
+                db_query,
+                # debug tools
+                execute_javascript_program,
+                list_d8_flags,
+                list_v8_trace_options,
+                trace_v8_analysis,
+                get_program_js_from_hash,
+                read_from_generate_folder,
+                list_generate_folder,
+                write_and_execute_js,
+                start_mi_debug_session,
+                stop_mi_debug_session,
+                mi_exec,
+                mi_run,
+                mi_step,
+                mi_next,
+                mi_continue,
+                gdb_run_command,
+                gdb_set_breakpoint,
+                gdb_print_value,
+                pwndbg_context,
+                pwndbg_vmmap,
+                pwndbg_regs,
+                pwndbg_nearpc,
+                # file read and path tools
+                read_file,
+                get_realpath,
+                # V8 source search tools
+                fuzzy_finder,
+                ripgrep,
+                tree,
+                search_v8_source_rag,
+                get_v8_source_rag_doc,
+            ],
             model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
-            max_steps=30,
+            max_steps=100,
             planning_interval=None,
+            max_context_tokens=120000,
         )
         self.agents['JS_Generator'].prompt_templates["system_prompt"] = self.get_prompt("JS_generator.txt")
         self.agents['JS_Generator'].managed_agents = []
@@ -157,8 +221,12 @@ class EBG_Plateau(Agent):
                 list_d8_flags,
                 list_v8_trace_options,
                 trace_v8_analysis,
+                get_program_js_from_hash,
                 read_from_generate_folder,
                 list_generate_folder,
+                search_v8_source_rag,
+                get_v8_source_rag_doc,
+
             ],
             model=LiteLLMModel(model_id=MANAGER_MODEL, api_key=self.api_key),
             managed_agents=[
@@ -168,6 +236,7 @@ class EBG_Plateau(Agent):
             ],
             max_steps=30,
             planning_interval=None,
+            max_context_tokens=120000,
         )
         self.agents['runtime_analyzer'].prompt_templates["system_prompt"] = self.get_prompt("runtime_analyzer.txt")
 
@@ -187,6 +256,7 @@ class EBG_Plateau(Agent):
             managed_agents=root_managed_agents,
             max_steps=30,
             planning_interval=None,
+            max_context_tokens=120000,
         )
         self.agents['root_manager'].prompt_templates["system_prompt"] = root_manager_prompt
 

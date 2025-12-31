@@ -435,7 +435,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
         (InputMutator(typeAwareness: .loose),  20),
         (InputMutator(typeAwareness: .aware),  10),
         // Can be enabled for experimental use, ConcatMutator is a limited version of CombineMutator
-        (ConcatMutator(),                   10),
+        //(ConcatMutator(),                   10),
         (OperationMutator(),                   10),
         (CombineMutator(),                     10),
         // Include this once it does more than just remove unneeded try-catch
@@ -587,7 +587,7 @@ let ui = TerminalUI(for: fuzzer)
 
 // Install signal handlers to terminate the fuzzer gracefully.
 var signalSources: [DispatchSourceSignal] = []
-for sig in [SIGINT, SIGTERM] {
+for sig in [SIGINT, SIGTERM, SIGQUIT] {
     // Seems like we need this so the dispatch sources work correctly?
     signal(sig, SIG_IGN)
 

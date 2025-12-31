@@ -934,20 +934,18 @@ public class Fuzzer {
                 exitReason = "100 iterations without new interesting sample"
             }
             
-            // Condition 2: Time-based limit (5 minutes max in corpus generation)
-            // This prevents infinite corpus generation in distributed scenarios where
-            // multiple workers keep finding and sharing interesting samples
+            // Condition 2: Time-based limit 
             if let startTime = corpusGenerationStartTime {
                 let timeInCorpusGen = -startTime.timeIntervalSinceNow
-                if timeInCorpusGen > 5 * Minutes {
+                if timeInCorpusGen > 60 * Minutes {
                     shouldExitCorpusGeneration = true
                     exitReason = "time limit reached (\(String(format: "%.1f", timeInCorpusGen))s)"
                 }
             }
             
-            // Condition 3: Corpus size-based limit (500+ samples is plenty)
+            // Condition 3: Corpus size-based limit
             // If we have a large corpus (e.g., from PostgreSQL sync), we should move to fuzzing
-            if corpus.size >= 500 {
+            if corpus.size >= 1500 {
                 shouldExitCorpusGeneration = true
                 exitReason = "corpus size threshold reached (\(corpus.size) samples)"
             }

@@ -18,6 +18,11 @@ from pathlib import *
 import sys
 import re
 
+try:
+    from pygdbmi.gdbcontroller import GdbController as PygdbmiController
+except Exception:
+    PygdbmiController = None
+
 from config_loader import get_openai_api_key, get_anthropic_api_key
 client = OpenAI(api_key=get_openai_api_key())
 
@@ -472,3 +477,344 @@ def get_call_graph_node(function_name: str) -> dict:
         dict: The call graph node for the function.
     """
     return CALL_GRAPH_MAP.get(function_name)
+
+#########################################################################################################
+#
+# GDB and pwndbg helpers for D8 with JS inputs (session-aware)
+#
+
+def _check_v8_binary() -> str | None:
+    if not D8_PATH:
+        return "Error: D8_PATH is not set"
+    if not os.path.exists(D8_PATH):
+        return f"Error: D8 binary not found at '{D8_PATH}'"
+    if not os.access(D8_PATH, os.X_OK):
+        return f"Error: D8 binary at '{D8_PATH}' is not executable"
+    return None
+
+
+def _check_js_path(js_path: str) -> str | None:
+    if not js_path:
+        return "Error: js_path is required"
+    if not os.path.isabs(js_path):
+        return f"Error: js_path must be absolute, got '{js_path}'"
+    if not os.path.exists(js_path):
+        return f"Error: JS file '{js_path}' not found"
+    return None
+
+
+def _format_args(js_path: str | None, d8_args: str | None) -> str:
+    user_args = d8_args.strip() if d8_args else ""
+    if js_path:
+        base = f"{D8_COMMON_FLAGS} {user_args} {js_path}".strip()
+    else:
+        base = f"{D8_COMMON_FLAGS} {user_args}".strip()
+    return base
+
+
+# Cached session defaults for JS + args - must be set via start_mi_debug_session
+DEBUG_SESSION: dict = {"js_path": "", "d8_args": ""}
+MI_CONTROLLER = None
+
+
+def _require_debug_session() -> tuple[str, str] | str:
+    """Check that debug session is active and return js_path and d8_args, or error string."""
+    js_path = DEBUG_SESSION.get("js_path", "")
+    if not js_path:
+        return "Error: No active debug session. Call start_debug_session first."
+    d8_args = DEBUG_SESSION.get("d8_args", "")
+    return js_path, d8_args
+
+
+def _require_mi_available() -> str | None:
+    if PygdbmiController is None:
+        return "Error: pygdbmi is not installed; install pygdbmi to use MI session."
+    return None
+
+
+def _require_mi_controller():
+    if MI_CONTROLLER is None:
+        return "Error: No active MI session. Call start_mi_debug_session first."
+    return None
+
+
+def _format_mi_responses(responses) -> str:
+    try:
+        return json.dumps(responses, indent=2)
+    except Exception:
+        return str(responses)
+
+
+@tool
+def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
+    """
+    Start a persistent GDB/MI session (like pwno) against D8 with the given JS file.
+
+    Args:
+        js_path (str): Absolute path to a JS file to run with d8.
+        d8_args (str): Extra args to pass to d8 before the JS path (optional).
+
+    Returns:
+        str: Status message.
+    """
+    global MI_CONTROLLER
+    avail_err = _require_mi_available()
+    if avail_err:
+        return avail_err
+    err = _check_v8_binary()
+    if err:
+        return err
+    js_err = _check_js_path(js_path)
+    if js_err:
+        return js_err
+
+    # Update session defaults
+    DEBUG_SESSION["js_path"] = js_path
+    DEBUG_SESSION["d8_args"] = d8_args or ""
+
+    # Close any existing controller
+    if MI_CONTROLLER is not None:
+        try:
+            MI_CONTROLLER.exit()
+        except Exception:
+            pass
+        MI_CONTROLLER = None
+
+    try:
+        MI_CONTROLLER = PygdbmiController(command=["gdb", "--interpreter=mi4", "--quiet"])
+        init_cmds = [
+            "-gdb-set pagination off",
+            "-gdb-set confirm off",
+            "-gdb-set mi-async on",
+            f"-file-exec-and-symbols {D8_PATH}",
+        ]
+        args = _format_args(js_path, d8_args)
+        init_cmds.append(f"set args {args}")
+        results = []
+        for cmd in init_cmds:
+            res = MI_CONTROLLER.write(cmd, timeout_sec=7.0)
+            results.append({"cmd": cmd, "resp": res})
+        return "MI debug session started.\n" + _format_mi_responses(results)
+    except Exception as e:
+        MI_CONTROLLER = None
+        return f"Error starting MI session: {e}"
+
+
+@tool
+def stop_mi_debug_session() -> str:
+    """
+    Stop the persistent GDB/MI session.
+
+    Returns:
+        str: Status message.
+    """
+    global MI_CONTROLLER
+    if MI_CONTROLLER is not None:
+        try:
+            MI_CONTROLLER.exit()
+        except Exception as e:
+            MI_CONTROLLER = None
+            return f"Stopped MI session with warning: {e}"
+        MI_CONTROLLER = None
+        return "MI debug session stopped."
+    return "No active MI session to stop."
+
+
+@tool
+def mi_exec(command: str) -> str:
+    """
+    Execute a raw GDB/MI command in the active session.
+
+    Args:
+        command (str): MI or classic GDB command to run (for example, \"-exec-continue\", \"info registers\").
+
+    Returns:
+        str: Command responses.
+    """
+    avail_err = _require_mi_available()
+    if avail_err:
+        return avail_err
+    ctrl_err = _require_mi_controller()
+    if ctrl_err:
+        return ctrl_err
+    if not command:
+        return "Error: command is required"
+    try:
+        resp = MI_CONTROLLER.write(command, timeout_sec=7.0)
+        return _format_mi_responses(resp)
+    except Exception as e:
+        return f"Error executing MI command: {e}"
+
+
+@tool
+def mi_run() -> str:
+    """
+    Run the loaded D8 + JS in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    return mi_exec("-exec-run")
+
+
+@tool
+def mi_continue() -> str:
+    """
+    Continue execution in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    return mi_exec("-exec-continue")
+
+
+@tool
+def mi_next() -> str:
+    """
+    Step over (next) in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    return mi_exec("-exec-next")
+
+
+@tool
+def mi_step() -> str:
+    """
+    Step into in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    return mi_exec("-exec-step")
+
+
+@tool
+def gdb_run_command(command: str) -> str:
+    """
+    Run a gdb or pwndbg command in the active MI session.
+
+    Args:
+        command (str): GDB or pwndbg command to execute (for example, "info registers", "context", "vmmap").
+
+    Returns:
+        str: The output of the command.
+    """
+    avail_err = _require_mi_available()
+    if avail_err:
+        return avail_err
+    ctrl_err = _require_mi_controller()
+    if ctrl_err:
+        return ctrl_err
+    if not command:
+        return "Error: command is required"
+    try:
+        resp = MI_CONTROLLER.write(command, timeout_sec=7.0)
+        return _format_mi_responses(resp)
+    except Exception as e:
+        return f"Error executing command: {e}"
+
+
+@tool
+def gdb_set_breakpoint(source_file: str, line: int) -> str:
+    """
+    Set a source-level breakpoint and list breakpoints using the active MI session.
+
+    Args:
+        source_file (str): Source file path (relative or absolute) to break on.
+        line (int): Line number for the breakpoint.
+
+    Returns:
+        str: The output of the command.
+    """
+    if not source_file:
+        return "Error: source_file is required"
+    if line <= 0:
+        return "Error: line must be positive"
+    resp = gdb_run_command(f"break {source_file}:{line}")
+    if resp.startswith("Error"):
+        return resp
+    return gdb_run_command("info breakpoints")
+
+
+@tool
+def gdb_print_value(expression: str) -> str:
+    """
+    Print an expression in the active MI session (runs program if needed).
+
+    Args:
+        expression (str): GDB expression to print (for example, "print some_var").
+
+    Returns:
+        str: The output of the command.
+    """
+    if not expression:
+        return "Error: expression is required"
+    # ensure program is run first
+    run_resp = mi_run()
+    if "Error" in run_resp:
+        return run_resp
+    return gdb_run_command(f"print {expression}")
+
+
+@tool
+def pwndbg_context() -> str:
+    """
+    Show pwndbg context (registers, code, stack, backtrace) in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    run_resp = mi_run()
+    if "Error" in run_resp:
+        return run_resp
+    return gdb_run_command("context")
+
+
+@tool
+def pwndbg_vmmap() -> str:
+    """
+    Display virtual memory mappings via pwndbg in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    run_resp = mi_run()
+    if "Error" in run_resp:
+        return run_resp
+    return gdb_run_command("vmmap")
+
+
+@tool
+def pwndbg_regs() -> str:
+    """
+    Show registers with pwndbg regs after running in the active MI session.
+
+    Returns:
+        str: The output of the command.
+    """
+    run_resp = mi_run()
+    if "Error" in run_resp:
+        return run_resp
+    return gdb_run_command("regs")
+
+
+@tool
+def pwndbg_nearpc(count: int = 10) -> str:
+    """
+    Disassemble near the current PC after running in the active MI session.
+
+    Args:
+        count (int): Number of instructions to show near PC.
+
+    Returns:
+        str: The output of the command.
+    """
+    if count <= 0:
+        return "Error: count must be positive"
+    run_resp = mi_run()
+    if "Error" in run_resp:
+        return run_resp
+    return gdb_run_command(f"nearpc {count}")
+

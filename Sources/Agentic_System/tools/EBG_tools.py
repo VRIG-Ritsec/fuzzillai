@@ -722,6 +722,64 @@ def fetch_program_js_from_db(program_hash: str) -> str:
 
 
 @tool
+def get_program_js_from_hash(program_hash: str) -> str:
+    """
+    Fetch a program from the database by its hash and convert it to JavaScript code.
+    This allows you to read and analyze the actual JavaScript code that corresponds to a program_hash.
+    Use this to understand what code is being executed when analyzing plateau root causes.
+    
+    Args:
+        program_hash (str): The hash of the program to retrieve (from program table).
+    
+    Returns:
+        str: The JavaScript code of the program, or an error message if not found.
+    """
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD
+        )
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cursor.execute(
+            "SELECT program_base64 FROM program WHERE program_hash = %s LIMIT 1",
+            (program_hash,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return json.dumps({"error": f"Program with hash {program_hash} not found in database"})
+        
+        program_b64 = row['program_base64']
+        decoded = base64.b64decode(program_b64)
+        
+        with open(TEMP_FUZZIL_PATH, "wb") as f:
+            f.write(decoded)
+        
+        cmd = f"{FUZZILLI_TOOL_BIN} --liftToJS {TEMP_FUZZIL_PATH}"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        js_code = get_output(result)
+        
+        if js_code.startswith("Error"):
+            return json.dumps({"error": js_code})
+        
+        return json.dumps({
+            "program_hash": program_hash,
+            "javascript_code": js_code
+        }, indent=2)
+        
+    except psycopg2.Error as e:
+        return json.dumps({"error": f"Database error: {e}"})
+    except Exception as e:
+        return json.dumps({"error": f"Error fetching program: {e}"})
+    finally:
+        if conn:
+            conn.close()
+
+
+@tool
 def trace_v8_analysis(
     program_hash: str,
     presets: list = None,
@@ -768,9 +826,9 @@ def trace_v8_analysis(
     Returns:
         JSON string with trace output, any errors, and metadata about flags used
     """
-    if len(presets) == 0:
+    if presets is not None and len(presets) == 0:
         presets = None
-    if len(custom_flags) == 0:
+    if custom_flags is not None and len(custom_flags) == 0:
         custom_flags = None
     if function_filter == "":
         function_filter = None
@@ -927,6 +985,50 @@ def list_v8_trace_options() -> str:
 #
 # This can then be inserted into a generated programs database table
 # Then the table can be appending to the main queue corpus table, and flushed after.
+@tool
+def write_and_execute_js(js_code: str, file_name: str = None, d8_flags: str = "") -> str:
+    """
+    Write JavaScript code to a file in the generate folder and execute it with d8.
+
+    Args:
+        js_code (str): The JavaScript code to write and execute.
+        file_name (str): Optional filename (defaults to auto-generated name with .js extension).
+        d8_flags (str): Optional d8 flags to pass during execution.
+
+    Returns:
+        str: Execution result including stdout and stderr.
+    """
+    import tempfile
+    import uuid
+    
+    if not js_code or not js_code.strip():
+        return json.dumps({"error": "js_code is required and cannot be empty"}, indent=2)
+    
+    if file_name is None:
+        file_name = f"generated_{uuid.uuid4().hex[:8]}.js"
+    
+    if not file_name.endswith('.js'):
+        file_name += '.js'
+    
+    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
+    file_path = os.path.join(GENERATE_FOLDER_HASHS, file_name)
+    
+    try:
+        with open(file_path, 'w') as f:
+            f.write(js_code)
+        
+        abs_path = os.path.abspath(file_path)
+        result = execute_javascript_program(abs_path, d8_flags)
+        
+        return json.dumps({
+            "file_path": abs_path,
+            "file_name": file_name,
+            "execution_result": result
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to write or execute JS: {str(e)}"}, indent=2)
+
+
 @tool
 def db_store_generated_program(js_program: str, fuzzer_id: int) -> str:
     """

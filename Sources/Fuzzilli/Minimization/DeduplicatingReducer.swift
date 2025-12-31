@@ -14,7 +14,7 @@
 
 // Attempts deduplicate variables containing the same values.
 struct DeduplicatingReducer: Reducer {
-    func reduce(with helper: MinimizationHelper) {
+    func reduce(with helper: MinimizationHelper) async {
         // Currently we only handle CreateNamedVariable, but the code could easily be
         // extended to cover other types of values as well.
         // It's not obvious however which other values would benefit from this.
@@ -66,7 +66,7 @@ struct DeduplicatingReducer: Reducer {
         }
 
         if !replacements.isEmpty {
-            helper.tryReplacements(replacements)
+            await helper.tryReplacements(replacements)
         }
     }
 }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 struct WasmTypeGroupReducer: Reducer {
-    func reduce(with helper: MinimizationHelper) {
+    func reduce(with helper: MinimizationHelper) async {
         // Compute all candidates: intermediate operations in a data flow chain.
         var candidates = [Int]()
         var uses = VariableMap<Int>()
@@ -49,6 +49,6 @@ struct WasmTypeGroupReducer: Reducer {
             let newInstr = Instruction(WasmEndTypeGroup(typesCount: newInoutsMap.count), inouts: newInouts, flags: .empty)
             replacements.append((candidate, newInstr))
         }
-        helper.tryReplacements(replacements, renumberVariables: true)
+        await helper.tryReplacements(replacements, renumberVariables: true)
     }
 }

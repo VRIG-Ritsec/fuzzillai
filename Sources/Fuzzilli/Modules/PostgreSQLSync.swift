@@ -57,23 +57,23 @@ public class PostgreSQLSync: Module {
                     logger.info("Fuzzer registered with PostgreSQL database: fuzzerId \(self.cachedFuzzerId ?? -1)")
                 }
                 
-                // Signal that registration is complete
+                // Registration complete 
                 registrationSemaphore.signal()
-                
+
                 // Step 2: Sync corpus from database to in-memory basicCorpus (can be async)
                 let programs = try await storage.syncCorpusFromDatabase()
                 logger.info("Found: \(programs.count) programs from db")
                 if enableLogging {
                     logger.info("Syncing \(programs.count) programs from database to corpus")
                 }
-                
+
                 // Import each program into the fuzzer's corpus
                 for program in programs {
                     fuzzer.async {
                         fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
                     }
                 }
-                
+
                 if enableLogging {
                     logger.info("Corpus synchronization complete: imported \(programs.count) programs")
                 }
@@ -325,7 +325,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Flush
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
@@ -356,7 +356,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
             Task {
                 await self.syncWithDatabase(fuzzer)
             }
@@ -368,7 +368,7 @@ public class PostgreSQLSync: Module {
             }
         }
 
-        fuzzer.timers.scheduleTask(every: 5 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 35 * Minutes) {
             Task {
                 do {
                     try await self.storage.refreshMaterializedViews()

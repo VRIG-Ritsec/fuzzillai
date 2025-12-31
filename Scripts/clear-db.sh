@@ -53,11 +53,9 @@ run_query_silent() {
 # Function to get table row counts
 get_table_counts() {
     echo -e "${CYAN}Current database statistics:${NC}"
-    run_query "
+    run_query_silent "
         SELECT 
             'main' as table_name, COUNT(*) as row_count FROM main
-        UNION ALL
-        SELECT 'fuzzer', COUNT(*) FROM fuzzer
         UNION ALL
         SELECT 'program', COUNT(*) FROM program
         UNION ALL
@@ -70,7 +68,7 @@ get_table_counts() {
         SELECT 'crash_analysis', COUNT(*) FROM crash_analysis
         UNION ALL
         SELECT 'fuzzer_statistics', COALESCE((SELECT COUNT(*) FROM fuzzer_statistics), 0);
-    " | grep -v "row_count" | grep -v "^$" | grep -v "^-" | while read -r line; do
+    " 2>/dev/null | grep -v "row_count" | grep -v "^$" | grep -v "^-" | grep -v "ERROR" | while read -r line; do
         if [ -n "$line" ]; then
             echo "  $line"
         fi
@@ -99,8 +97,7 @@ main() {
         echo -e "${YELLOW}WARNING: This will delete ALL data from the database!${NC}"
         echo -e "${YELLOW}The following will be cleared:${NC}"
         echo "  - All fuzzer instances (main table)"
-        echo "  - All corpus programs (fuzzer table)"
-        echo "  - All executed programs (program table)"
+        echo "  - All corpus programs (program table)"
         echo "  - All execution records (execution table)"
         echo "  - All coverage details (coverage_detail table)"
         echo "  - All feedback vector details (feedback_vector_detail table)"
@@ -145,9 +142,6 @@ main() {
     
     echo -e "${CYAN}Clearing program...${NC}"
     run_query_silent "TRUNCATE TABLE program CASCADE;"
-    
-    echo -e "${CYAN}Clearing fuzzer (corpus)...${NC}"
-    run_query_silent "TRUNCATE TABLE fuzzer CASCADE;"
     
     echo -e "${CYAN}Clearing fuzzer_statistics...${NC}"
     run_query_silent "TRUNCATE TABLE fuzzer_statistics CASCADE;"

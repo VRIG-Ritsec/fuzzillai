@@ -26,7 +26,7 @@ struct LoopSimplifier: Reducer {
     // (if e.g. the loop is necessary to trigger JIT compilation) and so we test each reduction multiple times.
     private let numTestExecutions = 3
 
-    func reduce(with helper: MinimizationHelper) {
+    func reduce(with helper: MinimizationHelper) async {
         /// Here we keep blocks (i.e. something like an iterator) in use even while changing the underlying code.
         /// This works because the iteration order visits inner blocks before outer blocks, so we will never change
         /// block instructions that we will visit later on.
@@ -221,7 +221,7 @@ struct LoopSimplifier: Reducer {
             } else {
                 replacement = Instruction(BeginRepeatLoop(iterations: numIterations, exposesLoopCounter: false))
             }
-            if helper.tryReplacing(instructionAt: group.head, with: replacement, numExecutions: numTestExecutions) {
+            if await helper.tryReplacing(instructionAt: group.head, with: replacement, numExecutions: numTestExecutions) {
                 return
             }
         }
@@ -237,7 +237,7 @@ struct LoopSimplifier: Reducer {
                 newCode[headerIndex] = Instruction(BeginRepeatLoop(iterations: numIterations, exposesLoopCounter: false))
             }
             // After this change, the variable numbers may no longer be sequential as we may have removed instructions with inner outputs. So we need to also renumber the variables.
-            if helper.tryReplacing(range: range, with: newCode, renumberVariables: true, numExecutions: numTestExecutions) {
+            if await helper.tryReplacing(range: range, with: newCode, renumberVariables: true, numExecutions: numTestExecutions) {
                 return
             }
         }
@@ -326,6 +326,6 @@ struct LoopSimplifier: Reducer {
         }
 
         // We may have changed the order of variable declarations, so we need to renumber the variables.
-        helper.tryReplacements(replacements, renumberVariables: true, numExecutions: numTestExecutions)
+        await helper.tryReplacements(replacements, renumberVariables: true, numExecutions: numTestExecutions)
     }
 }

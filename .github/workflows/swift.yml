@@ -1,6 +1,7 @@
 name: build_test
 
 on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
   push:
     branches: [ main ]
   pull_request:

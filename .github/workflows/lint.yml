@@ -1,6 +1,7 @@
 name: lint
 
 on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
   push:
     branches: [main]
     paths:

@@ -21,15 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install SwiftLint
-        run: |
-          SWIFTLINT_VERSION="0.56.2"
-          curl -sL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux.zip" -o swiftlint.zip
-          unzip -q swiftlint.zip
-          chmod +x swiftlint
-          sudo mv swiftlint /usr/local/bin/
-
-      - name: Run SwiftLint
-        run: |
-          swiftlint version
-          swiftlint lint --reporter github-actions-logging Sources/ Tests/
+      - name: SwiftLint
+        uses: cirruslabs/swiftlint-action@v1
+        with:
+          version: 0.56.2
+          args: --reporter github-actions-logging

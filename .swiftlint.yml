@@ -1,0 +1,50 @@
+# SwiftLint Configuration for Fuzzilli
+# https://github.com/realm/SwiftLint
+
+excluded:
+  - .build
+  - .venv
+  - v8
+  - v8_patch
+  - Targets
+  - Package.swift
+  - "**/*.pb.swift"
+  - "**/*Test*"
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - identifier_name
+  - large_tuple
+  - nesting
+  - force_cast
+  - force_try
+  - force_unwrapping
+  - todo
+  - opening_brace
+  - trailing_comma
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - fatal_error_message
+  - first_where
+  - overridden_super_call
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - yoda_condition
+  - contains_over_first_not_nil
+
+function_parameter_count:
+  warning: 8
+  error: 10
+
+type_name:
+  min_length: 2
+  max_length: 50
+
+reporter: "github-actions-logging"

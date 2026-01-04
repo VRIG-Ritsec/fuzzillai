@@ -1,8 +1,9 @@
 name: build_test
 
 on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
   push:
-    branches: [ main ]
+    branches: ['**']
   pull_request:
     branches: [ main ]
 
@@ -40,8 +41,8 @@ jobs:
           tar xzf swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
           rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
-          export PATH="/opt/swift/usr/bin:${PATH}"
-      - uses: actions/checkout@v2
+          echo "/opt/swift/usr/bin" >> $GITHUB_PATH
+      - uses: actions/checkout@v4
       - name: Build
         run: swift build -c ${{ matrix.kind }} -v
       - name: Install protobuf

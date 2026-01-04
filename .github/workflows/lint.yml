@@ -1,0 +1,27 @@
+name: lint
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
+  push:
+    branches: ['**']
+    paths:
+      - '**.swift'
+      - '.swiftlint.yml'
+      - '.github/workflows/lint.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.swift'
+      - '.swiftlint.yml'
+      - '.github/workflows/lint.yml'
+
+jobs:
+  swiftlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SwiftLint
+        uses: norio-nomura/action-swiftlint@3.2.1
+        with:
+          args: --reporter github-actions-logging --lenient

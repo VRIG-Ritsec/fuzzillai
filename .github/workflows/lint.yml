@@ -22,7 +22,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: SwiftLint
-        uses: cirruslabs/swiftlint-action@v1
+        uses: norio-nomura/action-swiftlint@3.2.1
         with:
-          version: 0.56.2
           args: --reporter github-actions-logging

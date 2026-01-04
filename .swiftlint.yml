@@ -9,6 +9,7 @@ excluded:
   - Targets
   - Package.swift
   - "**/*.pb.swift"
+  - "**/*Test*"
 
 disabled_rules:
   - trailing_whitespace

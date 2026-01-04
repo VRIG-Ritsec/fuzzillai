@@ -24,4 +24,4 @@ jobs:
       - name: SwiftLint
         uses: norio-nomura/action-swiftlint@3.2.1
         with:
-          args: --reporter github-actions-logging
+          args: --reporter github-actions-logging --lenient

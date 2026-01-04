@@ -3,7 +3,7 @@ name: lint
 on:
   workflow_dispatch:  # Manual trigger from GitHub UI
   push:
-    branches: [main]
+    branches: ['**']
     paths:
       - '**.swift'
       - '.swiftlint.yml'

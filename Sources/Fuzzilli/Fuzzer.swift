@@ -1108,27 +1108,27 @@ public class Fuzzer {
 
     public func adjustMutatorWeightsForCrash() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 50000.0)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 500.0)
     }
     
     public func adjustMutatorWeightsForInteresting() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 50.0)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.5)
     }
     
     public func adjustMutatorWeightsForValid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.0125)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
     }
     
     public func adjustMutatorWeightsForInvalid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.045)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
     }
     
     public func adjustMutatorWeightsForTimeout() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 0.045)
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
     }
 
     /// A pending corpus import job together with some statistics.

@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 _module_dir = Path(__file__).parent
-_module_path = _module_dir / "rises-the-fog.py"
+_module_path = _module_dir / "start_scripts" / "rises-the-fog.py"
 
 if str(_module_dir) not in sys.path:
     sys.path.insert(0, str(_module_dir))

@@ -23,7 +23,7 @@ except FileExistsError:
     pass
 
 # Cached regressions.json data to avoid reloading on every tool call
-_REGRESSIONS_PATH = (Path(__file__).parent.parent / "regressions.json").resolve()
+_REGRESSIONS_PATH = (Path(__file__).parent.parent / "regressions" / "regressions.json").resolve()
 _REGRESSIONS_CACHE = None
 _TEMPLATES_PATH = (Path(__file__).parent.parent / "templates" / "templates.json").resolve()
 _TEMPLATES_CACHE = None

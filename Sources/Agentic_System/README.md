@@ -8,7 +8,7 @@
 3. Put your OpenAI key into a `keys.cfg` in Sources/Agentic_System
 4. Replace the smolagents site-packaged located in `.venv/lib/python3.12/site-packages` or similar with the provided fork of smolagents<br>
     You can simply remove the existing smolagents in site-packages and move + rename the fork as `smolagents`
-5. run `python3 rises-the-fog.py (--debug)`
+5. run `python3 start_scripts/rises-the-fog.py (--debug)`
 
 ### Technical flow
 #### The first multi agent system is implemented and starts by initializing a root manager whose goal is to actually orchestrate the creation of program templates. It starts by selecting a "code region" that it determines to be interesting; this is done by querying a RAG DB (json file) that contains over 8000 regression tests, their FuzzIL form, and execution data via trace flags.  We instruct the system to select a code region by using the execution data. On top of that, the system has access to a vector RAG DB with: V8 docs, JS MDM docs, C++ docs, and various research papers that it can query to gather more information. The vectorization library we use is META’s FAISS -"Facebook AI Similarity Search". After this is done it will select a code region such as: "Keyed array element access & elements-kind transitions (KeyedStoreIC/KeyedLoadIC, ElementsTransition, GrowElements/CopyElements, and Array builtin fast paths)".

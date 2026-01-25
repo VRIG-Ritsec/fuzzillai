@@ -63,9 +63,10 @@ let package = Package(
                     "Protobuf/README.md",
                     "Protobuf/gen_programproto.py"],
                 resources: [
-                    // The ast.proto file is required by the node.js parser and stuff
                     .copy("Protobuf/ast.proto"),
-                    .copy("Compiler/Parser")]),
+                    .copy("Compiler/Parser/parser.js"),
+                    .copy("Compiler/Parser/package.json"),
+                    .copy("Compiler/Parser/README.md")]),
 
         .executableTarget(name: "REPRLRun",
                 dependencies: ["libreprl"]),

@@ -36,8 +36,8 @@ public class JavaScriptParser {
 
         // This will only work if the executor is node as we will need to use node modules.
 
-        // The Parser/ subdirectory is copied verbatim into the module bundle, see Package.swift.
-        self.parserScriptPath = Bundle.module.path(forResource: "parser", ofType: "js", inDirectory: "Parser")!
+        // Parser files are in Compiler/Parser in the module bundle, see Package.swift.
+        self.parserScriptPath = Bundle.module.path(forResource: "parser", ofType: "js", inDirectory: "Compiler/Parser")!
 
         // Check if the parser works. If not, it's likely because its node.js dependencies have not been installed.
         do {

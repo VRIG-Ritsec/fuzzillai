@@ -45,14 +45,14 @@ You MUST use your template tools to compare against existing templates:
 You MUST use RAG DB tools to verify the template aligns with known patterns:
 1. Use `get_runtime_db_ids` to get the list of RAG DB entries for this session
 2. Use `read_rag_db_id` to read relevant entries that contain program template examples, Swift code, FuzzIL code, JS versions, and execution traces
-3. Use `get_rag_doc` to retrieve specific RAG documents that may contain context about the targeted V8 components
+3. Use `search_v8_source_rag_hybrid` to retrieve source context about the targeted V8 components
 4. Compare the generated template against examples in the RAG DB that show successful templates targeting similar components
 5. Verify that the template structure matches patterns that have been proven to work in similar scenarios
 
 ## STAGE 3: V8 TARGETING ACCURACY VALIDATION
 
 You MUST use knowledge base tools to verify V8 targeting:
-1. Use `search_knowledge_base` to search for information about the V8 components, functions, or code paths mentioned in the target context
+1. Use `search_knowledge_base_hybrid` to search for information about the V8 components, functions, or code paths mentioned in the target context
 2. Use `get_knowledge_doc` to retrieve detailed documentation about relevant V8 implementation details
 3. Verify that the template's structure (functions, loops, builds, etc.) would actually exercise the targeted V8 components
 4. Confirm that ProgramBuilder API calls used in the template are appropriate for the intended V8 behaviors
@@ -144,8 +144,9 @@ Your response must follow this JSON structure:
 
 Remember to actively use these tools during validation:
 - Template tools: get_all_template_names, get_template_from_json_by_name, search_template_file_json, search_regex_template_swift, similar_template_swift, search_regex_template_fuzzil, similar_template_fuzzil
-- RAG DB tools: get_runtime_db_ids, read_rag_db_id, get_rag_doc
-- Knowledge base tools: search_knowledge_base, get_knowledge_doc
+- RAG DB tools: get_runtime_db_ids, read_rag_db_id
+- V8 source RAG tools: search_v8_source_rag_hybrid, get_v8_source_rag_doc
+- Knowledge base tools: search_knowledge_base_hybrid, get_knowledge_doc
 - Web search: web_search (when needed for additional V8 or FuzzIL information)
 
 Always ensure your review is thorough, uses available tools, and is constructive. The quality of the generated Swift Program Templates directly impacts the effectiveness of the entire fuzzing campaign.

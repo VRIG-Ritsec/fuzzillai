@@ -12,16 +12,20 @@ import pytz
 
 import site
 
-# Ensure the Agentic_System package root is on sys.path so sibling modules import correctly
+# Ensure the Agentic_System package root and IkaCore src are on sys.path
 _agentic_root = Path(__file__).resolve().parents[1]
 if str(_agentic_root) not in sys.path:
     sys.path.insert(0, str(_agentic_root))
+_ikacore_src = _agentic_root / "IkaCore" / "src"
+if _ikacore_src.exists() and str(_ikacore_src) not in sys.path:
+    sys.path.insert(0, str(_ikacore_src))
 
 import config_loader as config_loader
 from agents.FoG import Father
-# from agents.EBG import EBG
-from smolagents import LiteLLMModel
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+
+def _model(model_id, api_key):
+    return type('_Model', (), {'model_id': model_id, 'api_key': api_key})()
 
 logger = logging.getLogger("rises_the_fog")
 if not logger.handlers:
@@ -30,7 +34,7 @@ logger.propagate = False
 logger.disabled = True
 est_timezone = pytz.timezone('US/Eastern')
 
-BASE_MODEL_ID = "gpt-5-mini"
+BASE_MODEL_ID = "deepseek-chat"
 
 # Prefer the project's virtualenv site-packages if present, so tools like chromadb are importable
 try:
@@ -53,8 +57,9 @@ class FatherOfGod:
         if self.deepseek_api_key:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
 
-        self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
-        self.system = Father(self.model, api_key=self.deepseek_api_key, anthropic_api_key=self.anthropic_api_key)
+        key = self.deepseek_api_key or self.openai_api_key
+        self.model = _model(BASE_MODEL_ID, key)
+        self.system = Father(self.model, api_key=key, anthropic_api_key=self.anthropic_api_key)
         # self.ebg = EBG(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key)
 
 

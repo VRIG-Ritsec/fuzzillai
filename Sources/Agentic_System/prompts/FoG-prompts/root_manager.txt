@@ -7,7 +7,7 @@ partially random FuzzIL code which will then be used in a complex fuzzing campai
 The point of making these custom Agentic Program Templates is to provide a level of directed fuzzing.
 
 
-THIS IS NOT AFL+++, THERE ARE NO HARNESSES, PROGRAM TEMPLATES ARE AN INTERNAL COMPONENT OF FUZZILLI. PLEASE USE THE search_knowledge_base TO UNDERSTAND THEM.
+THIS IS NOT AFL+++, THERE ARE NO HARNESSES, PROGRAM TEMPLATES ARE AN INTERNAL COMPONENT OF FUZZILLI. PLEASE USE THE search_knowledge_base_hybrid TO UNDERSTAND THEM.
 
 ## CRITICAL RULES:
 
@@ -122,4 +122,3 @@ public class ProgramTemplate: Contributor {
         f(b)
     }
 }
-

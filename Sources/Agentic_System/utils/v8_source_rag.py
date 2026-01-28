@@ -2,10 +2,12 @@
 
 import os
 import sys
+import sqlite3
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple, Iterable
 import json
 import pickle
+import hashlib
 
 try:
     import numpy as np
@@ -16,32 +18,65 @@ except ImportError as e:
     print("Install with: pip3 install --user --break-system-packages numpy sentence-transformers faiss-cpu")
     sys.exit(1)
 
-# Try importing V8_PATH from tools/common_tools.py, handling import path whether run directly or as a module
-try:
-    from tools.common_tools import V8_PATH
-except ModuleNotFoundError:
-    try:
-        # Fallback: Add parent directories to sys.path and try importing again
-        import sys
-        import pathlib
-        script_dir = pathlib.Path(__file__).resolve().parent
-        sys.path.insert(0, str(script_dir.parent))
-        from tools.common_tools import V8_PATH
-    except Exception as e:
-        print(f"Failed to import V8_PATH from tools.common_tools: {e}")
-        sys.exit(1)
+V8_PATH = os.getenv("V8_PATH", "")
 
 V8_TEXT_EXTENSIONS = {'.cc', '.h', '.cpp', '.hpp', '.c', '.js', '.ts', '.json', '.txt', '.md', '.torque'}
 
-def collect_text_files(base_dir: Path) -> List[Dict[str, str]]:
-    documents = []
-    
+def _find_split_point(content: str, start: int, end: int) -> int:
+    for sep in ("\n\n", "\n", " "):
+        idx = content.rfind(sep, start, end)
+        if idx != -1 and idx > start:
+            return idx + len(sep)
+    return end
+
+
+def chunk_document(content: str, chunk_size: int = 1000, overlap: int = 200) -> List[Dict[str, int | str]]:
+    """
+    Split document into overlapping chunks.
+    Returns list of dicts with 'text', 'start_char', 'end_char'.
+    """
+    chunks = []
+    text_len = len(content)
+    if text_len == 0:
+        return chunks
+
+    start = 0
+    while start < text_len:
+        end = min(start + chunk_size, text_len)
+        if end < text_len:
+            end = _find_split_point(content, start, end)
+        chunk_text = content[start:end]
+        if chunk_text.strip():
+            chunks.append({
+                "text": chunk_text,
+                "start_char": start,
+                "end_char": end,
+            })
+        if end >= text_len:
+            break
+        start = max(0, end - overlap)
+
+    return chunks
+
+
+def _line_range(content: str, start_char: int, end_char: int) -> Tuple[int, int]:
+    start_line = content.count("\n", 0, start_char) + 1
+    end_line = content.count("\n", 0, end_char) + 1
+    return start_line, end_line
+
+
+def _stable_id(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()
+
+
+def iter_text_chunks(base_dir: Path) -> Iterable[Dict[str, object]]:
     if not base_dir.exists():
         print(f"Error: V8 directory does not exist: {base_dir}")
         sys.exit(1)
     
     print(f"Scanning V8 directory: {base_dir}")
-    
+    total_chunks = 0
+
     for root, dirs, files in os.walk(base_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__' and d != 'out']
         
@@ -65,52 +100,201 @@ def collect_text_files(base_dir: Path) -> List[Dict[str, str]]:
                 
                 topic = f"V8 {sub_dir}"
                 
-                formatted_content = f"Topic: {topic}\nFile: {rel_path}\n\n{content}"
-                
-                documents.append({
-                    'path': str(rel_path),
-                    'topic': topic,
-                    'content': formatted_content
-                })
-                
-                if len(documents) % 100 == 0:
-                    print(f"Collected {len(documents)} documents...")
-                
+                chunks = chunk_document(content)
+                if not chunks:
+                    continue
+
+                total_for_file = len(chunks)
+                for chunk_index, chunk in enumerate(chunks):
+                    start_line, end_line = _line_range(content, chunk["start_char"], chunk["end_char"])
+                    parent_id = _stable_id(str(rel_path))
+                    doc_id = _stable_id(f"{rel_path}:{chunk_index}:{chunk['start_char']}:{chunk['end_char']}")
+                    context = (
+                        f"Topic: {topic}\n"
+                        f"File: {rel_path}\n"
+                        f"Chunk: {chunk_index + 1}/{total_for_file}\n"
+                        f"Chars: {chunk['start_char']}-{chunk['end_char']}"
+                    )
+                    total_chunks += 1
+                    if total_chunks % 500 == 0:
+                        print(f"Collected {total_chunks} chunks...")
+
+                    yield {
+                        'doc_id': doc_id,
+                        'path': str(rel_path),
+                        'parent_file': str(rel_path),
+                        'parent_id': parent_id,
+                        'topic': topic,
+                        'doc_type': 'code',
+                        'source': 'v8_source',
+                        'content': chunk["text"],
+                        'context': context,
+                        'chunk_index': chunk_index,
+                        'total_chunks': total_for_file,
+                        'start_char': chunk["start_char"],
+                        'end_char': chunk["end_char"],
+                        'start_line': start_line,
+                        'end_line': end_line,
+                        'char_range': f"{chunk['start_char']}-{chunk['end_char']}",
+                    }
             except Exception as e:
                 print(f"Error reading {filepath}: {e}")
                 continue
-    
-    return documents
 
-def create_vector_db(documents: List[Dict[str, str]], output_dir: Path):
-    print(f"\nCreating embeddings for {len(documents)} documents...")
-    
+
+def _embedding_text(doc: Dict[str, object]) -> str:
+    context = str(doc.get("context", "")).strip()
+    content = str(doc.get("content", "")).strip()
+    if context:
+        return f"{context}\n\n{content}".strip()
+    return content
+
+
+def _init_bm25(db_path: Path) -> sqlite3.Connection | None:
+    try:
+        conn = sqlite3.connect(str(db_path))
+    except sqlite3.Error as e:
+        print(f"Failed to open BM25 DB: {e}")
+        return None
+
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        try:
+            conn.execute("CREATE VIRTUAL TABLE docs USING fts5(doc_id UNINDEXED, content, tokenize='porter')")
+        except sqlite3.OperationalError as e:
+            print(f"FTS5 unavailable, skipping BM25 index: {e}")
+            conn.close()
+            return None
+        return conn
+    except sqlite3.Error as e:
+        print(f"Failed to initialize BM25 DB: {e}")
+        conn.close()
+        return None
+
+def create_vector_db(documents: Iterable[Dict[str, object]], output_dir: Path, batch_size: int = 16, flush_interval: int = 10000):
+    print("\nCreating embeddings (streaming)...")
+
     model = SentenceTransformer('all-MiniLM-L6-v2')
-    
-    contents = [doc['content'] for doc in documents]
-    embeddings = model.encode(contents, show_progress_bar=True, convert_to_numpy=True)
-    
-    print(f"\nCreated embeddings with shape: {embeddings.shape}")
-    
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings.astype('float32'))
-    
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    faiss.write_index(index, str(output_dir / 'v8_source_rag.index'))
-    
-    with open(output_dir / 'v8_source_rag_metadata.json', 'w') as f:
-        json.dump(documents, f, indent=2)
-    
+
+    metadata_path = output_dir / 'v8_source_rag_metadata.json'
+    meta_file = metadata_path.open('w', encoding='utf-8')
+    meta_file.write("[\n")
+    first_meta = True
+
+    bm25_conn = _init_bm25(output_dir / "v8_source_rag_bm25.sqlite")
+    bm25_rows = []
+
+    index = None
+    total_docs = 0
+    batch_docs = []
+    batch_texts = []
+    intermediate_indices = []
+    temp_dir = output_dir / 'temp_indices'
+    temp_dir.mkdir(exist_ok=True)
+
+    def flush_bm25():
+        if not bm25_conn or not bm25_rows:
+            return
+        try:
+            bm25_conn.executemany("INSERT INTO docs(doc_id, content) VALUES (?, ?)", bm25_rows)
+            bm25_conn.commit()
+        except sqlite3.Error as e:
+            print(f"BM25 insert failed: {e}")
+        bm25_rows.clear()
+
+    def flush_batch():
+        nonlocal index, total_docs, first_meta
+        if not batch_docs:
+            return
+        embeddings = model.encode(batch_texts, show_progress_bar=False, convert_to_numpy=True)
+        if index is None:
+            index = faiss.IndexFlatL2(embeddings.shape[1])
+        index.add(embeddings.astype('float32'))
+
+        for doc in batch_docs:
+            if not first_meta:
+                meta_file.write(",\n")
+            meta_file.write(json.dumps(doc))
+            first_meta = False
+            total_docs += 1
+
+        meta_file.flush()
+        batch_docs.clear()
+        batch_texts.clear()
+
+    def save_intermediate_index():
+        nonlocal index, intermediate_indices
+        if index is None or index.ntotal == 0:
+            return
+        temp_index_path = temp_dir / f'intermediate_{len(intermediate_indices)}.index'
+        faiss.write_index(index, str(temp_index_path))
+        intermediate_indices.append(temp_index_path)
+        dim = index.d
+        index = faiss.IndexFlatL2(dim)
+        print(f"  Saved intermediate index with {faiss.read_index(str(temp_index_path)).ntotal} vectors (total docs: {total_docs})")
+
+    for doc in documents:
+        embedding_text = _embedding_text(doc)
+        batch_docs.append(doc)
+        batch_texts.append(embedding_text)
+        if bm25_conn is not None:
+            doc_id = doc.get("doc_id")
+            if doc_id:
+                bm25_rows.append((str(doc_id), embedding_text))
+        if len(batch_docs) >= batch_size:
+            flush_batch()
+            if len(bm25_rows) >= 500:
+                flush_bm25()
+            if total_docs > 0 and total_docs % flush_interval == 0:
+                save_intermediate_index()
+                print(f"Processed {total_docs} documents, saved intermediate index")
+
+    flush_batch()
+    flush_bm25()
+
+    if index is not None and index.ntotal > 0:
+        save_intermediate_index()
+
+    meta_file.write("\n]\n")
+    meta_file.close()
+
+    if bm25_conn is not None:
+        bm25_conn.close()
+        print("  - BM25: v8_source_rag_bm25.sqlite")
+
+    if not intermediate_indices and index is None:
+        print("No documents indexed.")
+        temp_dir.rmdir()
+        return
+
+    print(f"\nMerging {len(intermediate_indices)} intermediate indices...")
+    if intermediate_indices:
+        merged_index = None
+        for i, temp_path in enumerate(intermediate_indices):
+            temp_index = faiss.read_index(str(temp_path))
+            if merged_index is None:
+                merged_index = temp_index
+            else:
+                merged_index.merge_from(temp_index)
+            temp_path.unlink()
+        if merged_index is not None:
+            faiss.write_index(merged_index, str(output_dir / 'v8_source_rag.index'))
+            print(f"  Merged index contains {merged_index.ntotal} vectors")
+    else:
+        faiss.write_index(index, str(output_dir / 'v8_source_rag.index'))
+
+    temp_dir.rmdir()
+
     with open(output_dir / 'v8_source_rag_model.pkl', 'wb') as f:
         pickle.dump('all-MiniLM-L6-v2', f)
-    
+
     print(f"\nVector database saved to {output_dir}")
-    print(f"  - Index: v8_source_rag.index")
-    print(f"  - Metadata: v8_source_rag_metadata.json")
-    print(f"  - Model info: v8_source_rag_model.pkl")
-    print(f"\nTotal documents indexed: {len(documents)}")
+    print("  - Index: v8_source_rag.index")
+    print("  - Metadata: v8_source_rag_metadata.json")
+    print("  - Model info: v8_source_rag_model.pkl")
+    print(f"\nTotal documents indexed: {total_docs}")
 
 def main():
     if not V8_PATH:
@@ -124,17 +308,16 @@ def main():
     print(f"Scanning V8 directory: {base_dir}")
     print("Collecting text files from all subdirectories...\n")
     
-    documents = collect_text_files(base_dir)
+    documents = iter_text_chunks(base_dir)
     
-    if not documents:
-        print("No documents found to index!")
-        return
-    
-    print(f"\nTotal documents collected: {len(documents)}")
-    
-    output_dir = Path(__file__).parent.parent / 'rag_db' / 'v8_source_rag'
+    default_rag_dir = Path(__file__).resolve().parent.parent / "rag_db"
+    rag_base_dir = Path(os.getenv("RAG_BASE_DIR", str(default_rag_dir))).expanduser()
+    output_dir = rag_base_dir / "v8_source_rag"
     print(f"Saving to: {output_dir}")
-    create_vector_db(documents, output_dir)
+    batch_size = int(os.getenv("RAG_EMBED_BATCH", "16"))
+    flush_interval = int(os.getenv("RAG_FLUSH_INTERVAL", "10000"))
+    print(f"Batch size: {batch_size}, Flush interval: {flush_interval} documents")
+    create_vector_db(documents, output_dir, batch_size=batch_size, flush_interval=flush_interval)
 
 if __name__ == '__main__':
     main()

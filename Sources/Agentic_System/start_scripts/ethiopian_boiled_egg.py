@@ -20,8 +20,10 @@ if str(_agentic_root) not in sys.path:
 import config_loader as config_loader
 from agents.EBG_crash import EBG_Crash
 from agents.EBG_plateau import EBG_Plateau
-from smolagents import LiteLLMModel
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+
+def _model(model_id, api_key):
+    return type('_Model', (), {'model_id': model_id, 'api_key': api_key})()
 
 logger = logging.getLogger("boiled_eggs")
 if not logger.handlers:
@@ -53,12 +55,13 @@ class EthiopianBoiledEgg:
         if self.deepseek_api_key:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
 
-        self.model = LiteLLMModel(model_id=BASE_MODEL_ID, api_key=self.openai_api_key)
+        key = self.deepseek_api_key or self.openai_api_key
+        self.model = _model(BASE_MODEL_ID, key)
         print("System is running in " + mode + " mode")
         if mode == "Crash":
-            self.system = EBG_Crash(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, crash_program_hash=crash_program_hash)
+            self.system = EBG_Crash(self.model, api_key=key, anthropic_api_key=self.anthropic_api_key, crash_program_hash=crash_program_hash)
         elif mode == "Plateau":
-            self.system = EBG_Plateau(self.model, api_key=self.openai_api_key, anthropic_api_key=self.anthropic_api_key, fuzzer_id=fuzzer_id)
+            self.system = EBG_Plateau(self.model, api_key=key, anthropic_api_key=self.anthropic_api_key, fuzzer_id=fuzzer_id)
 
 
 def run(force_logging: bool = True):

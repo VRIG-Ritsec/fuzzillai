@@ -4,6 +4,8 @@ import os
 import json
 import hashlib
 import sys
+import re
+import sqlite3
 from pathlib import Path
 
 try:
@@ -82,6 +84,90 @@ def _compute_doc_id(metadata: dict, content: str) -> str:
     ]
     h = hashlib.sha1("|".join(key_fields).encode("utf-8"))
     return h.hexdigest()
+
+
+def _tokenize(text: str):
+    return re.findall(r"[A-Za-z0-9_]{2,}", text.lower())
+
+
+def _sanitize_bm25_query(query: str) -> str:
+    tokens = _tokenize(query)
+    if not tokens:
+        return ""
+    return " OR ".join(tokens[:16])
+
+
+def _bm25_search(db_path: Path, query: str, top_k: int) -> list[tuple[str, float]]:
+    if not db_path.exists():
+        return []
+    query = query.strip()
+    if not query:
+        return []
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+    except sqlite3.Error:
+        return []
+
+    try:
+        conn.row_factory = sqlite3.Row
+        try:
+            cur = conn.execute(
+                "SELECT doc_id, bm25(docs) AS score FROM docs WHERE docs MATCH ? ORDER BY score LIMIT ?",
+                (query, int(top_k)),
+            )
+        except sqlite3.OperationalError:
+            safe_query = _sanitize_bm25_query(query)
+            if not safe_query:
+                return []
+            try:
+                cur = conn.execute(
+                    "SELECT doc_id, bm25(docs) AS score FROM docs WHERE docs MATCH ? ORDER BY score LIMIT ?",
+                    (safe_query, int(top_k)),
+                )
+            except sqlite3.OperationalError:
+                return []
+        return [(row["doc_id"], float(row["score"])) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def _rrf_fuse(result_lists: list[list[dict]], rrf_k: int = 60) -> list[dict]:
+    scores = {}
+    for results in result_lists:
+        for rank, item in enumerate(results):
+            doc_id = item.get("doc_id")
+            if not doc_id:
+                continue
+            score = 1.0 / (rrf_k + rank + 1)
+            if doc_id in scores:
+                scores[doc_id]["rrf_score"] += score
+                for key, value in item.items():
+                    if key not in scores[doc_id] or scores[doc_id][key] in (None, ""):
+                        scores[doc_id][key] = value
+            else:
+                merged = dict(item)
+                merged["rrf_score"] = score
+                scores[doc_id] = merged
+    return sorted(scores.values(), key=lambda d: d.get("rrf_score", 0.0), reverse=True)
+
+
+def _lite_rerank(query: str, docs: list[dict]) -> list[dict]:
+    query_tokens = set(_tokenize(query))
+    if not query_tokens:
+        return docs
+
+    ranked = []
+    for doc in docs:
+        content = str(doc.get("content", ""))
+        doc_tokens = set(_tokenize(content))
+        overlap = len(query_tokens & doc_tokens) / max(1, len(query_tokens))
+        base = float(doc.get("rrf_score", 0.0)) + float(doc.get("similarity", 0.0))
+        doc = dict(doc)
+        doc["rerank_score"] = (0.65 * base) + (0.35 * overlap)
+        ranked.append(doc)
+
+    return sorted(ranked, key=lambda d: d.get("rerank_score", 0.0), reverse=True)
 
 @tool
 def set_rag_collection(name: str) -> str:
@@ -270,7 +356,8 @@ class FAISSKnowledgeBase:
         if not FAISS_AVAILABLE:
             raise RuntimeError("FAISS dependencies not available")
         
-        base_dir = Path(__file__).parent.parent / 'knowlage_docs' / 'v8_knowlagebase'
+        default_dir = Path(__file__).resolve().parent.parent / "rag_db"
+        base_dir = Path(os.getenv("RAG_BASE_DIR", str(default_dir))).expanduser() / "v8_knowlagebase"
         
         if not base_dir.exists():
             raise FileNotFoundError(f"Knowledge base not found: {base_dir}")
@@ -352,6 +439,7 @@ class FAISSKnowledgeBase:
                 
                 similarity = 1.0 / (1.0 + distance)
                 results.append({
+                    'doc_id': doc.get('doc_id'),
                     'path': doc['path'],
                     'topic': doc['topic'],
                     'content': doc['content'],
@@ -390,6 +478,7 @@ def search_knowledge_base(query: str, top_k: int = 3, topic_filter: str = "") ->
             content = result['content']
             
             output.append({
+                'doc_id': result.get('doc_id'),
                 'topic': result['topic'],
                 'file': result['path'],
                 'similarity': round(result['similarity'], 3),
@@ -420,15 +509,26 @@ def get_knowledge_doc(file_path: str) -> str:
     try:
         kb = FAISSKnowledgeBase.get_instance()
         
-        for doc in kb.metadata:
-            if doc['path'] == file_path:
-                return json.dumps({
-                    'topic': doc['topic'],
-                    'file': doc['path'],
-                    'content': doc['content']
-                }, indent=2)
-        
-        return json.dumps({"error": f"Document not found: {file_path}"})
+        matches = [doc for doc in kb.metadata if doc.get('path') == file_path]
+        if not matches:
+            return json.dumps({"error": f"Document not found: {file_path}"})
+
+        matches.sort(key=lambda d: d.get("chunk_index", 0))
+        output = []
+        for doc in matches:
+            output.append({
+                'doc_id': doc.get('doc_id'),
+                'topic': doc.get('topic'),
+                'file': doc.get('path'),
+                'chunk_index': doc.get('chunk_index'),
+                'total_chunks': doc.get('total_chunks'),
+                'start_char': doc.get('start_char'),
+                'end_char': doc.get('end_char'),
+                'start_line': doc.get('start_line'),
+                'end_line': doc.get('end_line'),
+                'content': doc.get('content', '')
+            })
+        return json.dumps(output, indent=2)
     
     except Exception as e:
         return json.dumps({"error": f"Failed to retrieve document: {str(e)}"})
@@ -441,7 +541,8 @@ class FAISSV8SourceRag:
         if not FAISS_AVAILABLE:
             raise RuntimeError("FAISS dependencies not available")
         
-        base_dir = Path(__file__).parent.parent / 'rag_db' / 'v8_source_rag'
+        default_dir = Path(__file__).resolve().parent.parent / "rag_db"
+        base_dir = Path(os.getenv("RAG_BASE_DIR", str(default_dir))).expanduser() / "v8_source_rag"
         
         if not base_dir.exists():
             raise FileNotFoundError(f"v8 source rag not found: {base_dir}")
@@ -457,6 +558,9 @@ class FAISSV8SourceRag:
         
         with open(metadata_file, 'r') as f:
             self.metadata = json.load(f)
+
+        self.doc_id_to_doc = {doc.get("doc_id"): doc for doc in self.metadata if doc.get("doc_id")}
+        self.bm25_db_path = base_dir / "v8_source_rag_bm25.sqlite"
         
         with open(model_file, 'rb') as f:
             model_name = pickle.load(f)
@@ -507,7 +611,7 @@ class FAISSV8SourceRag:
             cls._instance = cls()
         return cls._instance
     
-    def search(self, query: str, top_k: int = 5, topic_filter: str = None):
+    def search_vector(self, query: str, top_k: int = 5, topic_filter: str = None):
         query_embedding = self.model.encode([query], convert_to_numpy=True)
         
         search_k = top_k * 3 if topic_filter else top_k
@@ -523,6 +627,7 @@ class FAISSV8SourceRag:
                 
                 similarity = 1.0 / (1.0 + distance)
                 results.append({
+                    'doc_id': doc.get('doc_id'),
                     'path': doc['path'],
                     'topic': doc['topic'],
                     'content': doc['content'],
@@ -533,6 +638,40 @@ class FAISSV8SourceRag:
                     break
         
         return results
+
+    def search_hybrid(
+        self,
+        query: str,
+        top_k: int = 5,
+        topic_filter: str = None,
+        vector_k: int = 40,
+        bm25_k: int = 60,
+        rerank_k: int = 12,
+    ):
+        vector_results = self.search_vector(query, vector_k, topic_filter)
+        bm25_hits = _bm25_search(self.bm25_db_path, query, bm25_k)
+        bm25_results = []
+        for doc_id, score in bm25_hits:
+            doc = self.doc_id_to_doc.get(doc_id)
+            if not doc:
+                continue
+            if topic_filter and topic_filter.lower() not in doc.get('topic', '').lower():
+                continue
+            bm25_results.append({
+                'doc_id': doc_id,
+                'path': doc.get('path'),
+                'topic': doc.get('topic'),
+                'content': doc.get('content', ''),
+                'bm25_score': float(score),
+            })
+
+        fused = _rrf_fuse([vector_results, bm25_results], rrf_k=60)
+        rerank_pool = fused[:max(top_k, rerank_k)]
+        reranked = _lite_rerank(query, rerank_pool)
+        return reranked[:top_k]
+
+    def search(self, query: str, top_k: int = 5, topic_filter: str = None):
+        return self.search_vector(query, top_k, topic_filter)
 
 @tool
 def search_v8_source_rag(query: str, top_k: int = 3, topic_filter: str = "") -> str:
@@ -560,6 +699,7 @@ def search_v8_source_rag(query: str, top_k: int = 3, topic_filter: str = "") -> 
         for result in results:
             content = result['content']
             output.append({
+                'doc_id': result.get('doc_id'),
                 'topic': result['topic'],
                 'file': result['path'],
                 'similarity': round(result['similarity'], 3),
@@ -570,6 +710,58 @@ def search_v8_source_rag(query: str, top_k: int = 3, topic_filter: str = "") -> 
     
     except Exception as e:
         return json.dumps({"error": f"Failed to search V8 source RAG: {str(e)}"})
+
+
+@tool
+def search_v8_source_rag_hybrid(
+    query: str,
+    top_k: int = 6,
+    topic_filter: str = "",
+    vector_k: int = 40,
+    bm25_k: int = 60,
+    rerank_k: int = 12,
+) -> str:
+    """
+    Hybrid search (BM25 + vector + rerank) over the V8 source RAG.
+
+    Args:
+        query (str): Natural language query about V8 source code.
+        top_k (int): Number of results to return (default 6, max 8).
+        topic_filter (str): Optional topic filter to narrow results (e.g., 'ic', 'compiler', 'runtime'), or empty for all.
+        vector_k (int): Vector candidates to retrieve (default 40, max 80).
+        bm25_k (int): BM25 candidates to retrieve (default 60, max 120).
+        rerank_k (int): Candidates to rerank (default 12, max 20).
+    Returns:
+        str: JSON string containing hybrid search results.
+    """
+    if not FAISS_AVAILABLE:
+        return json.dumps({"error": "V8 source RAG not available. Install dependencies: pip install numpy faiss-cpu sentence-transformers"})
+
+    try:
+        kb = FAISSV8SourceRag.get_instance()
+
+        top_k = max(1, min(8, int(top_k)))
+        vector_k = max(top_k, min(80, int(vector_k)))
+        bm25_k = max(top_k, min(120, int(bm25_k)))
+        rerank_k = max(top_k, min(20, int(rerank_k)))
+
+        results = kb.search_hybrid(query, top_k, topic_filter if topic_filter else None, vector_k, bm25_k, rerank_k)
+
+        output = []
+        for result in results:
+            content = result.get('content', '')
+            output.append({
+                'doc_id': result.get('doc_id'),
+                'topic': result.get('topic'),
+                'file': result.get('path'),
+                'similarity': round(result.get('similarity', 0.0), 3),
+                'content': content
+            })
+
+        return json.dumps(output, indent=2)
+
+    except Exception as e:
+        return json.dumps({"error": f"Failed to search V8 source RAG (hybrid): {str(e)}"})
 
 @tool
 def get_v8_source_rag_doc(file_path: str) -> str:
@@ -587,16 +779,26 @@ def get_v8_source_rag_doc(file_path: str) -> str:
     
     try:
         kb = FAISSV8SourceRag.get_instance()
-        
-        for doc in kb.metadata:
-            if doc['path'] == file_path:
-                return json.dumps({
-                    'topic': doc['topic'],
-                    'file': doc['path'],
-                    'content': doc['content']
-                }, indent=2)
-        
-        return json.dumps({"error": f"V8 source RAG document not found: {file_path}"})
+        matches = [doc for doc in kb.metadata if doc.get('path') == file_path]
+        if not matches:
+            return json.dumps({"error": f"V8 source RAG document not found: {file_path}"})
+
+        matches.sort(key=lambda d: d.get("chunk_index", 0))
+        output = []
+        for doc in matches:
+            output.append({
+                'doc_id': doc.get('doc_id'),
+                'topic': doc.get('topic'),
+                'file': doc.get('path'),
+                'chunk_index': doc.get('chunk_index'),
+                'total_chunks': doc.get('total_chunks'),
+                'start_char': doc.get('start_char'),
+                'end_char': doc.get('end_char'),
+                'start_line': doc.get('start_line'),
+                'end_line': doc.get('end_line'),
+                'content': doc.get('content', '')
+            })
+        return json.dumps(output, indent=2)
     
     except Exception as e:
         return json.dumps({"error": f"Failed to retrieve V8 source RAG document: {str(e)}"})

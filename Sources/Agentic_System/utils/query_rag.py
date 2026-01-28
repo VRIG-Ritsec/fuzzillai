@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import pickle
 import sys
 from pathlib import Path
@@ -27,7 +28,10 @@ class RAGDatabase:
         model_file = db_path / 'v8_knowlagebase_model.pkl'
         
         if not all([index_file.exists(), metadata_file.exists(), model_file.exists()]):
-            raise FileNotFoundError("Database files incomplete")
+            raise FileNotFoundError(
+                f"Database files incomplete: {index_file.resolve()}, "
+                f"{metadata_file.resolve()}, {model_file.resolve()}"
+            )
         
         self.index = faiss.read_index(str(index_file))
         
@@ -82,7 +86,9 @@ def main():
     query = sys.argv[1]
     top_k = int(sys.argv[2]) if len(sys.argv) > 2 else 5
     
-    db_path = Path(__file__).parent / 'v8_knowlagebase'
+    default_rag_dir = Path(__file__).resolve().parent.parent / "rag_db"
+    rag_base_dir = Path(os.getenv("RAG_BASE_DIR", str(default_rag_dir))).expanduser()
+    db_path = rag_base_dir / "v8_knowlagebase"
     
     print(f"Loading RAG database from: {db_path}\n")
     rag = RAGDatabase(db_path)
@@ -94,4 +100,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

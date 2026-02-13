@@ -139,80 +139,75 @@ public class PostgreSQLSync: Module {
             // If not found (e.g., corpus import), use empty strings
             let programId = program.id.uuidString
             let (stdout, stderr, fuzzout) = self.executionCache[programId] ?? ("", "", "")
-            
-            // Clean up the cache entry immediately after use
             self.executionCache.removeValue(forKey: programId)
-            
-            Task {
-                guard let fuzzerId = self.cachedFuzzerId else {
-                    self.logger.error("Fuzzer ID not set - registration may have failed")
-                    return
+
+            guard let fuzzerId = self.cachedFuzzerId else {
+                self.logger.error("Fuzzer ID not set - registration may have failed")
+                return
+            }
+
+            let programInput: PostgresSQLStorage.ProgramInput
+            do {
+                programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
+            } catch {
+                self.logger.error("Failed to prepare program input: \(error)")
+                return
+            }
+
+            var executionInput: PostgresSQLStorage.ExecutionInput? = nil
+            if let execution = execution {
+                // Determine if new edges were found
+                // Check if aspects is a CovEdgeSet to distinguish between:
+                // - New coverage edges (CovEdgeSet with count > 0)
+                // - Feedback/optimization delta only (basic ProgramAspects)
+                let isNewEdge: Bool
+                if let covEdgeSet = aspects as? CovEdgeSet {
+                    isNewEdge = covEdgeSet.count > 0
+                } else {
+                    isNewEdge = false
                 }
 
-                let programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
-                await self.storage.addProgramToBatch(programInput)
-                    
-                if let execution = execution {
-                    let outcomeId = DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome)
+                var coverageTotal: Double? = nil
+                var edgesFound: Int? = nil
+                var totalEdges: Int? = nil
+                var turbofanOptimizationBits: Int64? = nil
+                var feedbackNexusCount: Int? = nil
 
-                    // Determine if new edges were found
-                    // Check if aspects is a CovEdgeSet to distinguish between:
-                    // - New coverage edges (CovEdgeSet with count > 0)
-                    // - Feedback/optimization delta only (basic ProgramAspects)
-                    let isNewEdge: Bool
+                if let evaluator = self.covEvaluator {
+                    let totalEdgesCount = evaluator.getTotalEdgesCount()
+                    totalEdges = Int(totalEdgesCount)
+                    let foundEdgesCount = evaluator.getFoundEdgesCount()
+                    if totalEdgesCount > 0 {
+                        coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
+                    }
                     if let covEdgeSet = aspects as? CovEdgeSet {
-                        isNewEdge = covEdgeSet.count > 0
+                        edgesFound = Int(covEdgeSet.count)
                     } else {
-                        isNewEdge = false
+                        edgesFound = 0
                     }
+                    turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
+                    feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
+                }
 
-                    var coverageTotal: Double? = nil
-                    var edgesFound: Int? = nil
-                    var totalEdges: Int? = nil
-                    var turbofanOptimizationBits: Int64? = nil
-                    var feedbackNexusCount: Int? = nil
-                    
-                    if let evaluator = self.covEvaluator {
-                        let totalEdgesCount = evaluator.getTotalEdgesCount()
-                        totalEdges = Int(totalEdgesCount)
-                        
-                        let foundEdgesCount = evaluator.getFoundEdgesCount()
-                        
-                        if totalEdgesCount > 0 {
-                            coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
-                        }
-                        
-                        if let covEdgeSet = aspects as? CovEdgeSet {
-                            edgesFound = Int(covEdgeSet.count)
-                        } else {
-                            edgesFound = 0
-                        }
-                        
-                        turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
-                        feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
-                    }
-                    
-                    let executionInput = PostgresSQLStorage.ExecutionInput(
-                        programHash: programInput.programHash,
-                        executionOutcomeId: outcomeId,
-                        coverageTotal: coverageTotal,
-                        edgesFound: edgesFound,
-                        totalEdges: totalEdges,
-                        isNewEdge: isNewEdge,
-                        stdout: stdout,
-                        stderr: stderr,
-                        fuzzout: fuzzout,
-                        turbofanOptimizationBits: turbofanOptimizationBits,
-                        feedbackNexusCount: feedbackNexusCount,
-                        createdAt: Date()
-                    )
+                executionInput = PostgresSQLStorage.ExecutionInput(
+                    programHash: programInput.programHash,
+                    executionOutcomeId: DatabaseUtils.mapExecutionOutcome(outcome: execution.outcome),
+                    coverageTotal: coverageTotal,
+                    edgesFound: edgesFound,
+                    totalEdges: totalEdges,
+                    isNewEdge: isNewEdge,
+                    stdout: stdout,
+                    stderr: stderr,
+                    fuzzout: fuzzout,
+                    turbofanOptimizationBits: turbofanOptimizationBits,
+                    feedbackNexusCount: feedbackNexusCount,
+                    createdAt: Date()
+                )
+            }
+            Task {
+                await self.storage.addProgramToBatch(programInput)
+                if let executionInput = executionInput {
                     await self.storage.addExecutionToBatch(executionInput)
-                    
-                    // TODO Aleksi: This is a bit too verbose, maybe only log every x times
-                    //if self.enableLogging {
-                    //    let edgeInfo = isNewEdge ? " with new edges" : " (feedback/optimization delta only)"
-                    //    self.logger.verbose("Added interesting program and execution to batch\(edgeInfo)")
-                    //}
                 }
             }
         }
@@ -226,58 +221,55 @@ public class PostgreSQLSync: Module {
             // For crashes, stderr will contain the crash stacktrace and signal info
             let programId = program.id.uuidString
             let (stdout, stderr, fuzzout) = self.executionCache[programId] ?? ("", "", "")
-            
-            // Clean up the cache entry immediately after use
             self.executionCache.removeValue(forKey: programId)
             
-            Task {
-                guard let fuzzerId = self.cachedFuzzerId else {
-                    self.logger.error("Fuzzer ID not set - registration may have failed")
-                    return
-                }
+            guard let fuzzerId = self.cachedFuzzerId else {
+                self.logger.error("Fuzzer ID not set - registration may have failed")
+                return
+            }
 
-                let programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
-                await self.storage.addProgramToBatch(programInput)
-                
-                // Get coverage metrics if available (crashes may still have coverage)
-                var coverageTotal: Double? = nil
-                var edgesFound: Int? = nil
-                var totalEdges: Int? = nil
-                var turbofanOptimizationBits: Int64? = nil
-                var feedbackNexusCount: Int? = nil
-                
-                if let evaluator = self.covEvaluator {
-                    let totalEdgesCount = evaluator.getTotalEdgesCount()
-                    totalEdges = Int(totalEdgesCount)
-                    
-                    let foundEdgesCount = evaluator.getFoundEdgesCount()
-                    
-                    if totalEdgesCount > 0 {
-                        coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
-                    }
-                    
-                    // For crashes, we don't have new edge information in the same way
-                    edgesFound = Int(foundEdgesCount)
-                    
-                    turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
-                    feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
+            let programInput: PostgresSQLStorage.ProgramInput
+            do {
+                programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
+            } catch {
+                self.logger.error("Failed to prepare program input: \(error)")
+                return
+            }
+
+            // Get coverage metrics if available (crashes may still have coverage)
+            var coverageTotal: Double? = nil
+            var totalEdges: Int? = nil
+            var turbofanOptimizationBits: Int64? = nil
+            var feedbackNexusCount: Int? = nil
+
+            if let evaluator = self.covEvaluator {
+                let totalEdgesCount = evaluator.getTotalEdgesCount()
+                totalEdges = Int(totalEdgesCount)
+                let foundEdgesCount = evaluator.getFoundEdgesCount()
+                if totalEdgesCount > 0 {
+                    coverageTotal = (Double(foundEdgesCount) / Double(totalEdgesCount)) * 100
                 }
+                turbofanOptimizationBits = Int64(evaluator.getTurbofanOptimizationBits())
+                feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
+            }
                 
-                // Create execution record with outcome_id = 1 (Crashed)
-                let executionInput = PostgresSQLStorage.ExecutionInput(
-                    programHash: programInput.programHash,
-                    executionOutcomeId: 1,  // Crashed
-                    coverageTotal: coverageTotal,
-                    edgesFound: edgesFound,
-                    totalEdges: totalEdges,
-                    isNewEdge: false,  // Crashes don't contribute new edges
-                    stdout: stdout,
-                    stderr: stderr,  // Contains crash stacktrace and signal info
-                    fuzzout: fuzzout,
-                    turbofanOptimizationBits: turbofanOptimizationBits,
-                    feedbackNexusCount: feedbackNexusCount,
-                    createdAt: Date()
-                )
+            let executionInput = PostgresSQLStorage.ExecutionInput(
+                programHash: programInput.programHash,
+                executionOutcomeId: 1, // Crashed 
+                coverageTotal: coverageTotal,
+                edgesFound: nil, // Crashes don't contribute new edges
+                totalEdges: totalEdges,
+                isNewEdge: false, // Crashes don't contribute new edges
+                stdout: stdout,
+                stderr: stderr, // Contains crash stacktrace and signal info
+                fuzzout: fuzzout,
+                turbofanOptimizationBits: turbofanOptimizationBits,
+                feedbackNexusCount: feedbackNexusCount,
+                createdAt: Date()
+            )
+            // TODO Aleksi: Store the crash on disk as well
+            Task {
+                await self.storage.addProgramToBatch(programInput)
                 await self.storage.addExecutionToBatch(executionInput)
                 
                 if self.enableLogging {
@@ -289,7 +281,7 @@ public class PostgreSQLSync: Module {
         }
         
         // Periodic Flush
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+        fuzzer.timers.scheduleTask(every: 2 * Minutes) {
             Task {
                 do {
                     try await self.storage.flushBatches()
@@ -462,9 +454,5 @@ public class PostgreSQLSync: Module {
             contributorNames: contributorNames,
             parentHash: parentHash
         )
-    }
-
-    private func prepareExecutionInput() {
-
     }
 }

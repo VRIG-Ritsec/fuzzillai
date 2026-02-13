@@ -111,7 +111,7 @@ public class PostgreSQLSync: Module {
             self.cleanupCache(&self.executionCache)
         }
 
-        // Cache all mutator names and contributor names from ProgramGenerated event (before minimization)
+        // Cache all mutator names and contributor names from ProgramGenerated event (before minddimization)
         // This works around the fact that contributors don't survive protobuf serialization
         fuzzer.registerEventListener(for: fuzzer.events.ProgramGenerated) { program in
             let programId = program.id.uuidString
@@ -149,15 +149,7 @@ public class PostgreSQLSync: Module {
                     return
                 }
 
-                let mutatorNames =  self.mutatorCache[programId] ?? [] 
-                let contributorNames = self.contributorCache[programId] ?? []
-                
-                let programInput = PostgresSQLStorage.ProgramInput(
-                    program: program,
-                    fuzzerId: fuzzerId,
-                    mutatorNames: mutatorNames,
-                    contributorNames: contributorNames
-                )
+                let programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
                 await self.storage.addProgramToBatch(programInput)
                     
                 if let execution = execution {
@@ -200,18 +192,8 @@ public class PostgreSQLSync: Module {
                         feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                     }
                     
-                    let programHash: String
-                    do {
-                        programHash = try DatabaseUtils.calculateProgramHash(program: program)
-                    } catch {
-                        if self.enableLogging {
-                            self.logger.warning("Failed to calculate program hash, skipping execution record: \(error)")
-                        }
-                        return
-                    }
-                    
                     let executionInput = PostgresSQLStorage.ExecutionInput(
-                        programHash: programHash,
+                        programHash: programInput.programHash,
                         executionOutcomeId: outcomeId,
                         coverageTotal: coverageTotal,
                         edgesFound: edgesFound,
@@ -254,15 +236,7 @@ public class PostgreSQLSync: Module {
                     return
                 }
 
-                let mutatorNames =  self.mutatorCache[programId] ?? [] 
-                let contributorNames = self.contributorCache[programId] ?? []
-                
-                let programInput = PostgresSQLStorage.ProgramInput(
-                    program: program,
-                    fuzzerId: fuzzerId,
-                    mutatorNames: mutatorNames,
-                    contributorNames: contributorNames
-                )
+                let programInput = try self.prepareProgramInput(program: program, fuzzerId: fuzzerId, programId: programId)
                 await self.storage.addProgramToBatch(programInput)
                 
                 // Get coverage metrics if available (crashes may still have coverage)
@@ -289,19 +263,9 @@ public class PostgreSQLSync: Module {
                     feedbackNexusCount = Int(evaluator.getFeedbackNexusCount())
                 }
                 
-                let programHash: String
-                do {
-                    programHash = try DatabaseUtils.calculateProgramHash(program: program)
-                } catch {
-                    if self.enableLogging {
-                        self.logger.warning("Failed to calculate program hash for crash, skipping execution record: \(error)")
-                    }
-                    return
-                }
-                
                 // Create execution record with outcome_id = 1 (Crashed)
                 let executionInput = PostgresSQLStorage.ExecutionInput(
-                    programHash: programHash,
+                    programHash: programInput.programHash,
                     executionOutcomeId: 1,  // Crashed
                     coverageTotal: coverageTotal,
                     edgesFound: edgesFound,
@@ -472,5 +436,35 @@ public class PostgreSQLSync: Module {
                 cache.removeValue(forKey: key)
             }
         }
+    }
+
+    private func prepareProgramInput(program: Program, fuzzerId: Int, programId: String) throws -> PostgresSQLStorage.ProgramInput {
+        let mutatorNames =  self.mutatorCache[programId] ?? [] 
+        self.mutatorCache.removeValue(forKey: programId)
+
+        let contributorNames = self.contributorCache[programId] ?? []
+        self.contributorCache.removeValue(forKey: programId)
+                
+        let (programHash, programBase64) = try DatabaseUtils.prepareProgram(program: program)
+        let parentHash: String?
+        if let parentProgram = program.parent {
+            parentHash = try? DatabaseUtils.prepareProgram(program: parentProgram).hash
+        } else {
+            parentHash = nil
+        }
+
+        return PostgresSQLStorage.ProgramInput(
+            program: program,
+            programHash: programHash,
+            programBase64: programBase64,
+            fuzzerId: fuzzerId,
+            mutatorNames: mutatorNames,
+            contributorNames: contributorNames,
+            parentHash: parentHash
+        )
+    }
+
+    private func prepareExecutionInput() {
+
     }
 }

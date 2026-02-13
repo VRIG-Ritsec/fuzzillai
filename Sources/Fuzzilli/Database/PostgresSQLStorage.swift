@@ -67,20 +67,29 @@ public actor PostgresSQLStorage {
 
     public struct ProgramInput {
         public let program: Program
+        public let programHash: String
+        public let programBase64: String
         public let fuzzerId: Int
         public let mutatorNames: [String]
         public let contributorNames: [String]
+        public let parentHash: String?
 
         public init(
             program: Program, 
+            programHash: String, 
+            programBase64: String, 
             fuzzerId: Int, 
             mutatorNames: [String], 
-            contributorNames: [String]
+            contributorNames: [String],
+            parentHash: String?
         ) {
             self.program = program
+            self.programHash = programHash
+            self.programBase64 = programBase64
             self.fuzzerId = fuzzerId
             self.mutatorNames = mutatorNames
             self.contributorNames = contributorNames
+            self.parentHash = parentHash
         }
     }
 
@@ -369,6 +378,7 @@ public actor PostgresSQLStorage {
     }
     
     public func addProgramToBatch(_ programInput: ProgramInput) {
+        /*
         guard let programHash = try? DatabaseUtils.calculateProgramHash(program: programInput.program) else {
             if self.enableLogging {
                 self.logger.warning("Failed to calculate program hash, skipping program")
@@ -385,6 +395,7 @@ public actor PostgresSQLStorage {
         }
         
         seenProgramHashes.insert(programHash)
+        */
         pendingPrograms.append(programInput)
     }
     
@@ -421,6 +432,7 @@ public actor PostgresSQLStorage {
         
         if !programsToStore.isEmpty {
             // Group by fuzzerId to use storeProgramsBatch
+            // TODO Aleksi: Is this even necessary?
             let groupedPrograms = Dictionary(grouping: programsToStore, by: { $0.fuzzerId})
             for (fuzzerId, programInputs) in groupedPrograms {
                 _ = try await storeProgramsBatch(programInputs: programInputs, fuzzerId: fuzzerId)
@@ -441,66 +453,8 @@ public actor PostgresSQLStorage {
     }
     
     private func _storeProgramsBatchImpl(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
-        // Pre-calculate all hashes and sort to ensure consistent lock ordering
-        struct PreparedProgram {
-            let hash: String
-            let input: ProgramInput
-            let parentHash: String?
-            let programData: String
-        }
-        
-        var preparedPrograms: [PreparedProgram] = []
-        
-        for programInput in programInputs {
-            let program = programInput.program
-            
-            // Calculate program hash
-            let programHash: String
-            do {
-                programHash = try DatabaseUtils.calculateProgramHash(program: program)
-            } catch {
-                if self.enableLogging {
-                    self.logger.warning("Failed to calculate hash for program, skipping: \(error)")
-                }
-                continue
-            }
-            
-            // Calculate parent hash if exists
-            let parentHash: String?
-            if let parentProgram = program.parent {
-                do {
-                    parentHash = try DatabaseUtils.calculateProgramHash(program: parentProgram)
-                } catch {
-                    if self.enableLogging {
-                        self.logger.warning("Failed to calculate parent hash, using nil: \(error)")
-                    }
-                    parentHash = nil
-                }
-            } else {
-                parentHash = nil
-            }
-            
-            // Encode program (must be done after parent hash calculation)
-            let programData: String
-            do {
-                programData = try DatabaseUtils.encodeProgramToBase64(program: program)
-            } catch {
-                if self.enableLogging {
-                    self.logger.warning("Failed to encode program with hash \(programHash), skipping: \(error)")
-                }
-                continue
-            }
-            
-            preparedPrograms.append(PreparedProgram(
-                hash: programHash,
-                input: programInput,
-                parentHash: parentHash,
-                programData: programData
-            ))
-        }
-        
         // Sort by hash - ensures all workers acquire locks in the same order
-        preparedPrograms.sort { $0.hash < $1.hash }
+        let sortedProgramInputs = programInputs.sorted { $0.programHash < $1.programHash }
         
         return try await databasePool.withConnection { connection in
             var programHashes: [String] = []
@@ -511,11 +465,10 @@ public actor PostgresSQLStorage {
                 var insertedCount = 0
                 var skippedCount = 0
                 
-                for prepared in preparedPrograms {
-                    let programHash = prepared.hash
-                    let programInput = prepared.input
-                    let mutatorNames = programInput.mutatorNames
-                    let contributorNames = programInput.contributorNames
+                for input in sortedProgramInputs {
+                    let programHash = input.programHash
+                    let mutatorNames = input.mutatorNames
+                    let contributorNames = input.contributorNames
 
                     // Format as PostgreSQL arrays: ARRAY['name1', 'name2', ...]
                     let mutatorsArray: String
@@ -539,7 +492,7 @@ public actor PostgresSQLStorage {
                     // Single unified INSERT into the program table (previously split between fuzzer and program tables)
                     let programQuery = PostgresQuery(stringLiteral: """
                         INSERT INTO program (program_hash, fuzzer_id, inserted_at, program_base64, created_at, source_mutators, contributors, parent_program_hash) 
-                        VALUES ('\(programHash)', \(fuzzerId), NOW(), '\(prepared.programData)', NOW(), \(mutatorsArray), \(contributorsArray), \(prepared.parentHash != nil ? "'\(prepared.parentHash!)'" : "NULL"))
+                        VALUES ('\(programHash)', \(fuzzerId), NOW(), '\(input.programBase64)', NOW(), \(mutatorsArray), \(contributorsArray), \(input.parentHash != nil ? "'\(input.parentHash!)'" : "NULL"))
                         ON CONFLICT (program_hash) DO NOTHING
                         RETURNING program_hash
                     """)
@@ -683,7 +636,7 @@ public actor PostgresSQLStorage {
         }
         
         var allPrograms: [Program] = []
-        var seenHashes = Set<String>()
+        //var seenHashes = Set<String>()
         let batchSize = 5000  // Fetch 5k programs at a time
         var offset = 0
         var totalFetched = 0
@@ -696,6 +649,7 @@ public actor PostgresSQLStorage {
             }
             
             // Deduplicate and add to results
+            /*
             for program in batch {
                 do {
                     let hash = try DatabaseUtils.calculateProgramHash(program: program)
@@ -710,6 +664,7 @@ public actor PostgresSQLStorage {
                     }
                 }
             }
+            */
             
             totalFetched += batch.count
             

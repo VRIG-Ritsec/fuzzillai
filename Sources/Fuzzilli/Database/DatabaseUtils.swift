@@ -4,9 +4,19 @@ import Crypto
 
 public class DatabaseUtils {
 
-    public static func encodeProgramToBase64(program: Program) throws -> String {
-        let data = try encodeProgramToProtobuf(program: program)
-        return data.base64EncodedString()
+    public static func prepareProgram(program: Program) throws -> (hash: String, base64: String) {
+        if program.code.contains(where: { $0.op is JsInternalOperation }) {
+            throw DatabaseUtilsError.programContainsInternalOperations
+        }
+
+        var proto = program.asProtobuf()
+        proto.clearParent()
+        let data = try proto.serializedData()
+
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let base64 = data.base64EncodedString()
+
+        return (hash, base64)
     }
 
     public static func decodeProgramFromBase64(base64: String) throws -> Program {
@@ -16,6 +26,7 @@ public class DatabaseUtils {
         return try decodeProgramFromProtobuf(data: data)
     }
 
+    /*
     public static func encodeProgramToProtobuf(program: Program) throws -> Data {
         // Make sure the program does not contain internal operations
         if program.code.contains(where: { $0.op is JsInternalOperation }) {
@@ -29,12 +40,14 @@ public class DatabaseUtils {
         
         return try proto.serializedData()
     }
+    */
 
     public static func decodeProgramFromProtobuf(data: Data) throws -> Program {
         let proto = try Fuzzilli_Protobuf_Program(serializedBytes: data)
         return try Program(from: proto)
     }
     
+    /*
     public static func calculateProgramHash(program: Program) throws -> String {
         // Make sure the program does not contain internal operations
         if program.code.contains(where: { $0.op is JsInternalOperation }) {
@@ -57,6 +70,7 @@ public class DatabaseUtils {
         // Convert to hex string (64 characters for SHA-256)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
+    */
     
     public static func mapExecutionOutcome(outcome: ExecutionOutcome) -> Int {
         switch outcome {

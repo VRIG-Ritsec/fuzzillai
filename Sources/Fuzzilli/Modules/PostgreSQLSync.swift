@@ -70,7 +70,7 @@ public class PostgreSQLSync: Module {
                 // Import each program into the fuzzer's corpus
                 for program in programs {
                     fuzzer.async {
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .databaseSync), enableDropout: false)
                     }
                 }
 
@@ -413,7 +413,7 @@ public class PostgreSQLSync: Module {
                 
                 for (program, _) in newPrograms {
                     fuzzer.async {
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .databaseSync), enableDropout: false)
                     }
                 }
             }

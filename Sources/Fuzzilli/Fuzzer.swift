@@ -771,7 +771,11 @@ public class Fuzzer {
                 }
             }
             assert(!program.code.contains(where: { $0.op is JsInternalOperation }))
-            dispatchEvent(events.InterestingProgramFound, data: (program, aspects, origin, execution))
+
+            // Don't dispatch events for programs synced from the database
+            if origin != .corpusImport(mode: .databaseSync) {
+                dispatchEvent(events.InterestingProgramFound, data: (program, aspects, origin, execution))
+            }
 
             // If we're running in static corpus mode, we only add programs to our corpus during corpus import.
             if !config.staticCorpus || origin.isFromCorpusImport() {

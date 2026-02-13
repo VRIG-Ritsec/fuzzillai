@@ -75,12 +75,17 @@ public enum CorpusImportMode: Equatable {
     /// Only programs that increase coverage are included in the fuzzing corpus.
     case interestingOnly(shouldMinimize: Bool)
 
+    /// The program was synced from postgres 
+    case databaseSync
+
     public func requiresMinimization() -> Bool {
         switch self {
         case .full:
             return false
         case .interestingOnly(let shouldMinimize):
             return shouldMinimize
+        case .databaseSync:
+            return false
         }
     }
 }

@@ -40,56 +40,29 @@ public class PostgreSQLSync: Module {
         }
         
         // Register fuzzer synchronously before setting up event listeners
-        // This ensures cachedFuzzerId is set before any events start firing
-        // Use a semaphore to block until registration completes
-        let registrationSemaphore = DispatchSemaphore(value: 0)
-        
+        let semaphore = DispatchSemaphore(value: 0)
         Task {
             do {
-                // Sleep for a random amount of time to avoid stampedes
-                let jitter = TimeInterval.random(in: 0...60)
-                try? await Task.sleep(nanoseconds: UInt64(jitter * 1_000_000_000))
-
-                // Step 1: Register this worker with the database (blocking via semaphore)
                 let engineArgs = fuzzer.config.arguments
                 self.cachedFuzzerId = try await storage.registerFuzzer(engineArguments: engineArgs)
                 if enableLogging {
                     logger.info("Fuzzer registered with PostgreSQL database: fuzzerId \(self.cachedFuzzerId ?? -1)")
                 }
-                
-                // Registration complete 
-                registrationSemaphore.signal()
+                semaphore.signal()
 
-                // Step 2: Sync corpus from database to in-memory basicCorpus (can be async)
+                // Sync corpus from database to in-memory basicCorpus
+                let jitter = TimeInterval.random(in: 0...60)
+                try? await Task.sleep(nanoseconds: UInt64(jitter * 1_000_000_000))
                 let programs = try await storage.syncCorpusFromDatabase()
-                logger.info("Found: \(programs.count) programs from db")
-                if enableLogging {
-                    logger.info("Syncing \(programs.count) programs from database to corpus")
-                }
-
-                // Import each program into the fuzzer's corpus
                 for program in programs {
-                    fuzzer.async {
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .databaseSync), enableDropout: false)
-                    }
-                }
-
-                if enableLogging {
-                    logger.info("Corpus synchronization complete: imported \(programs.count) programs")
+                    fuzzer.async { fuzzer.importProgram(program, origin: .corpusImport(mode: .databaseSync), enableDropout: false) }
                 }
             } catch {
                 logger.error("Failed to register fuzzer with PostgreSQL database: \(String(reflecting: error))")
-                // Signal even on error so we don't deadlock
-                registrationSemaphore.signal()
+                semaphore.signal()
             }
         }
-        
-        // Wait for registration to complete before continuing with event listener setup
-        registrationSemaphore.wait()
-        
-        if enableLogging {
-            logger.info("Fuzzer registration complete, proceeding with event listener setup")
-        }
+        semaphore.wait()
         
         // Track program ID for each execution to correlate with outputs
         var currentExecutingProgramId: String? = nil

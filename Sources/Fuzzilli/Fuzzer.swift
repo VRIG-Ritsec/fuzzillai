@@ -949,9 +949,10 @@ public class Fuzzer {
             
             // Condition 3: Corpus size-based limit
             // If we have a large corpus (e.g., from PostgreSQL sync), we should move to fuzzing
-            if corpus.size >= 1500 {
+            let ceiling = 1500
+            if corpus.size >= ceiling {
                 shouldExitCorpusGeneration = true
-                exitReason = "corpus size threshold reached (\(corpus.size) samples)"
+                exitReason = "corpus size threshold reached (\(ceiling) samples)"
             }
             
             if shouldExitCorpusGeneration {

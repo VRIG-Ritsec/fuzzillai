@@ -444,6 +444,8 @@ public actor PostgresSQLStorage {
         }
     }
 
+    private let maxBatchSize = 500
+
     public func storeProgramsBatch(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
         guard !programInputs.isEmpty else { return [] }
 
@@ -451,82 +453,65 @@ public actor PostgresSQLStorage {
             try await self._storeProgramsBatchImpl(programInputs: programInputs, fuzzerId: fuzzerId)
         }
     }
-    
+
     private func _storeProgramsBatchImpl(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
-        // Sort by hash - ensures all workers acquire locks in the same order
-        let sortedProgramInputs = programInputs.sorted { $0.programHash < $1.programHash }
+        // Sort by hash so all workers acquire locks in the same order
+        let sortedInputs = programInputs.sorted { $0.programHash < $1.programHash }
         
         return try await databasePool.withConnection { connection in
-            var programHashes: [String] = []
+            var allHashes: [String] = []
 
-            try await connection.query("BEGIN", logger:self.logger)
-
-            do {
-                var insertedCount = 0
-                var skippedCount = 0
-                
-                for input in sortedProgramInputs {
-                    let programHash = input.programHash
-                    let mutatorNames = input.mutatorNames
-                    let contributorNames = input.contributorNames
-
-                    // Format as PostgreSQL arrays: ARRAY['name1', 'name2', ...]
-                    let mutatorsArray: String
-                    if !mutatorNames.isEmpty {
-                        let escapedMutators = mutatorNames.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
-                        mutatorsArray = "ARRAY[\(escapedMutators.joined(separator: ", "))]"
-                    } else {
-                        mutatorsArray = "NULL"
-                    }
-
-                    let contributorsArray: String
-                    if !contributorNames.isEmpty {
-                        let escapedContributors = contributorNames.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
-                        contributorsArray = "ARRAY[\(escapedContributors.joined(separator: ", "))]"
-                    } else {
-                        contributorsArray = "NULL"
-                    }
-
-                    // Use ON CONFLICT DO NOTHING with RETURNING to detect if insert succeeded
-                    // First worker to insert wins, others skip gracefully
-                    // Single unified INSERT into the program table (previously split between fuzzer and program tables)
-                    let programQuery = PostgresQuery(stringLiteral: """
-                        INSERT INTO program (program_hash, fuzzer_id, inserted_at, program_base64, created_at, source_mutators, contributors, parent_program_hash) 
-                        VALUES ('\(programHash)', \(fuzzerId), NOW(), '\(input.programBase64)', NOW(), \(mutatorsArray), \(contributorsArray), \(input.parentHash != nil ? "'\(input.parentHash!)'" : "NULL"))
-                        ON CONFLICT (program_hash) DO NOTHING
-                        RETURNING program_hash
-                    """)
-
-                    let programResult = try await connection.query(programQuery, logger:self.logger)
-                    let programRows = try await programResult.collect()
-                    
-                    // If RETURNING gave us a row, the insert succeeded
-                    // If no rows, it was skipped due to conflict
-                    if !programRows.isEmpty {
-                        programHashes.append(programHash)
-                        insertedCount += 1
-                    } else {
-                        skippedCount += 1
-                    }
-                }
-
-                try await connection.query("COMMIT", logger:self.logger)
-
-                if self.enableLogging {
-                    self.logger.info("Successfully batch stored \(insertedCount) programs in database (\(skippedCount) skipped as duplicates)")
-                }
-
-                return programHashes
-
-            } catch {
-                _ = try? await connection.query("ROLLBACK", logger:self.logger)
-
-                if self.enableLogging {
-                    self.logger.error("Failed to batch store programs: \(String(reflecting: error))")
-                }
-                throw error
+            for chunk in sortedInputs.chunked(into: self.maxBatchSize) {
+                let hashes = try await self.insertProgramChunk(chunk, fuzzerId: fuzzerId, connection: connection)
+                allHashes.append(contentsOf: hashes)
             }
+            return allHashes    
         }
+    }
+
+    private func insertProgramChunk(_ chunk: [ProgramInput], fuzzerId: Int, connection: PostgresConnection) async throws -> [String] {
+        guard !chunk.isEmpty else { return [] }
+
+        var bindings = PostgresBindings()
+        var valueClauses: [String] = []
+        var i = 1
+
+        for input in chunk {
+            let clause = "($\(i), $\(i+1), NOW(), $\(i+2), NOW(), $\(i+3), $\(i+4), $\(i+5))"
+            valueClauses.append(clause)
+
+            bindings.append(input.programHash)
+            bindings.append(fuzzerId)
+            bindings.append(input.programBase64)
+
+            let mutatorStr = input.mutatorNames.isEmpty ? nil : "{" + input.mutatorNames.joined(separator: ",") + "}"
+            bindings.append(mutatorStr)
+
+            let contributorStr = input.contributorNames.isEmpty ? nil : "{" + input.contributorNames.joined(separator: ",") + "}"
+            bindings.append(contributorStr)
+
+            bindings.append(input.parentHash)
+            i += 6
+        } 
+        
+        let sql = """
+            INSERT INTO program (
+                program_hash, fuzzer_id, inserted_at, 
+                program_base64, created_at, source_mutators, 
+                contributors, parent_program_hash)
+            VALUES \(valueClauses.joined(separator: ",\n    "))
+            ON CONFLICT (program_hash) DO NOTHING
+            RETURNING program_hash;
+        """
+
+        let query = PostgresQuery(unsafeSQL: sql, binds: bindings)
+        let result = try await connection.query(query, logger: self.logger)
+
+        var hashes: [String] = []
+        for try await (hash,) in result.decode((String).self) {
+            hashes.append(hash)
+        }
+        return hashes
     }
 
     public func storeExecutionsBatch(executions: [ExecutionInput]) async throws -> [Int] {
@@ -538,55 +523,62 @@ public actor PostgresSQLStorage {
     }
     
     private func _storeExecutionsBatchImpl(executions: [ExecutionInput]) async throws -> [Int] {
+        let sortedExecutions = executions.sorted { $0.programHash < $1.programHash }
+
         return try await databasePool.withConnection { connection in
             var executionIds: [Int] = []
-    
-            try await connection.query("BEGIN", logger:self.logger)
-    
-            do {
-                // Sort by program_hash for consistent lock ordering
-                let sortedExecutions = executions.sorted { $0.programHash < $1.programHash }
-                
-                for execution in sortedExecutions {
-                    let query: PostgresQuery = """
-                        INSERT INTO execution (
-                            program_hash, execution_outcome_id, coverage_total, 
-                            edges_found, total_edges, is_new_edge, 
-                            stdout, stderr, fuzzout, 
-                            turbofan_optimization_bits, feedback_nexus_count, created_at
-                        ) VALUES (
-                            \(execution.programHash), \(execution.executionOutcomeId), \(execution.coverageTotal), 
-                            \(execution.edgesFound), \(execution.totalEdges), \(execution.isNewEdge), 
-                            \(execution.stdout), \(execution.stderr), \(execution.fuzzout), 
-                            \(execution.turbofanOptimizationBits), \(execution.feedbackNexusCount), NOW()
-                        ) RETURNING execution_id
-                    """
-    
-                    let result = try await connection.query(query, logger:self.logger)
 
-                    for row in try await result.collect() {
-                        let id = try row.decode(Int.self) 
-                        executionIds.append(id)
-                    }
-                }
-    
-                try await connection.query("COMMIT", logger:self.logger)
-    
-                if self.enableLogging {
-                    self.logger.info("Successfully batch stored \(executionIds.count) executions")
-                }
-    
-                return executionIds
-    
-            } catch {
-                _ = try? await connection.query("ROLLBACK", logger:self.logger)
-                if self.enableLogging {
-                    self.logger.error("Failed to batch store executions: \(String(reflecting: error))")
-                }
-                throw error
+            for chunk in sortedExecutions.chunked(into: self.maxBatchSize) {
+                let ids = try await self.insertExecutionChunk(chunk, connection: connection)
+                executionIds.append(contentsOf: ids)
             }
+            return executionIds
         }
-    } 
+    }
+
+    private func insertExecutionChunk(_ chunk: [ExecutionInput], connection: PostgresConnection) async throws -> [Int] {
+        guard !chunk.isEmpty else { return [] }
+
+        var bindings = PostgresBindings()
+        var valueClauses: [String] = []
+        var i = 1
+
+        for execution in chunk {
+            let clause = "($\(i), $\(i+1), $\(i+2), $\(i+3), $\(i+4), $\(i+5), $\(i+6), $\(i+7), $\(i+8), $\(i+9), $\(i+10), NOW())"
+            valueClauses.append(clause)
+            bindings.append(execution.programHash)
+            bindings.append(execution.executionOutcomeId)
+            bindings.append(execution.coverageTotal)
+            bindings.append(execution.edgesFound)
+            bindings.append(execution.totalEdges)
+            bindings.append(execution.isNewEdge)
+            bindings.append(execution.stdout)
+            bindings.append(execution.stderr)
+            bindings.append(execution.fuzzout)
+            bindings.append(execution.turbofanOptimizationBits)
+            bindings.append(execution.feedbackNexusCount)
+            i += 11
+        }
+
+        let sql = """
+            INSERT INTO execution (
+                program_hash, execution_outcome_id, coverage_total, 
+                edges_found, total_edges, is_new_edge, 
+                stdout, stderr, fuzzout, 
+                turbofan_optimization_bits, feedback_nexus_count, created_at) 
+            VALUES \(valueClauses.joined(separator: ",\n    "))
+            RETURNING execution_id;
+        """
+
+        let query = PostgresQuery(unsafeSQL: sql, binds: bindings)
+        let result = try await connection.query(query, logger: self.logger)
+
+        var ids: [Int] = []
+        for try await (id,) in result.decode((Int).self) {
+            ids.append(id)
+        }
+        return ids
+    }
 
     /// Retry wrapper for deadlock handling
     /// Detects PostgreSQL deadlock errors (40P01) and retries with exponential backoff
@@ -827,6 +819,14 @@ public actor PostgresSQLStorage {
             case .queryFailed(let message):
                 return "Database query failed: \(message)"
             }
+        }
+    }
+    
+}
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }

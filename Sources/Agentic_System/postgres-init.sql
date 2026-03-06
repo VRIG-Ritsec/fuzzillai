@@ -506,53 +506,6 @@ AFTER INSERT ON execution
 FOR EACH ROW
 EXECUTE FUNCTION update_fuzzer_last_activity();
 
--- Function: Notify on first crash per program_hash
-CREATE OR REPLACE FUNCTION notify_first_crash()
-RETURNS TRIGGER AS $$
-DECLARE
-    already_crashed BOOLEAN;
-    f_id INT;
-BEGIN
-    IF NEW.execution_outcome_id != 1 THEN
-        RETURN NEW;
-    END IF;
-
-    SELECT EXISTS (
-        SELECT 1
-        FROM execution e
-        WHERE e.program_hash = NEW.program_hash
-          AND e.execution_outcome_id = 1
-          AND e.execution_id <> NEW.execution_id
-        LIMIT 1
-    ) INTO already_crashed;
-
-    IF already_crashed THEN
-        RETURN NEW;
-    END IF;
-
-    SELECT p.fuzzer_id INTO f_id
-    FROM program p
-    WHERE p.program_hash = NEW.program_hash;
-
-    PERFORM pg_notify(
-        'crash_corpus',
-        json_build_object(
-            'execution_id', NEW.execution_id,
-            'program_hash', NEW.program_hash,
-            'fuzzer_id', f_id,
-            'created_at', NEW.created_at
-        )::text
-    );
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_notify_first_crash
-AFTER INSERT ON execution
-FOR EACH ROW
-EXECUTE FUNCTION notify_first_crash();
-
 -- Function: Calculate coverage percentage
 CREATE OR REPLACE FUNCTION calculate_coverage_percentage(p_edges_found INT, p_total_edges INT)
 RETURNS NUMERIC AS $$

@@ -21,6 +21,10 @@ logger.propagate = False
 logger.disabled = True
 est_timezone = pytz.timezone('US/Eastern')
 
+# Global default logging level for all IkaBaseAgent instances.
+# Override by passing logging_level into Agent.__init__.
+DEFAULT_AGENT_LOGGING_LEVEL = 1
+
 def enable_base_agent_logging():
     try:
         if os.getenv("FOG_DEBUG") == "1":
@@ -48,10 +52,18 @@ def enable_base_agent_logging():
 
 class Agent(ABC):
 
-    def __init__(self, model=None, api_key: str = None, anthropic_api_key: str = None, model_id: str = None):
+    def __init__(
+        self,
+        model=None,
+        api_key: str = None,
+        anthropic_api_key: str = None,
+        model_id: str = None,
+        logging_level=None,
+    ):
         self.model_id = model_id or (getattr(model, "model_id", None) if model else None) or "deepseek"
         self.api_key = api_key or (getattr(model, "api_key", None) if model else None)
         self.anthropic_api_key = anthropic_api_key
+        self.logging_level = DEFAULT_AGENT_LOGGING_LEVEL if logging_level is None else logging_level
         self.agents = {}
         self.setup_agents()
 
@@ -99,7 +111,7 @@ class Agent(ABC):
                 return results
 
             prompt = self._create_task_prompt(task_description, context)
-            base = getattr(manager_agent, "_base_prompt", None)
+            base = getattr(manager_agent, "_base_prompt", None) or getattr(manager_agent, "prompt", None)
             full = (base + "\n\n" + prompt) if base else prompt
 
             logger.info(f"Using {manager_agent.name} for task: {task_description}")

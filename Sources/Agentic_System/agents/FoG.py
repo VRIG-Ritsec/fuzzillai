@@ -75,7 +75,7 @@ class Father(Agent):
         self.agents['george_foreman'] = IkaBaseAgent(
             name="GeorgeForeman",
             description="L2 Worker responsible for validating program templates built by the program builder",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("george_foreman.txt"),
             system_prompt="You are GeorgeForeman.",
             tools=[
                 get_all_template_names_from_json_tool,
@@ -100,13 +100,14 @@ class Father(Agent):
             model_id="deepseek-chat",
             api_key=self.api_key,
             maxsteps=20,
+            logging_level=self.logging_level,
         )
         self.agents['george_foreman']._base_prompt = self.get_prompt("george_foreman.txt")
 
         self.agents['compiler'] = IkaBaseAgent(
             name="Compiler",
             description="L2 Worker responsible for compiling program templates built by the program builder",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("compiler.txt"),
             system_prompt="You are Compiler.",
             tools=[
                 swift_fuzzy_finder_tool,
@@ -127,13 +128,14 @@ class Father(Agent):
             model_id="deepseek-chat",
             api_key=self.api_key,
             maxsteps=100,
+            logging_level=self.logging_level,
         )
         self.agents['compiler']._base_prompt = self.get_prompt("compiler.txt")
 
         self.agents['reviewer_of_code'] = IkaBaseAgent(
             name="ReviewerOfCode",
             description="L2 Worker responsible for reviewing code from various sources using RAG database",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("reviewer_of_code.txt"),
             system_prompt="You are ReviewerOfCode.",
             tools=[
                 fuzzy_finder_tool,
@@ -151,6 +153,7 @@ class Father(Agent):
             model_id="deepseek-chat",
             api_key=self.api_key,
             maxsteps=20,
+            logging_level=self.logging_level,
         )
         self.agents['reviewer_of_code']._base_prompt = self.get_prompt("reviewer_of_code.txt")
 
@@ -159,7 +162,7 @@ class Father(Agent):
         self.agents['v8_search'] = IkaBaseAgent(
             name="V8Search",
             description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
-            prompt="Complete the delegated task.",
+            prompt=v8_txt,
             system_prompt="You are V8Search.",
             tools=[
                 fuzzy_finder_tool,
@@ -179,13 +182,14 @@ class Father(Agent):
             model_id="deepseek-chat",
             api_key=self.api_key,
             maxsteps=50,
+            logging_level=self.logging_level,
         )
         self.agents['v8_search']._base_prompt = v8_txt
 
         self.agents['code_analyzer'] = IkaBaseAgent(
             name="CodeAnalyzer",
             description="L1 Manager responsible for analyzing code and coordinating retrieval and V8 search operations",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("code_analyzer.txt"),
             system_prompt="You are CodeAnalyzer.",
             tools=[
                 run_python_tool,
@@ -207,13 +211,14 @@ class Father(Agent):
             api_key=self.api_key,
             subagents=[self.agents['reviewer_of_code'], self.agents['v8_search']],
             maxsteps=15,
+            logging_level=self.logging_level,
         )
         self.agents['code_analyzer']._base_prompt = self.get_prompt("code_analyzer.txt")
 
         self.agents['program_builder'] = IkaBaseAgent(
             name="ProgramBuilder",
             description="L1 Manager responsible for building program templates using corpus and context",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("program_builder.txt"),
             system_prompt="You are ProgramBuilder.",
             tools=[
                 get_all_template_names_from_json_tool,
@@ -231,13 +236,14 @@ class Father(Agent):
             api_key=self.api_key,
             subagents=[self.agents['george_foreman'], self.agents['compiler']],
             maxsteps=30,
+            logging_level=self.logging_level,
         )
         self.agents['program_builder']._base_prompt = self.get_prompt("program_builder.txt")
 
         self.agents['pick_section'] = IkaBaseAgent(
             name="PickSection",
             description="L0 Root Manager responsible for picking a section of the V8 code base that targets the JIT system",
-            prompt="Complete the delegated task.",
+            prompt=self.get_prompt("pick_section.txt"),
             system_prompt="You are PickSection.",
             tools=[
                 search_js_file_name_by_pattern_tool,
@@ -254,13 +260,14 @@ class Father(Agent):
             model_id="deepseek-chat",
             api_key=self.api_key,
             maxsteps=30,
+            logging_level=self.logging_level,
         )
         self.agents['pick_section']._base_prompt = self.get_prompt("pick_section.txt")
 
         self.agents['father_of_george'] = IkaBaseAgent(
             name="FatherOfGeorge",
             description="L0 Manager responsible for orchestrating code analysis and program building operations",
-            prompt="The task will be provided at runtime.",
+            prompt=self.get_prompt("root_manager.txt"),
             system_prompt="You are FatherOfGeorge, the root manager.",
             tools=[
                 search_knowledge_base_tool,
@@ -277,6 +284,7 @@ class Father(Agent):
             api_key=self.api_key,
             subagents=[self.agents['code_analyzer'], self.agents['program_builder'], self.agents['pick_section']],
             maxsteps=30,
+            logging_level=self.logging_level,
         )
         self.agents['father_of_george']._base_prompt = self.get_prompt("root_manager.txt")
 

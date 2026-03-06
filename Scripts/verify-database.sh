@@ -1,4 +1,4 @@
-#!/bin/bash
+    #!/bin/bash
 # Database initialization verification and fix script
 
 echo "=== Checking PostgreSQL Connection ==="

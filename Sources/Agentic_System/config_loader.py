@@ -59,4 +59,11 @@ def get_deepseek_api_key() -> str:
     if not key:
         key = os.getenv('DEEPSEEK_API_KEY', '')
     return key
+    
+def get_openrouter_api_key() -> str:
+    keys = load_keys_from_config()
+    key = keys.get('OPENROUTER_API_KEY', '')
+    if not key:
+        key = os.getenv('OPENROUTER_API_KEY', '')
+    return key
 

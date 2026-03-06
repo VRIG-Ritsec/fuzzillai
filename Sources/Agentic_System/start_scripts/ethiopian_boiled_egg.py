@@ -20,7 +20,7 @@ if str(_agentic_root) not in sys.path:
 import config_loader as config_loader
 from agents.EBG_crash import EBG_Crash
 from agents.EBG_plateau import EBG_Plateau
-from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
+from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key, get_openrouter_api_key
 
 def _model(model_id, api_key):
     return type('_Model', (), {'model_id': model_id, 'api_key': api_key})()
@@ -32,7 +32,9 @@ logger.propagate = False
 logger.disabled = True
 est_timezone = pytz.timezone('US/Eastern')
 
-BASE_MODEL_ID = "deepseek"
+DEEPSEEK_MODEL_ID = "deepseek"
+OPENAI_MODEL_ID = "gpt-4o"
+OPENROUTER_MODEL_ID = "openai/gpt-4o-mini"
 
 # Prefer the project's virtualenv site-packages if present, so tools like chromadb are importable
 try:
@@ -51,17 +53,30 @@ class EthiopianBoiledEgg:
         self.openai_api_key = get_openai_api_key()
         self.anthropic_api_key = get_anthropic_api_key()
         self.deepseek_api_key = get_deepseek_api_key()
+        self.openrouter_api_key = get_openrouter_api_key()
 
         if self.deepseek_api_key:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+        if self.openrouter_api_key:
+            os.environ["OPENROUTER_API_KEY"] = self.openrouter_api_key
+            os.environ["OPENROUTER_API_URL"] = "https://openrouter.ai/api/v1/chat/completions"
 
-        key = self.deepseek_api_key or self.openai_api_key
-        self.model = _model(BASE_MODEL_ID, key)
+        key, model_id = self._select_model_and_key()
+        self.model = _model(model_id, key)
         print("System is running in " + mode + " mode")
         if mode == "Crash":
             self.system = EBG_Crash(self.model, api_key=key, anthropic_api_key=self.anthropic_api_key, crash_program_hash=crash_program_hash)
         elif mode == "Plateau":
             self.system = EBG_Plateau(self.model, api_key=key, anthropic_api_key=self.anthropic_api_key, fuzzer_id=fuzzer_id)
+
+    def _select_model_and_key(self):
+        if self.deepseek_api_key:
+            return self.deepseek_api_key, DEEPSEEK_MODEL_ID
+        if self.openai_api_key:
+            return self.openai_api_key, OPENAI_MODEL_ID
+        if self.openrouter_api_key:
+            return self.openrouter_api_key, OPENROUTER_MODEL_ID
+        return None, DEEPSEEK_MODEL_ID
 
 
 def run(force_logging: bool = True):
@@ -133,7 +148,7 @@ def run(force_logging: bool = True):
 
     logger.info("something funny")
     logger.info(f"time: {datetime.now(est_timezone)}")
-    a = EthiopianBoiledEgg(mode="Plateau")
+    a = EthiopianBoiledEgg(mode="Crash")
     path = os.path.join(os.getenv('FUZZILLI_PATH', ''), "Sources", "Agentic_System")
     regressions_dir = os.path.join(path, "regressions")
     if not os.path.exists(os.path.join(regressions_dir, "regressions.json")):
@@ -150,4 +165,3 @@ def run(force_logging: bool = True):
 
 if __name__ == "__main__":
     sys.exit(run())
-

@@ -309,6 +309,53 @@ def _ripgrep_executor(params: dict) -> str:
     while i < len(parts):
         part = parts[i]
         if part.startswith('-'):
+            # Cap context-related flags to at most +/- 5 lines.
+            if part in ["--context", "-C", "--before-context", "-B", "--after-context", "-A"] and i + 1 < len(parts):
+                try:
+                    ctx_val = int(parts[i + 1])
+                    flags.append(part)
+                    flags.append(str(min(ctx_val, 5)))
+                    i += 2
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--before-context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--before-context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--after-context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--after-context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("-C") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-C{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+            elif part.startswith("-B") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-B{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+            elif part.startswith("-A") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-A{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+
             flags.append(part)
             if part in ['--type', '--glob'] and i + 1 < len(parts):
                 next_part = parts[i + 1]
@@ -1077,6 +1124,53 @@ def _swift_ripgrep_executor(params: dict) -> str:
     while i < len(parts):
         part = parts[i]
         if part.startswith('-'):
+            # Cap context-related flags to at most +/- 5 lines.
+            if part in ["--context", "-C", "--before-context", "-B", "--after-context", "-A"] and i + 1 < len(parts):
+                try:
+                    ctx_val = int(parts[i + 1])
+                    flags.append(part)
+                    flags.append(str(min(ctx_val, 5)))
+                    i += 2
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--before-context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--before-context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("--after-context="):
+                try:
+                    ctx_val = int(part.split("=", 1)[1])
+                    flags.append(f"--after-context={min(ctx_val, 5)}")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+            elif part.startswith("-C") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-C{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+            elif part.startswith("-B") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-B{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+            elif part.startswith("-A") and len(part) > 2 and part[2:].isdigit():
+                flags.append(f"-A{min(int(part[2:]), 5)}")
+                i += 1
+                continue
+
             flags.append(part)
             if part in ['--type', '--glob'] and i + 1 < len(parts):
                 next_part = parts[i + 1]

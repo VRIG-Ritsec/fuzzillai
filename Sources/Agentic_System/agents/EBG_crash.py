@@ -144,7 +144,7 @@ class EBG_Crash(Agent):
             api_key=self.api_key,
             api_url=API_URL,
             maxsteps=50,
-            step_timeout=180,
+            step_timeout=300,
             logging_level=self.logging_level,
         )
 
@@ -176,7 +176,7 @@ class EBG_Crash(Agent):
             model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=30,
-            step_timeout=180,
+            step_timeout=300,
             api_url=API_URL,
             logging_level=self.logging_level,
         )
@@ -212,7 +212,7 @@ class EBG_Crash(Agent):
             model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=30,
-            step_timeout=120,
+            step_timeout=180,
             api_url=API_URL,
             logging_level=self.logging_level,
         )
@@ -226,7 +226,7 @@ class EBG_Crash(Agent):
             model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=30,
-            step_timeout=120,
+            step_timeout=180,
             api_url=API_URL,
             logging_level=self.logging_level,
         )
@@ -247,7 +247,7 @@ class EBG_Crash(Agent):
             api_key=self.api_key,
             subagents=[self.agents['v8_search'], self.agents['db_analyzer'], self.agents['debugger']],
             maxsteps=30,
-            step_timeout=180,
+            step_timeout=420,
             api_url=API_URL,
             logging_level=self.logging_level,
         )
@@ -269,7 +269,7 @@ class EBG_Crash(Agent):
             api_key=self.api_key,
             subagents=[self.agents['v8_search'], self.agents['debugger'], self.agents['JS_Generator']],
             maxsteps=30,
-            step_timeout=180,
+            step_timeout=300,
             api_url=API_URL,
             logging_level=self.logging_level,
         )
@@ -286,7 +286,7 @@ class EBG_Crash(Agent):
             api_key=self.api_key,
             subagents=root_managed,
             maxsteps=30,
-            step_timeout=240,
+            step_timeout=600,
             api_url=API_URL,
             logging_level=self.logging_level,
         )

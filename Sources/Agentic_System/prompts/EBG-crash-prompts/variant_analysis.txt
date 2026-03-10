@@ -29,6 +29,9 @@ exists in the code, please save the code as valid_variant to the RAG.
 After performing variant analysis, use `JSGenerator` and `Debugger` to create programs 
 that crash in a similar manner.
 
+Only call `Debugger` after you have a concrete JS artifact path and a specific hypothesis to test.
+Do not run debugger loops when there is no reproducible crash signal.
+
 
 ## STAGE 4
 Using the same information provided to you in STAGE 1, look for completely different code paths 
@@ -38,6 +41,9 @@ that reach the same crashing code. Then perform STAGE 2.
 Using `JSGenerator` and `Debugger`, create program(s) that crash in a dissimilar manner to original 
 crashing program. Save crashing programs into crashes/ directory using the original crash's name
 + '_variant_#' as an identifier. If there are multiple variants, increment the '#' in the identifier.
+
+If debugging evidence shows "inferior exited" / "no stack" / "no registers", stop repeating the same
+debugger commands and return a failure reason with next required inputs.
 
 ## STAGE 6
 Provide a detailed summary of any variants you have found. If you have not found any, return a 

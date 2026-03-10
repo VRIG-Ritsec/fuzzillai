@@ -26,9 +26,25 @@ FUZZILLI_PATH = os.getenv('FUZZILLI_PATH', '')
 SWIFT_PATH = os.path.join(FUZZILLI_PATH, 'Sources', 'Fuzzilli') if FUZZILLI_PATH else ''
 
 
-def run_command(command: str):
-    """Execute a shell command and return the result."""
-    return subprocess.run(command, shell=True, capture_output=True, text=True)
+def run_command(command: str, timeout: int = 90):
+    """Execute a shell command and return the result with timeout protection."""
+    try:
+        return subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        class TimeoutResult:
+            def __init__(self, timeout_sec, cmd):
+                self.stdout = ""
+                self.stderr = f"Command timed out after {timeout_sec} seconds: {cmd}"
+                self.returncode = -1
+                self.args = cmd
+
+        return TimeoutResult(timeout, command)
 
 
 def get_output(completed_process) -> str:

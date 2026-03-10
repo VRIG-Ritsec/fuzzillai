@@ -12,6 +12,7 @@ import datetime
 import base64
 import hashlib
 import random
+import re
 
 # Environment variables (optional, for remote PostgreSQL):
 #   - POSTGRES_HOST: Remote PostgreSQL host/IP (if set, connects to remote instead of local container)
@@ -43,7 +44,15 @@ DB_CONTAINER = 'fuzzilli-postgres-master' if not os.getenv('DB_CONTAIER') else o
 
 TEMP_FUZZIL_PATH = "/tmp/temp-base64-fuzzil.fzil"
 
-GENERATE_FOLDER_HASHS = "folder_" + hashlib.sha256(datetime.datetime.now().isoformat().encode('utf-8')).hexdigest() + "_" + str(random.randint(1, 1000000))
+# Lazy initialization - folder is created only when needed, not at module import
+_GENERATE_FOLDER_HASHS = None
+
+def _get_varianal_folder():
+    """Get or create the variant analysis folder path (lazy initialization)."""
+    global _GENERATE_FOLDER_HASHS
+    if _GENERATE_FOLDER_HASHS is None:
+        _GENERATE_FOLDER_HASHS = "varianal_" + hashlib.sha256(datetime.datetime.now().isoformat().encode('utf-8')).hexdigest() + "_" + str(random.randint(1, 1000000))
+    return _GENERATE_FOLDER_HASHS
 
 def json_serial(obj):
     if isinstance(obj, Decimal):
@@ -55,7 +64,7 @@ def json_serial(obj):
 
 
 @tool
-def db_query(query: str, params: list = []) -> str:
+def db_query(query: str, params: list = None) -> str:
     """
     Perform and arbitrary user specified query
 
@@ -68,6 +77,23 @@ def db_query(query: str, params: list = []) -> str:
     """ 
     conn = None
     try:
+        params = [] if params is None else params
+
+        # Accept PostgreSQL-style placeholders ($1, $2, ...) and normalize to psycopg2 (%s).
+        positional_matches = re.findall(r"\$(\d+)", query)
+        if positional_matches:
+            max_pos = max(int(m) for m in positional_matches)
+            if len(params) < max_pos:
+                return (
+                    f"Database error: not enough parameters for positional placeholders "
+                    f"(expected at least {max_pos}, got {len(params)})"
+                )
+            normalized_query = re.sub(r"\$\d+", "%s", query)
+            exec_params = tuple(params[int(m) - 1] for m in positional_matches)
+        else:
+            normalized_query = query
+            exec_params = tuple(params)
+
         conn = psycopg2.connect(
             host=POSTGRES_HOST,
             port=POSTGRES_PORT,
@@ -76,7 +102,7 @@ def db_query(query: str, params: list = []) -> str:
             password=POSTGRES_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute(query, params)
+        cursor.execute(normalized_query, exec_params)
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
         return result_json
@@ -375,6 +401,9 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
     """
     conn = None
     try:
+        if sample_interval_minutes <= 0:
+            return "Unexpected error: sample_interval_minutes must be > 0"
+
         conn = psycopg2.connect(
             host=POSTGRES_HOST,
             port=POSTGRES_PORT,
@@ -388,7 +417,7 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
             SELECT 
                 fuzzer_id,
                 DATE_TRUNC('minute', time_bucket) - 
-                    (EXTRACT(MINUTE FROM time_bucket)::INT % %s) * INTERVAL '1 minute' as sample_time,
+                    (EXTRACT(MINUTE FROM time_bucket)::INT %% %s) * INTERVAL '1 minute' as sample_time,
                 outcome,
                 execution_outcome_id,
                 SUM(execution_count) as total_executions,
@@ -396,7 +425,7 @@ def db_get_execution_outcome_distribution(fuzzer_id: int, time_window_hours: int
                 SUM(new_edges_count) as new_edges_discovered
             FROM execution_outcome_distribution
             WHERE fuzzer_id = %s 
-            AND time_bucket > NOW() - INTERVAL '%s hours'
+            AND time_bucket > NOW() - (%s * INTERVAL '1 hour')
             GROUP BY fuzzer_id, sample_time, outcome, execution_outcome_id
             ORDER BY sample_time DESC, outcome
         """, (sample_interval_minutes, fuzzer_id, time_window_hours))
@@ -495,19 +524,27 @@ def db_get_program_coverage_mapping(fuzzer_id: int, limit: int = 50, min_coverag
 @tool
 def create_generate_folder() -> str:
     """
-    Create a folder for the generate folder hash
+    Create a folder for variant analysis operations. This folder is used to store temporary files
+    during program analysis and debugging workflows.
 
     Returns:
         str: A JSON string containing the message that the folder was created
     """
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    return json.dumps({"message": f"Folder {GENERATE_FOLDER_HASHS} created"})
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    return json.dumps({"message": f"Folder {folder} created"})
 
 @tool
 def write_to_generate_folder(file_name: str, content: str) -> str:
     """
-    Write to a file in the generate folder. This will be used to store the results of the analysis.
-    Use this to insert any data you found interesting in the Database!
+    Write to a file in the variant analysis folder. This is used to store temporary analysis results,
+    generated JavaScript programs, and debugging artifacts.
+    
+    INTENDED WORKFLOW:
+    1. Fetch crash program from database using get_program_js_from_hash(program_hash)
+    2. Write the crash program to this folder using write_to_generate_folder("original_crash.js", js_code)
+    3. Create and write variants/modifications to the same folder
+    4. Use read_from_generate_folder and write_and_execute_js to analyze all programs
 
     Args:
         file_name: The name of the file to write to
@@ -516,41 +553,70 @@ def write_to_generate_folder(file_name: str, content: str) -> str:
     Returns:
         str: A JSON string containing the message that the file was written to the folder
     """
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    with open(os.path.join(GENERATE_FOLDER_HASHS, file_name), "w") as f:
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, file_name), "w") as f:
         f.write(content)
-    return json.dumps({"message": f"File {file_name} written to folder {GENERATE_FOLDER_HASHS} with content:\n\n {content[:500]}..."})
+    return json.dumps({"message": f"File {file_name} written to folder {folder} with content:\n\n {content[:500]}..."})
 
 @tool
 def read_from_generate_folder(file_name: str) -> str:
     """
-    Read from a file in the generate folder.
+    Read from a file in the variant analysis folder. 
+    
+    IMPORTANT: This reads files that were ALREADY WRITTEN to the folder using write_to_generate_folder.
+    To retrieve programs from the database, use get_program_js_from_hash() first, then write them
+    to this folder before reading.
+    
+    Always call list_generate_folder() first to verify the file exists before reading.
 
     Args:
         file_name: The name of the file to read from the folder
     
     Returns:
-        str: The content of the file
+        str: The content of the file, or an error message if the file doesn't exist
     """
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    with open(os.path.join(GENERATE_FOLDER_HASHS, file_name), "r") as f:
-        return f.read()
-    return json.dumps({"message": f"File {file_name} read from folder {GENERATE_FOLDER_HASHS} with content:\n\n {content[:500]}..."})
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    file_path = os.path.join(folder, file_name)
+    
+    if not os.path.exists(file_path):
+        available_files = os.listdir(folder)
+        return json.dumps({
+            "error": f"File '{file_name}' not found in folder {folder}",
+            "available_files": available_files,
+            "workflow_hint": "To read a crash program: (1) get_program_js_from_hash(hash) to fetch from DB, (2) write_to_generate_folder(filename, js_code) to save it, (3) then read_from_generate_folder(filename) to read it",
+            "note": "This folder only contains files you've written. Programs must be fetched from database first."
+        }, indent=2)
+    
+    try:
+        with open(file_path, "r") as f:
+            content = f.read()
+        return content
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read file: {str(e)}"}, indent=2)
 
 @tool 
 def list_generate_folder() -> str:
     """
-    List all files in the generate folder.
+    List all files in the variant analysis folder. Use this before attempting to read files
+    to verify they exist.
 
     Returns:
         str: A JSON string containing the list of files in the folder
     """
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    return json.dumps({"message": f"Files in folder {GENERATE_FOLDER_HASHS}: {os.listdir(GENERATE_FOLDER_HASHS)}"})
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    files = os.listdir(folder)
+    return json.dumps({
+        "folder": folder,
+        "files": files,
+        "count": len(files)
+    }, indent=2)
 @tool
 def delete_files_from_generate_folder(file_name: str) -> str:
     """
-    Delete the files from the generate folder. Make sure to only delete files that you are sure you want to delete!
+    Delete a file from the variant analysis folder. Only delete files you are certain should be removed.
 
     Args:
         file_name: The name of the file to delete from the folder
@@ -558,9 +624,18 @@ def delete_files_from_generate_folder(file_name: str) -> str:
     Returns:
         str: A JSON string containing the message that the file was deleted from the folder
     """
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    os.remove(os.path.join(GENERATE_FOLDER_HASHS, file_name))
-    return json.dumps({"message": f"File {file_name} deleted from folder {GENERATE_FOLDER_HASHS}"})
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    file_path = os.path.join(folder, file_name)
+    
+    if not os.path.exists(file_path):
+        return json.dumps({"error": f"File '{file_name}' not found in folder {folder}"}, indent=2)
+    
+    try:
+        os.remove(file_path)
+        return json.dumps({"message": f"File {file_name} deleted from folder {folder}"})
+    except Exception as e:
+        return json.dumps({"error": f"Failed to delete file: {str(e)}"}, indent=2)
 
 
 V8_TRACE_PRESETS = {
@@ -726,7 +801,12 @@ def get_program_js_from_hash(program_hash: str) -> str:
     """
     Fetch a program from the database by its hash and convert it to JavaScript code.
     This allows you to read and analyze the actual JavaScript code that corresponds to a program_hash.
-    Use this to understand what code is being executed when analyzing plateau root causes.
+    
+    TYPICAL WORKFLOW FOR CRASH ANALYSIS:
+    1. Use this tool to fetch the crash program: js_code = get_program_js_from_hash(crash_hash)
+    2. Write it to the variant analysis folder: write_to_generate_folder("crash_original.js", js_code)
+    3. Create variants and write them too: write_to_generate_folder("variant_1.js", modified_code)
+    4. Read and execute variants for testing: read_from_generate_folder("variant_1.js")
     
     Args:
         program_hash (str): The hash of the program to retrieve (from program table).
@@ -1010,8 +1090,9 @@ def write_and_execute_js(js_code: str, file_name: str = None, d8_flags: str = ""
     if not file_name.endswith('.js'):
         file_name += '.js'
     
-    os.makedirs(GENERATE_FOLDER_HASHS, exist_ok=True)
-    file_path = os.path.join(GENERATE_FOLDER_HASHS, file_name)
+    folder = _get_varianal_folder()
+    os.makedirs(folder, exist_ok=True)
+    file_path = os.path.join(folder, file_name)
     
     try:
         with open(file_path, 'w') as f:

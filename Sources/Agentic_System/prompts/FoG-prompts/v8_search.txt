@@ -53,9 +53,9 @@ STRICT OUTPUT RULES FOR write_rag_db_id:
 
 VALID EXAMPLE (single object), USE write_rag_db_id to do this properly :
 ```
-{"id": jsadd_pipeline,
- "body": "void ExamplePhase::Run(PipelineData* data, Zone* temp_zone) { ... }",
- "context": [turbo_prologue_deopt, v8_holey_double_search, v8_bigint_remat, turbo_prologue_deopt],
- "explanation": "ExamplePhase::Run()(id:jsadd_pipeline) processes a basic block with ExampleReducer.",
- "file_line": "example.cc:10"}
+{"id": "jsadd_pipeline",
+ "Body": "void ExamplePhase::Run(PipelineData* data, Zone* temp_zone) { ... }",
+ "Context": ["turbo_prologue_deopt", "v8_holey_double_search", "v8_bigint_remat", "turbo_prologue_deopt"],
+ "Explanation": "ExamplePhase::Run()(id:jsadd_pipeline) processes a basic block with ExampleReducer.",
+ "FileLine": "example.cc:10"}
 ```

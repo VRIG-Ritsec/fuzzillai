@@ -10,6 +10,7 @@ import subprocess
 import json
 import os
 import re
+import shlex
 import random
 import time
 
@@ -49,9 +50,25 @@ FUZZILLI_TOOL_BIN = os.getenv('FUZZILLI_TOOL_BIN', '')
 SWIFT_PATH = os.path.join(FUZZILLI_PATH, 'Sources', 'Fuzzilli') if FUZZILLI_PATH else ''
 
 
-def run_command(command: str):
-    """Execute a shell command and return the result."""
-    return subprocess.run(command, shell=True, capture_output=True, text=True)
+def run_command(command: str, timeout: int = 90):
+    """Execute a shell command and return the result with timeout protection."""
+    try:
+        return subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        class TimeoutResult:
+            def __init__(self, timeout_sec, cmd):
+                self.stdout = ""
+                self.stderr = f"Command timed out after {timeout_sec} seconds: {cmd}"
+                self.returncode = -1
+                self.args = cmd
+
+        return TimeoutResult(timeout, command)
 
 
 def get_output(completed_process) -> str:
@@ -213,21 +230,52 @@ get_realpath_tool = IkaTools(
 # --- tree ---
 def _tree_executor(params: dict) -> str:
     options = params.get("options", "")
-    opts = options or ""
-    parts = opts.split()
-    if parts:
-        last = parts[-1]
-        if not last.startswith("-"):
-            candidate = os.path.join(V8_PATH, last)
-            if not os.path.isdir(candidate):
-                parts[-1] = "."
-                opts = " ".join(parts)
-    final_opts = opts if opts else "-L 2 -f ."
-    return get_output(run_command(f"cd {V8_PATH} && tree {final_opts} | head -n 1000"))
+    depth = 2
+    target_path = "."
+    tokens = []
+
+    if options:
+        try:
+            tokens = shlex.split(options)
+        except ValueError:
+            tokens = options.split()
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "-L":
+            if i + 1 < len(tokens):
+                try:
+                    depth = int(tokens[i + 1])
+                except ValueError:
+                    depth = 2
+                i += 2
+                continue
+        elif token.startswith("-L") and len(token) > 2:
+            try:
+                depth = int(token[2:])
+            except ValueError:
+                depth = 2
+            i += 1
+            continue
+        elif not token.startswith("-"):
+            # Use only the first positional path token.
+            target_path = token
+        i += 1
+
+    # Always keep tree bounded to prevent context blowups.
+    depth = max(1, min(depth, 2))
+
+    candidate = os.path.join(V8_PATH, target_path) if not os.path.isabs(target_path) else target_path
+    if not os.path.isdir(candidate):
+        target_path = "."
+
+    final_opts = f"-L {depth} -f {shlex.quote(target_path)}"
+    return get_output(run_command(f"cd {shlex.quote(V8_PATH)} && tree {final_opts} | head -n 300"))
 
 tree_tool = IkaTools(
     name="tree",
-    description="Display directory structure using tree command to explore the v8 code base layout. V8_PATH already points to the `src/` directory. MAX OUTPUT 1000 lines.",
+    description="Display directory structure using tree command to explore the v8 code base layout. V8_PATH already points to the `src/` directory. Depth is always capped at 2 and output is capped at 300 lines.",
     parameters={
         "options": {
             "type": "string",
@@ -252,7 +300,7 @@ def _ripgrep_executor(params: dict) -> str:
         return f"Invalid regex passed in as pattern with error: {error}"
 
     if not options:
-        return get_output(run_command(f"cd {V8_PATH} && rg '{pattern}' | head -n 10000"))
+        return get_output(run_command(f"cd {V8_PATH} && rg '{pattern}' | head -n 10000", timeout=60))
 
     parts = options.split()
     flags = []
@@ -273,7 +321,7 @@ def _ripgrep_executor(params: dict) -> str:
 
     flags_str = ' '.join(flags) if flags else ''
     cmd = f"cd {V8_PATH} && rg '{pattern}' {flags_str} | head -n 1000"
-    return get_output(run_command(cmd))
+    return get_output(run_command(cmd, timeout=60))
 
 ripgrep_tool = IkaTools(
     name="ripgrep",
@@ -303,7 +351,15 @@ def _fuzzy_finder_executor(params: dict) -> str:
         return "Error: pattern parameter is required"
 
     file_list_cmd = "rg --hidden --no-follow --no-ignore-vcs --files 2>/dev/null"
-    return get_output(run_command(f"cd {V8_PATH} && {file_list_cmd} | fzf {options} '{pattern}' | head -n 1000"))
+    options = options.strip() if options else ""
+    quoted_pattern = shlex.quote(pattern)
+    if "--filter" in options:
+        fzf_cmd = f"fzf {options}"
+    else:
+        # Force non-interactive mode to avoid fzf interpreting free text as options.
+        fzf_cmd = f"fzf {options} --filter {quoted_pattern}".strip()
+    cmd = f"cd {shlex.quote(V8_PATH)} && {file_list_cmd} | {fzf_cmd} | head -n 1000"
+    return get_output(run_command(cmd, timeout=60))
 
 fuzzy_finder_tool = IkaTools(
     name="fuzzy_finder",
@@ -320,6 +376,7 @@ fuzzy_finder_tool = IkaTools(
             "required": False
         }
     },
+    limit_calls=12,
     execute_function=_fuzzy_finder_executor
 )
 
@@ -472,6 +529,7 @@ write_rag_db_id_tool = IkaTools(
         },
         "Context": {
             "type": "array",
+            "items": {"type": "string"},
             "description": "List of related IDs for context",
             "required": False
         },
@@ -906,7 +964,14 @@ def _swift_fuzzy_finder_executor(params: dict) -> str:
         return "Error: pattern parameter is required"
 
     file_list_cmd = "rg --hidden --no-follow --no-ignore-vcs --files 2>/dev/null"
-    return get_output(run_command(f"cd {SWIFT_PATH} && {file_list_cmd} | fzf {options} '{pattern}' | head -n 1000"))
+    options = options.strip() if options else ""
+    quoted_pattern = shlex.quote(pattern)
+    if "--filter" in options:
+        fzf_cmd = f"fzf {options}"
+    else:
+        fzf_cmd = f"fzf {options} --filter {quoted_pattern}".strip()
+    cmd = f"cd {shlex.quote(SWIFT_PATH)} && {file_list_cmd} | {fzf_cmd} | head -n 1000"
+    return get_output(run_command(cmd, timeout=60))
 
 swift_fuzzy_finder_tool = IkaTools(
     name="swift_fuzzy_finder",
@@ -923,6 +988,7 @@ swift_fuzzy_finder_tool = IkaTools(
             "required": False
         }
     },
+    limit_calls=12,
     execute_function=_swift_fuzzy_finder_executor
 )
 
@@ -930,21 +996,50 @@ swift_fuzzy_finder_tool = IkaTools(
 # --- swift_tree ---
 def _swift_tree_executor(params: dict) -> str:
     options = params.get("options", "")
-    opts = options or ""
-    parts = opts.split()
-    if parts:
-        last = parts[-1]
-        if not last.startswith("-"):
-            candidate = os.path.join(SWIFT_PATH, last)
-            if not os.path.isdir(candidate):
-                parts[-1] = "."
-                opts = " ".join(parts)
-    final_opts = opts if opts else "-L 2 -f ."
-    return get_output(run_command(f"cd {SWIFT_PATH} && tree {final_opts} | head -n 1000"))
+    depth = 2
+    target_path = "."
+    tokens = []
+
+    if options:
+        try:
+            tokens = shlex.split(options)
+        except ValueError:
+            tokens = options.split()
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "-L":
+            if i + 1 < len(tokens):
+                try:
+                    depth = int(tokens[i + 1])
+                except ValueError:
+                    depth = 2
+                i += 2
+                continue
+        elif token.startswith("-L") and len(token) > 2:
+            try:
+                depth = int(token[2:])
+            except ValueError:
+                depth = 2
+            i += 1
+            continue
+        elif not token.startswith("-"):
+            target_path = token
+        i += 1
+
+    depth = max(1, min(depth, 2))
+
+    candidate = os.path.join(SWIFT_PATH, target_path) if not os.path.isabs(target_path) else target_path
+    if not os.path.isdir(candidate):
+        target_path = "."
+
+    final_opts = f"-L {depth} -f {shlex.quote(target_path)}"
+    return get_output(run_command(f"cd {shlex.quote(SWIFT_PATH)} && tree {final_opts} | head -n 300"))
 
 swift_tree_tool = IkaTools(
     name="swift_tree",
-    description="Display directory structure of the Fuzzilli Swift codebase. MAX OUTPUT 1000 lines.",
+    description="Display directory structure of the Fuzzilli Swift codebase. Depth is always capped at 2 and output is capped at 300 lines.",
     parameters={
         "options": {
             "type": "string",
@@ -974,7 +1069,7 @@ def _swift_ripgrep_executor(params: dict) -> str:
         resolved_path = SWIFT_PATH
 
     if not options:
-        return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' | head -n 10000"))
+        return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' | head -n 10000", timeout=60))
 
     parts = options.split()
     flags = []
@@ -994,7 +1089,7 @@ def _swift_ripgrep_executor(params: dict) -> str:
 
     flags_str = ' '.join(flags) if flags else ''
     cmd = f"cd {resolved_path} && rg '{pattern}' {flags_str} | head -n 1000"
-    return get_output(run_command(cmd))
+    return get_output(run_command(cmd, timeout=60))
 
 swift_ripgrep_tool = IkaTools(
     name="swift_ripgrep",

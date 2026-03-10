@@ -25,4 +25,5 @@ psycopg2-binary
 
 #Utilities
 pytz
+pygdbmi
 duckduckgo-search

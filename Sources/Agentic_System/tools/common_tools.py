@@ -120,16 +120,34 @@ def is_valid_regex(pattern: str) -> tuple[bool, re.error | None]:
         
 
 @tool
-def run_command(command: str) -> str:
+def run_command(command: str, timeout: int = 90) -> str:
     """
-    Executes a command analysis tools.
+    Executes a command analysis tools with a timeout.
     
     Args:
         command (str): The command to execute in the container.
+        timeout (int): Maximum time in seconds to wait for command completion (default: 90).
     """
-    return_val = subprocess.run(command, shell=True, capture_output=True, text=True)
-    print(f"Command: {command}")
-    return return_val
+    try:
+        return_val = subprocess.run(
+            command, 
+            shell=True, 
+            capture_output=True, 
+            text=True,
+            timeout=timeout
+        )
+        print(f"Command: {command}")
+        return return_val
+    except subprocess.TimeoutExpired as e:
+        print(f"Command timed out after {timeout}s: {command}")
+        # Return a mock CompletedProcess with timeout information
+        class TimeoutResult:
+            def __init__(self, timeout_sec, cmd):
+                self.stdout = ""
+                self.stderr = f"Command timed out after {timeout_sec} seconds"
+                self.returncode = -1
+                self.args = cmd
+        return TimeoutResult(timeout, command)
 
 @tool
 def read_rag_db(query: str) -> str:
@@ -694,9 +712,12 @@ def mi_step() -> str:
 def gdb_run_command(command: str) -> str:
     """
     Run a gdb or pwndbg command in the active MI session.
+    
+    IMPORTANT: This tool is ONLY for GDB/pwndbg debugging commands, NOT for shell commands.
+    DO NOT use this tool for: pip, apt, npm, cd, ls, cat, echo, or any other shell commands.
 
     Args:
-        command (str): GDB or pwndbg command to execute (for example, "info registers", "context", "vmmap").
+        command (str): GDB or pwndbg command to execute (for example, "info registers", "context", "vmmap", "break", "continue", "step", "backtrace").
 
     Returns:
         str: The output of the command.
@@ -709,6 +730,24 @@ def gdb_run_command(command: str) -> str:
         return ctrl_err
     if not command:
         return "Error: command is required"
+    
+    # Validate that this is a GDB command, not a shell command
+    invalid_commands = [
+        'pip', 'apt', 'apt-get', 'yum', 'npm', 'yarn', 'cargo', 'gem',
+        'sudo', 'su', 'cd', 'ls', 'cat', 'echo', 'mkdir', 'rm', 'cp', 'mv',
+        'chmod', 'chown', 'wget', 'curl', 'git', 'docker', 'systemctl'
+    ]
+    
+    cmd_lower = command.strip().lower()
+    first_word = cmd_lower.split()[0] if cmd_lower else ""
+    
+    if first_word in invalid_commands:
+        return json.dumps({
+            "error": f"Invalid command: '{first_word}' is not a GDB/pwndbg command",
+            "hint": "This tool is only for GDB debugging commands like: info, break, run, continue, step, next, backtrace, print, x, disassemble, context, vmmap, etc.",
+            "attempted_command": command
+        }, indent=2)
+    
     try:
         resp = MI_CONTROLLER.write(command, timeout_sec=7.0)
         return _format_mi_responses(resp)

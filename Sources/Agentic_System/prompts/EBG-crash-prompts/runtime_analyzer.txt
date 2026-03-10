@@ -32,6 +32,9 @@ based on the information that was returned to you from the DB analyzer. Your goa
 JS programs runs and create a plan towards figuring out a path forward in terms of analzying the v8 code base to better understand 
 how to fix the system.
 
+If database evidence indicates synthetic/non-reproducible data (for example fake crash markers), do not launch heavy debugger flows.
+In that case, report the limitation and proceed with static/runtime trace evidence only.
+
 
 ## STAGE 3:
 Based on the specific task given to you by your managing agent, call `v8_search` to figure out the related code sections for the task given to you.
@@ -45,11 +48,11 @@ JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF T
     REASON: "[The reason for finding these specific code sections for {the task provided to you (runtime_analyzer)} are... . Please provide specific reasoning to direct V8search.]"
 } 
 
-## STAGE 3:
-Gather extra information using the tool calls provided to you to gather more runtime information that can get 
-provided to v8_search in STAGE 4 in order to help in its search. Feel free to use any tool calls provided to you in order to gather this information.
-
 ## STAGE 4:
+Gather extra information using the tool calls provided to you to gather more runtime information that can get 
+provided to v8_search in STAGE 5 in order to help in its search. Feel free to use any tool calls provided to you in order to gather this information.
+
+## STAGE 5:
 Analyze and relate the results from v8_search and db_analyzer into a cohesive answer for how you can solve the task given to you. This answer
 should explain the solution to your provided task to the best of your ability. If you feel you don't have enough information, return to either stage 1 or stage 2,
 based on what information you think is lacking. Once you are happy with your answer and reasoning/evidence for it, relay the answer back to your calling agent.

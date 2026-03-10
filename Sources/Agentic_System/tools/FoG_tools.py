@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import re
+import shlex
 import random
 import time
 
@@ -176,26 +177,53 @@ def tree(options: str = "") -> str:
 
     Args:
         options (str): Additional tree command options. Common options include:
-            -L NUM: Limit depth to NUM levels
+            -L NUM: Limit depth to NUM levels. NUM must be either 1 or 2, NEVER MORE THAN THAT.
             -f: Show full path prefix
             PATH: Prefer '.' or an absolute path. If you pass a relative like 'maglev/', it must exist under V8_PATH.
     
     Returns:
         str: Tree structure showing directories and files in the v8 code base.
     """
-    # If a trailing non-flag token looks like a path but does not exist under V8_PATH, fallback to '.'
-    # TODO: If the agent passes in "-L 3" as opts, this converts it to "-L ." and errors as invalid level
-    opts = options or ""
-    parts = opts.split()
-    if parts:
-        last = parts[-1]
-        if not last.startswith("-"):
-            candidate = os.path.join(V8_PATH, last)
-            if not os.path.isdir(candidate):
-                parts[-1] = "."
-                opts = " ".join(parts)
-    final_opts = opts if opts else "-L 2 -f ."
-    return get_output(run_command(f"cd {V8_PATH} && tree {final_opts} | head -n 1000"))
+    depth = 2
+    target_path = "."
+    tokens = []
+
+    if options:
+        try:
+            tokens = shlex.split(options)
+        except ValueError:
+            tokens = options.split()
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "-L":
+            if i + 1 < len(tokens):
+                try:
+                    depth = int(tokens[i + 1])
+                except ValueError:
+                    depth = 2
+                i += 2
+                continue
+        elif token.startswith("-L") and len(token) > 2:
+            try:
+                depth = int(token[2:])
+            except ValueError:
+                depth = 2
+            i += 1
+            continue
+        elif not token.startswith("-"):
+            target_path = token
+        i += 1
+
+    depth = max(1, min(depth, 2))
+
+    candidate = os.path.join(V8_PATH, target_path) if not os.path.isabs(target_path) else target_path
+    if not os.path.isdir(candidate):
+        target_path = "."
+
+    final_opts = f"-L {depth} -f {shlex.quote(target_path)}"
+    return get_output(run_command(f"cd {shlex.quote(V8_PATH)} && tree {final_opts} | head -n 300"))
 
 
 @tool
@@ -249,8 +277,9 @@ def ripgrep(pattern: str, options: str = "") -> str:
     if not valid:
         return f"Invalid regex passed in as pattern with error: {error}"
 
+    # Use a 60 second timeout for ripgrep operations
     if not options:
-        return get_output(run_command(f"cd {V8_PATH} && rg '{pattern}' | head -n 10000"))
+        return get_output(run_command(f"cd {V8_PATH} && rg '{pattern}' | head -n 10000", timeout=60))
     
     parts = options.split()
     flags = []
@@ -273,7 +302,7 @@ def ripgrep(pattern: str, options: str = "") -> str:
 
     cmd = f"cd {V8_PATH} && rg '{pattern}' {flags_str} | head -n 1000"
     
-    return get_output(run_command(cmd))
+    return get_output(run_command(cmd, timeout=60))
 
 
 @tool
@@ -309,7 +338,14 @@ def fuzzy_finder(pattern: str, options: str = "") -> str:
         str: Fuzzy search results showing up to 1000 files and content that approximately match the pattern.
     """
     file_list_cmd = "rg --hidden --no-follow --no-ignore-vcs --files 2>/dev/null"
-    return get_output(run_command(f"cd {V8_PATH} && {file_list_cmd} | fzf {options} '{pattern}' | head -n 1000")) 
+    options = options.strip() if options else ""
+    quoted_pattern = shlex.quote(pattern)
+    if "--filter" in options:
+        fzf_cmd = f"fzf {options}"
+    else:
+        fzf_cmd = f"fzf {options} --filter {quoted_pattern}".strip()
+    cmd = f"cd {shlex.quote(V8_PATH)} && {file_list_cmd} | {fzf_cmd} | head -n 1000"
+    return get_output(run_command(cmd, timeout=60))
 
 
 @tool
@@ -1420,7 +1456,14 @@ def swift_fuzzy_finder(pattern: str, options: str = "") -> str:
         str: Fuzzy search results showing up to 1000 files and content that approximately match the pattern.
     """
     file_list_cmd = "rg --hidden --no-follow --no-ignore-vcs --files 2>/dev/null"
-    return get_output(run_command(f"cd {SWIFT_PATH} && {file_list_cmd} | fzf {options} '{pattern}' | head -n 1000")) 
+    options = options.strip() if options else ""
+    quoted_pattern = shlex.quote(pattern)
+    if "--filter" in options:
+        fzf_cmd = f"fzf {options}"
+    else:
+        fzf_cmd = f"fzf {options} --filter {quoted_pattern}".strip()
+    cmd = f"cd {shlex.quote(SWIFT_PATH)} && {file_list_cmd} | {fzf_cmd} | head -n 1000"
+    return get_output(run_command(cmd, timeout=60))
 
 
 @tool
@@ -1443,17 +1486,46 @@ def swift_tree(options: str = "") -> str:
     Returns:
         str: Tree structure showing directories and files in the Fuzzilli Swift codebase.
     """
-    opts = options or ""
-    parts = opts.split()
-    if parts:
-        last = parts[-1]
-        if not last.startswith("-"):
-            candidate = os.path.join(SWIFT_PATH, last)
-            if not os.path.isdir(candidate):
-                parts[-1] = "."
-                opts = " ".join(parts)
-    final_opts = opts if opts else "-L 2 -f ."
-    return get_output(run_command(f"cd {SWIFT_PATH} && tree {final_opts} | head -n 1000"))
+    depth = 2
+    target_path = "."
+    tokens = []
+
+    if options:
+        try:
+            tokens = shlex.split(options)
+        except ValueError:
+            tokens = options.split()
+
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token == "-L":
+            if i + 1 < len(tokens):
+                try:
+                    depth = int(tokens[i + 1])
+                except ValueError:
+                    depth = 2
+                i += 2
+                continue
+        elif token.startswith("-L") and len(token) > 2:
+            try:
+                depth = int(token[2:])
+            except ValueError:
+                depth = 2
+            i += 1
+            continue
+        elif not token.startswith("-"):
+            target_path = token
+        i += 1
+
+    depth = max(1, min(depth, 2))
+
+    candidate = os.path.join(SWIFT_PATH, target_path) if not os.path.isabs(target_path) else target_path
+    if not os.path.isdir(candidate):
+        target_path = "."
+
+    final_opts = f"-L {depth} -f {shlex.quote(target_path)}"
+    return get_output(run_command(f"cd {shlex.quote(SWIFT_PATH)} && tree {final_opts} | head -n 300"))
 
 
 @tool
@@ -1512,8 +1584,9 @@ def swift_ripgrep(pattern: str, options: str = "") -> str:
     else:
         resolved_path = SWIFT_PATH
 
+    # Use a 60 second timeout for ripgrep operations
     if not options:
-        return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' | head -n 10000"))
+        return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' | head -n 10000", timeout=60))
     
     parts = options.split()
     flags = []
@@ -1536,7 +1609,7 @@ def swift_ripgrep(pattern: str, options: str = "") -> str:
 
     cmd = f"cd {resolved_path} && rg '{pattern}' {flags_str} | head -n 1000"
     
-    return get_output(run_command(cmd))
+    return get_output(run_command(cmd, timeout=60))
 
 
 @tool

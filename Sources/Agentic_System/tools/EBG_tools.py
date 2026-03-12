@@ -5,6 +5,7 @@ from pathlib import Path
 from fuzzywuzzy import fuzz
 from functools import wraps
 from decimal import Decimal
+from collections import OrderedDict
 
 import psycopg2
 import psycopg2.extras
@@ -13,6 +14,7 @@ import base64
 import hashlib
 import random
 import re
+import json
 
 # Environment variables (optional, for remote PostgreSQL):
 #   - POSTGRES_HOST: Remote PostgreSQL host/IP (if set, connects to remote instead of local container)
@@ -46,6 +48,8 @@ TEMP_FUZZIL_PATH = "/tmp/temp-base64-fuzzil.fzil"
 
 # Lazy initialization - folder is created only when needed, not at module import
 _GENERATE_FOLDER_HASHS = None
+_DB_QUERY_CACHE = OrderedDict()
+_DB_QUERY_CACHE_MAX = 128
 
 def _get_varianal_folder():
     """Get or create the variant analysis folder path (lazy initialization)."""
@@ -60,6 +64,69 @@ def json_serial(obj):
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat()
     raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def _normalize_sql_whitespace(query: str) -> str:
+    return " ".join((query or "").strip().split())
+
+
+def _is_read_only_sql(query: str) -> bool:
+    normalized = _normalize_sql_whitespace(query).lower()
+    return normalized.startswith("select ") or normalized.startswith("with ") or normalized.startswith("explain ")
+
+
+def _build_cache_key(query: str, exec_params: tuple) -> str:
+    return f"{query}||{json.dumps(exec_params, default=str, ensure_ascii=True)}"
+
+
+def _cache_get(cache_key: str):
+    if cache_key not in _DB_QUERY_CACHE:
+        return None
+    _DB_QUERY_CACHE.move_to_end(cache_key)
+    return _DB_QUERY_CACHE[cache_key]
+
+
+def _cache_set(cache_key: str, value: str) -> None:
+    _DB_QUERY_CACHE[cache_key] = value
+    _DB_QUERY_CACHE.move_to_end(cache_key)
+    while len(_DB_QUERY_CACHE) > _DB_QUERY_CACHE_MAX:
+        _DB_QUERY_CACHE.popitem(last=False)
+
+
+def _validate_and_prepare_sql(query: str, params: list) -> tuple:
+    query = (query or "").strip()
+    params = [] if params is None else params
+    pg_matches = re.findall(r"\$(\d+)", query)
+    percent_placeholder_count = len(re.findall(r"(?<!%)%s", query))
+
+    if pg_matches and percent_placeholder_count:
+        return None, None, "Database error: mixed placeholder styles are not allowed (use either $n or %s)."
+
+    if pg_matches:
+        positions = [int(match) for match in pg_matches]
+        max_pos = max(positions)
+        if len(params) != max_pos:
+            return (
+                None,
+                None,
+                f"Database error: positional placeholder mismatch (expected exactly {max_pos} params for $ placeholders, got {len(params)}).",
+            )
+        normalized_query = re.sub(r"\$\d+", "%s", query)
+        exec_params = tuple(params[pos - 1] for pos in positions)
+        return normalized_query, exec_params, None
+
+    if percent_placeholder_count:
+        if len(params) != percent_placeholder_count:
+            return (
+                None,
+                None,
+                f"Database error: placeholder mismatch (expected exactly {percent_placeholder_count} params for %s placeholders, got {len(params)}).",
+            )
+        return query, tuple(params), None
+
+    if len(params) > 0:
+        return None, None, "Database error: query has no placeholders but params were provided."
+    return query, tuple(), None
 
 
 
@@ -77,22 +144,19 @@ def db_query(query: str, params: list = None) -> str:
     """ 
     conn = None
     try:
-        params = [] if params is None else params
+        normalized_query, exec_params, validation_error = _validate_and_prepare_sql(query, params)
+        if validation_error:
+            return validation_error
 
-        # Accept PostgreSQL-style placeholders ($1, $2, ...) and normalize to psycopg2 (%s).
-        positional_matches = re.findall(r"\$(\d+)", query)
-        if positional_matches:
-            max_pos = max(int(m) for m in positional_matches)
-            if len(params) < max_pos:
-                return (
-                    f"Database error: not enough parameters for positional placeholders "
-                    f"(expected at least {max_pos}, got {len(params)})"
-                )
-            normalized_query = re.sub(r"\$\d+", "%s", query)
-            exec_params = tuple(params[int(m) - 1] for m in positional_matches)
+        read_only_query = _is_read_only_sql(normalized_query)
+        cache_key = _build_cache_key(_normalize_sql_whitespace(normalized_query), exec_params)
+        if read_only_query:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return cached
         else:
-            normalized_query = query
-            exec_params = tuple(params)
+            # Keep cache only for stable read-only data.
+            _DB_QUERY_CACHE.clear()
 
         conn = psycopg2.connect(
             host=POSTGRES_HOST,
@@ -103,8 +167,17 @@ def db_query(query: str, params: list = None) -> str:
         )
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cursor.execute(normalized_query, exec_params)
+        if cursor.description is None:
+            conn.commit()
+            return json.dumps(
+                {"status": "ok", "rows_affected": cursor.rowcount},
+                default=json_serial,
+                indent=2,
+            )
         rows = cursor.fetchall()
         result_json = json.dumps(rows, default=json_serial, indent=2)
+        if read_only_query:
+            _cache_set(cache_key, result_json)
         return result_json
     except psycopg2.Error as e:
         return f"Database error: {e}"
@@ -926,6 +999,10 @@ def trace_v8_analysis(
     with open(filepath_js, "w") as f:
         f.write(js_code)
     
+    # Enforce baseline tracing when caller does not specify tracing options.
+    if presets is None and custom_flags is None:
+        presets = ["tiering", "maglev", "ignition"]
+
     flags = ["--allow-natives-syntax"]
     
     if presets:
@@ -1165,6 +1242,7 @@ def db_store_generated_program(js_program: str, fuzzer_id: int) -> str:
         # Fetch the inserted row
         row = cursor.fetchone()
         conn.commit()
+        _DB_QUERY_CACHE.clear()
         
         # If row is None, the program already existed (conflict)
         if row is None:

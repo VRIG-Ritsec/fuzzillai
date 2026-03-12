@@ -22,6 +22,11 @@ Call `RuntimeAnalyzer` in the following format:
             PLEASE PROVIDE A REASON AND PROOF REGARDING YOUR REASONING."
 }
 
+CRITICAL EVIDENCE FOR STAGE 1 RESULTS:
+- Raw runtime crash artifacts (stderr, signal, fatal line, stack) from direct d8 traces.
+- If raw artifacts and DB summaries conflict, treat as DB inconsistency and continue with raw evidence.
+- If a crash is found/selected, RuntimeAnalyzer should include atleast one trace_v8_analysis result for that crash hash.
+- Stage 1 summary must include: flags used, return code, and quoted stderr/stdout evidence from trace_v8_analysis.
 
 ## STAGE 2 Call "VariantAnalysis"
 After you have received the reasoning behind the crash/bug, your goal is to call variant analysis: 

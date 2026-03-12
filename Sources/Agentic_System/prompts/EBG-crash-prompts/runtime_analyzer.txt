@@ -31,9 +31,19 @@ which flags you need to use run list_v8_trace_options. Here your goal is to figu
 based on the information that was returned to you from the DB analyzer. Your goal should be to figure out what and how the
 JS programs runs and create a plan towards figuring out a path forward in terms of analzying the v8 code base to better understand 
 how to fix the system.
+You should execute d8 with tracing flags (via trace_v8_analysis and/or execute_javascript_program) before finalizing conclusions.
+If a crash hash is available, you must call trace_v8_analysis for that hash before Stage 5 and include concrete evidence from its stderr/stdout output.
+Your final Stage 5 answer must cite: trace_v8_analysis flags_used, return_code, and at least one raw crash line from trace output.
 
-If database evidence indicates synthetic/non-reproducible data (for example fake crash markers), do not launch heavy debugger flows.
-In that case, report the limitation and proceed with static/runtime trace evidence only.
+CRITICAL EVIDENCE PRIORITY:
+1) raw runtime artifacts (stderr, signal, fatal line, stack trace) from direct d8 execution and trace_v8_analysis
+2) trace output metadata from tools
+3) database summaries/aggregates
+
+Never let database aggregate summaries override contradictory raw runtime artifacts.
+If DB indicates "fake crash" but raw runtime has concrete crash evidence (signal/fatal/stack), classify as inconsistent DB state and continue analysis using raw evidence.
+
+Do not skip stages only because the crash is synthetic; gate interpretation confidence, not execution.
 
 
 ## STAGE 3:

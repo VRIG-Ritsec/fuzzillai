@@ -24,10 +24,19 @@ Look for similar instances of the crashing code across the codebase.
 Go through the returned RAG entries of V8Search and validate variants, if you can confirm the same bug
 exists in the code, please save the code as valid_variant to the RAG. 
 
+Evidence priority during validation:
+1) raw runtime crash artifacts from d8 runs (stderr/signal/fatal line/stack)
+2) trace metadata and tool outputs
+3) DB summaries
 
 ## STAGE 3
 After performing variant analysis, use `JSGenerator` and `Debugger` to create programs 
 that crash in a similar manner.
+You should run d8 with trace flags for crash confirmation context before declaring a variant valid.
+For every candidate variant marked valid, you must include one trace_v8_analysis or traced execute_javascript_program result with:
+- flags used
+- return code
+- stderr/stdout crash evidence
 
 Only call `Debugger` after you have a concrete JS artifact path and a specific hypothesis to test.
 Do not run debugger loops when there is no reproducible crash signal.

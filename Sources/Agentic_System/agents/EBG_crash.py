@@ -240,6 +240,7 @@ class EBG_Crash(Agent):
                 execute_javascript_program_tool,
                 list_d8_flags_tool,
                 list_v8_trace_options_tool,
+                trace_v8_analysis_tool,
                 read_from_generate_folder_tool,
                 list_generate_folder_tool,
             ],

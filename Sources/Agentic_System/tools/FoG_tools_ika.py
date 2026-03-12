@@ -1633,11 +1633,24 @@ def _execute_javascript_program_executor(params: dict) -> str:
     if not template_js_path:
         return "Error: template_js_path parameter is required"
 
-    if "--allow-natives-syntax" not in d8_flags:
-        d8_flags += " --allow-natives-syntax"
+    required_flags = [
+        "--allow-natives-syntax",
+        "--trace-opt",
+        "--trace-deopt",
+        "--trace-maglev-graph-building",
+        "--print-bytecode",
+    ]
+    for flag in required_flags:
+        if flag not in d8_flags:
+            d8_flags += f" {flag}"
+    d8_flags = d8_flags.strip()
 
     d8 = run_command(f"{D8_PATH} {d8_flags} {template_js_path}")
-    return f"Program execution result:\n{d8.stderr}\n{d8.stdout}"
+    return (
+        "Program execution result:\n"
+        f"[flags used] {d8_flags}\n"
+        f"{d8.stderr}\n{d8.stdout}"
+    )
 
 execute_javascript_program_tool = IkaTools(
     name="execute_javascript_program",

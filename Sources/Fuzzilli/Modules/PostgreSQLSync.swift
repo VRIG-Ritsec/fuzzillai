@@ -4,7 +4,7 @@ public class PostgreSQLSync: Module {
     private let storage: PostgresSQLStorage
     private let fuzzerInstanceId: String
     private let enableLogging: Bool
-    private var lastSyncTime: Date
+    private var lastSyncCursor: (insertedAt: Date, hash: String)
     
     private let logger = Logger(withLabel: "PostgreSQLSync")
     
@@ -23,7 +23,7 @@ public class PostgreSQLSync: Module {
         self.storage = storage
         self.fuzzerInstanceId = fuzzerInstanceId
         self.enableLogging = enableLogging
-        self.lastSyncTime = Date()
+        self.lastSyncCursor = (insertedAt: Date(timeIntervalSince1970: 0), hash: "")
     }
     
     public func initialize(with fuzzer: Fuzzer) {
@@ -67,10 +67,16 @@ public class PostgreSQLSync: Module {
                     logger.info("Syncing \(programs.count) programs from database to corpus")
                 }
 
+                if let latestCursor = try await storage.fetchLatestProgramSyncCursor() {
+                    self.lastSyncCursor = latestCursor
+                }
+
                 // Import each program into the fuzzer's corpus
                 for program in programs {
                     fuzzer.async {
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
+                        // changing from full to interestingOnly(shouldMinimize: true)
+                        // watch results for this and change back to .full if needed 
+                        fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: true)), enableDropout: false)
                     }
                 }
 
@@ -142,6 +148,10 @@ public class PostgreSQLSync: Module {
             
             // Clean up the cache entry immediately after use
             self.executionCache.removeValue(forKey: programId)
+
+            guard !ev.origin.isFromCorpusImport() else {
+                return
+            }
             
             Task {
                 guard let fuzzerId = self.cachedFuzzerId else {
@@ -247,6 +257,10 @@ public class PostgreSQLSync: Module {
             
             // Clean up the cache entry immediately after use
             self.executionCache.removeValue(forKey: programId)
+
+            guard !ev.origin.isFromCorpusImport() else {
+                return
+            }
             
             Task {
                 guard let fuzzerId = self.cachedFuzzerId else {
@@ -400,21 +414,29 @@ public class PostgreSQLSync: Module {
     
     private func syncWithDatabase(_ fuzzer: Fuzzer) async {
         if enableLogging {
-            logger.info("Starting periodic sync with database. Last sync time: \(lastSyncTime)")
+            logger.info("Starting periodic sync with database. Last sync cursor: \(lastSyncCursor.insertedAt) / \(lastSyncCursor.hash)")
         }
         do {
-            let newPrograms = try await storage.fetchNewPrograms(since: lastSyncTime, limit: 2000)
-            if !newPrograms.isEmpty {
+            while true {
+                let newPrograms = try await storage.fetchNewPrograms(since: lastSyncCursor.insertedAt, after: lastSyncCursor.hash, limit: 2000)
+                guard !newPrograms.isEmpty else { return }
+
                 if enableLogging {
                     logger.info("Fetched \(newPrograms.count) new programs from database")
                 }
-                
-                lastSyncTime = Date()
-                
-                for (program, _) in newPrograms {
+
+                if let newestRecord = newPrograms.last {
+                    lastSyncCursor = (insertedAt: newestRecord.insertedAt, hash: newestRecord.hash)
+                }
+
+                for record in newPrograms {
                     fuzzer.async {
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: false)
+                        fuzzer.importProgram(record.program, origin: .corpusImport(mode: .full), enableDropout: false)
                     }
+                }
+
+                if newPrograms.count < 2000 {
+                    return
                 }
             }
         } catch {

@@ -112,7 +112,7 @@ class CrashExtractor:
                            save_programs: bool = False) -> List[Dict[str, Any]]:
         """Extract all crash executions."""
         # Build query dynamically
-        program_field = ", f.program_base64" if (include_program or save_programs) else ""
+        program_field = ", p.program_base64" if (include_program or save_programs) else ""
         where_clause = "WHERE eo.outcome = 'Crashed'"
         if fuzzer_id is not None:
             where_clause += f" AND p.fuzzer_id = {fuzzer_id}"
@@ -138,7 +138,6 @@ class CrashExtractor:
             FROM execution e
             JOIN program p ON e.program_hash = p.program_hash
             JOIN execution_outcome eo ON e.execution_outcome_id = eo.id
-            LEFT JOIN fuzzer f ON e.program_hash = f.program_hash
             {where_clause}
             ORDER BY e.created_at DESC
             LIMIT {limit}
@@ -159,7 +158,7 @@ class CrashExtractor:
         if fuzzer_id is not None:
             where_clause = f"WHERE ca.fuzzer_id = {fuzzer_id}"
         
-        program_field = ", f.program_base64" if (include_program or save_programs) else ""
+        program_field = ", p.program_base64" if (include_program or save_programs) else ""
         
         query = f"""
             SELECT 
@@ -172,7 +171,7 @@ class CrashExtractor:
                 ca.found_new_edges
                 {program_field}
             FROM crash_analysis ca
-            LEFT JOIN fuzzer f ON ca.program_hash = f.program_hash
+            LEFT JOIN program p ON ca.program_hash = p.program_hash
             {where_clause}
             ORDER BY ca.crash_count DESC, ca.first_crash DESC
             LIMIT {limit}
@@ -209,7 +208,7 @@ class CrashExtractor:
         """Decode a program from base64 to JavaScript code."""
         query = """
             SELECT program_base64 
-            FROM fuzzer 
+            FROM program 
             WHERE program_hash = %s
         """
         

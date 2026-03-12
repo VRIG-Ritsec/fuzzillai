@@ -46,11 +46,9 @@ ENV TIMEOUT=3500
 ENV MIN_MUTATIONS_PER_SAMPLE=25
 ENV DEBUG_LOGGING=true
 
-# Default command for distributed fuzzing
-# Single master database mode - all workers connect directly to master
-CMD exec ./FuzzilliCli --profile=v8 --engine=runtime-multi --resume --corpus=postgresql \
-      --postgres-url="${POSTGRES_URL}" \
-      --timeout="${TIMEOUT}" \
-      --minMutationsPerSample="${MIN_MUTATIONS_PER_SAMPLE}" \
-      --logLevel=verbose \
-      --postgres-logging ./fuzzbuild/d8
+# Environment variable for extra FuzzilliCli args (e.g. --disablePostgresSync)
+ENV FUZZILLI_EXTRA_ARGS=""
+
+COPY Cloud/VRIG/entrypoint-distributed.sh /home/app/entrypoint.sh
+RUN chmod +x /home/app/entrypoint.sh
+ENTRYPOINT ["/home/app/entrypoint.sh"]

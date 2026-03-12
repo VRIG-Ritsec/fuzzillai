@@ -10,7 +10,7 @@
 #   - X fuzzer worker containers
 #
 # Environment variables:
-#   - V8_BUILD_PATH: Path to V8 build directory on host (default: /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild)
+#   - V8_BUILD_PATH: Path to V8 build directory on host (default: /mnt/vdc/v8_vrig/v8/out/fuzzbuild)
 #   - POSTGRES_HOST: Remote PostgreSQL host/IP (if set, enables remote mode, skips local postgres)
 #   - POSTGRES_PORT: PostgreSQL port (default: 5432)
 #   - POSTGRES_DB: Database name (default: fuzzilli_master)
@@ -22,6 +22,7 @@
 #   - TIMEOUT: Execution timeout in ms (default: 2500)
 #   - MIN_MUTATIONS_PER_SAMPLE: Minimum mutations per sample (default: 25)
 #   - DEBUG_LOGGING: Enable debug logging (default: false)
+#   - FUZZILLI_EXTRA_ARGS: Extra FuzzilliCli args (e.g. --disablePostgresSync)
 
 set -e
 
@@ -44,7 +45,7 @@ if [ $# -eq 0 ]; then
     echo "    Creates: 8 fuzzer workers connecting to remote postgres at 192.168.1.100"
     echo ""
     echo "Environment variables:"
-    echo "  V8_BUILD_PATH - Path to V8 build on host (default: /home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild)"
+    echo "  V8_BUILD_PATH - Path to V8 build on host (default: /mnt/vdc/v8_vrig/v8/out/fuzzbuild)"
     echo "  POSTGRES_HOST - Remote PostgreSQL host/IP (if set, enables remote mode)"
     echo "  POSTGRES_PORT - PostgreSQL port (default: 5432)"
     echo "  POSTGRES_DB - Database name (default: fuzzilli_master)"
@@ -102,10 +103,11 @@ POSTGRES_DB=${POSTGRES_DB:-fuzzilli_master}
 POSTGRES_USER=${POSTGRES_USER:-fuzzilli}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-fuzzilli123}
 POSTGRES_DATA_PATH=${POSTGRES_DATA_PATH:-}
-V8_BUILD_PATH=${V8_BUILD_PATH:-/home/tropic/vrig/fuzzilli-vrig-proj/fuzzbuild}
+V8_BUILD_PATH=${V8_BUILD_PATH:-/mnt/vdc/v8_vrig/v8/out/fuzzbuild}
 TIMEOUT=${TIMEOUT:-2500}
 MIN_MUTATIONS_PER_SAMPLE=${MIN_MUTATIONS_PER_SAMPLE:-25}
 DEBUG_LOGGING=${DEBUG_LOGGING:-false}
+FUZZILLI_EXTRA_ARGS=${FUZZILLI_EXTRA_ARGS:-}
 
 # Determine if we're using remote or local postgres
 USE_REMOTE_DB=false
@@ -171,6 +173,7 @@ for i in $(seq 1 $NUM_WORKERS); do
       - TIMEOUT=${TIMEOUT}
       - MIN_MUTATIONS_PER_SAMPLE=${MIN_MUTATIONS_PER_SAMPLE}
       - DEBUG_LOGGING=${DEBUG_LOGGING}
+      - FUZZILLI_EXTRA_ARGS=${FUZZILLI_EXTRA_ARGS}
 EOF
 
     # Only add depends_on for local postgres mode

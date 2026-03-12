@@ -102,6 +102,7 @@ Options:
     --wasm                       : Enable Wasm CodeGenerators (see WasmCodeGenerators.swift).
     --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
     --postgres-url=url           : PostgreSQL connection string for PostgreSQL corpus (e.g., postgresql://user:pass@host:port/db).
+    --disablePostgresSync        : Disable PostgreSQL synchronization even when --corpus=postgresql is selected.
     --validate-before-cache      : Enable program validation before caching in PostgreSQL corpus (default: true).
     --execution-history-size=n   : Number of recent executions to keep in memory for PostgreSQL corpus (default: 10).
     --postgres-logging           : Enable PostgreSQL database operation logging.
@@ -164,6 +165,7 @@ let enableWasm = args.has("--wasm")
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
 let postgresUrl = args["--postgres-url"] ?? ProcessInfo.processInfo.environment["POSTGRES_URL"]
 let postgresLogging = args.has("--postgres-logging")
+let disablePostgresSync = args.has("--disablePostgresSync")
 
 var timeout : Timeout
 if let raw_timeout = args.string(for: "--timeout") {
@@ -244,7 +246,7 @@ if corpusName == "markov" && staticCorpus {
 
 // PostgreSQL corpus validation
 if corpusName == "postgresql" {
-    if postgresUrl == nil {
+    if !disablePostgresSync && postgresUrl == nil {
         configError("PostgreSQL corpus requires --postgres-url (or POSTGRES_URL environment variable)")
     }
 }
@@ -664,8 +666,8 @@ fuzzer.sync {
         fuzzer.addModule(ThreadParent(for: fuzzer))
     }
     
-    // Add PostgreSQL sync module if using postgresql corpus
-    if corpusName == "postgresql" {
+    // Add PostgreSQL sync module if using postgresql corpus and sync is enabled.
+    if corpusName == "postgresql" && !disablePostgresSync {
         guard let url = postgresUrl else {
             logger.fatal("PostgreSQL URL is required for PostgreSQL corpus")
         }
@@ -694,6 +696,8 @@ fuzzer.sync {
         } catch {
             logger.fatal("Failed to initialize PostgreSQL connection: \(error)")
         }
+    } else if corpusName == "postgresql" {
+        logger.info("PostgreSQL synchronization disabled via --disablePostgresSync; using local BasicCorpus only")
     }
 
     // Check for potential misconfiguration.

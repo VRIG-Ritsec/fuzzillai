@@ -8,6 +8,17 @@ import PostgresKit
 /// and metadata from PostgreSQL database. It handles the actual database operations
 /// that the PostgreSQLCorpus uses for persistence and synchronization.
 public actor PostgresSQLStorage {
+    public struct ProgramSyncRecord {
+        public let program: Program
+        public let hash: String
+        public let insertedAt: Date
+
+        public init(program: Program, hash: String, insertedAt: Date) {
+            self.program = program
+            self.hash = hash
+            self.insertedAt = insertedAt
+        }
+    }
 
     private let databasePool: DatabasePool
     private let logger: Logging.Logger
@@ -138,6 +149,27 @@ public actor PostgresSQLStorage {
         self.databasePool = databasePool
         self.enableLogging = enableLogging
         self.logger = Logging.Logger(label: "PostgresSQLStorage")
+    }
+
+    public func fetchLatestProgramSyncCursor() async throws -> (insertedAt: Date, hash: String)? {
+        return try await databasePool.withConnection { connection in
+            let query = PostgresQuery(stringLiteral: """
+                SELECT inserted_at, program_hash
+                FROM program
+                ORDER BY inserted_at DESC, program_hash DESC
+                LIMIT 1
+            """)
+
+            let result = try await connection.query(query, logger: self.logger)
+            let rows = try await result.collect()
+
+            guard let row = rows.first else {
+                return nil
+            }
+
+            let (insertedAt, hash) = try row.decode((Date, String).self, context: .default)
+            return (insertedAt, hash)
+        }
     }
     
     /// Register a new fuzzer instance in the database or register worker with an existing fuzzer
@@ -769,22 +801,24 @@ public actor PostgresSQLStorage {
     /// - Parameters:
     ///   - since: The timestamp to fetch programs from
     ///   - limit: Maximum number of programs to fetch
-    public func fetchNewPrograms(since: Date, limit: Int = 100) async throws -> [(Program, String)] {
+    public func fetchNewPrograms(since insertedAt: Date, after hash: String, limit: Int = 100) async throws -> [ProgramSyncRecord] {
         if self.enableLogging {
-            self.logger.info("Fetching new programs since: \(since)")
+            self.logger.info("Fetching new programs after cursor: \(insertedAt) / \(hash)")
         }
         
         return try await databasePool.withConnection { connection in 
             // Format the date for PostgreSQL
             let dateFormatter = ISO8601DateFormatter()
             dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let sinceString = dateFormatter.string(from: since)
+            let sinceString = dateFormatter.string(from: insertedAt)
+            let escapedHash = hash.replacingOccurrences(of: "'", with: "''")
         
             let query = PostgresQuery(stringLiteral: """
-                SELECT program_hash, program_base64 
+                SELECT program_hash, program_base64, inserted_at
                 FROM program 
                 WHERE inserted_at > '\(sinceString)'
-                ORDER BY inserted_at ASC
+                   OR (inserted_at = '\(sinceString)' AND program_hash > '\(escapedHash)')
+                ORDER BY inserted_at ASC, program_hash ASC
                 LIMIT \(limit)
             """)
         
@@ -799,14 +833,14 @@ public actor PostgresSQLStorage {
                 self.logger.info("Fetch query returned \(rows.count) rows")
             }
 
-            var programs: [(Program, String)] = []
+            var programs: [ProgramSyncRecord] = []
         
             for row in rows {
                 do {
-                    let (hash, data) = try row.decode((String, String).self, context: .default)
+                    let (hash, data, rowInsertedAt) = try row.decode((String, String, Date).self, context: .default)
 
                     if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: data) {
-                        programs.append((program, hash))
+                        programs.append(ProgramSyncRecord(program: program, hash: hash, insertedAt: rowInsertedAt))
                     } else if self.enableLogging {
                         self.logger.warning("Failed to decode program for hash: \(hash)")
                     }
@@ -828,6 +862,18 @@ public actor PostgresSQLStorage {
     public func refreshMaterializedViews() async throws {
         try await databasePool.withConnection { connection in
             do {
+                let lockQuery = PostgresQuery(stringLiteral: "SELECT pg_try_advisory_lock(937451)")
+                let lockResult = try await connection.query(lockQuery, logger: self.logger)
+                let lockRows = try await lockResult.collect()
+                let shouldRefresh = try lockRows.first?.decode(Bool.self, context: .default) ?? false
+
+                guard shouldRefresh else {
+                    if self.enableLogging {
+                        self.logger.info("Skipping materialized view refresh because another worker holds the refresh lock")
+                    }
+                    return
+                }
+
                 let startTime = Date()
                 
                 // Call the PostgreSQL function that refreshes all materialized views
@@ -846,7 +892,12 @@ public actor PostgresSQLStorage {
                         }
                     }
                 }
+
+                let unlockQuery = PostgresQuery(stringLiteral: "SELECT pg_advisory_unlock(937451)")
+                _ = try await connection.query(unlockQuery, logger: self.logger)
             } catch {
+                let unlockQuery = PostgresQuery(stringLiteral: "SELECT pg_advisory_unlock(937451)")
+                _ = try? await connection.query(unlockQuery, logger: self.logger)
                 if self.enableLogging {
                     self.logger.error("Failed to refresh materialized views: \(String(reflecting: error))")
                 }

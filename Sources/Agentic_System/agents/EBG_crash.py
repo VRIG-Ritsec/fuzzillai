@@ -17,7 +17,7 @@ if _ikacore_src.exists() and str(_ikacore_src) not in sys.path:
 
 from agents.BaseAgent import Agent
 from IkaCore.agents import IkaBaseAgent
-from tools.EBG_tools_ika import (
+from tools.EBG_tools import (
     base64_program_to_js_tool,
     db_query_tool,
     db_list_programs_tool,
@@ -51,7 +51,7 @@ from tools.EBG_tools_ika import (
     pwndbg_nearpc_tool,
     read_file_tool,
 )
-from tools.FoG_tools_ika import (
+from tools.FoG_tools import (
     fuzzy_finder_tool,
     ripgrep_tool,
     tree_tool,
@@ -59,14 +59,14 @@ from tools.FoG_tools_ika import (
     execute_javascript_program_tool,
     list_d8_flags_tool,
 )
-from tools.common_tools_ika import (
+from tools._shared import (
     get_cfg_for_tool,
     get_call_graph_hashmap_tool,
     find_functions_by_simple_name_tool,
     find_functions_by_fully_qualified_name_tool,
     get_call_graph_node_tool,
 )
-from tools.FoG_tools_ika import read_rag_db_id_tool, write_rag_db_id_tool, get_runtime_db_ids_tool
+from tools.FoG_tools import read_agent_memory_tool, write_agent_memory_tool, list_agent_memory_ids_tool
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key, get_openrouter_api_key
 from tools.FoG_tools import get_v8_path
 
@@ -129,11 +129,11 @@ class EBG_Crash(Agent):
                 fuzzy_finder_tool,
                 ripgrep_tool,
                 tree_tool,
-                read_rag_db_id_tool,
-                write_rag_db_id_tool,
+                read_agent_memory_tool,
+                write_agent_memory_tool,
                 read_file_tool,
                 get_realpath_tool,
-                get_runtime_db_ids_tool,
+                list_agent_memory_ids_tool,
                 get_cfg_for_tool,
                 get_call_graph_hashmap_tool,
                 find_functions_by_simple_name_tool,

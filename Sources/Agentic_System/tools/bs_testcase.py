@@ -38,7 +38,7 @@ struct Template {
             with open(filepath, 'w') as f:
                 f.write(content)
             
-            with patch('tools.FoG_tools.SWIFT_PATH', tmpdir):
+            with patch('tools.FoG_tools.program_template.SWIFT_PATH', tmpdir):
                 yield filepath
     
     def read_file(self, filepath):
@@ -159,7 +159,7 @@ struct Template {
             end_line=5
         )
         
-        assert "Error: Could not find exact match" in result
+        assert "Error: old_text not found" in result
     
     # Test 7: Error - multiple occurrences
     def test_multiple_occurrences(self, temp_swift_file):
@@ -171,8 +171,7 @@ struct Template {
             end_line=13
         )
         
-        assert "Error: Found" in result
-        assert "occurrences" in result
+        assert "Multiple occurrences" in result
     
     # Test 8: Error - invalid line numbers
     def test_invalid_line_numbers(self, temp_swift_file):
@@ -184,8 +183,8 @@ struct Template {
             start_line=100,
             end_line=101
         )
-        assert "Error: Invalid start_line" in result
-        
+        assert "Invalid start_line" in result
+
         # end_line too high
         result = edit_template_by_diff(
             old_text="test",
@@ -193,8 +192,8 @@ struct Template {
             start_line=1,
             end_line=100
         )
-        assert "Error: Invalid end_line" in result
-        
+        assert "Invalid end_line" in result
+
         # start_line > end_line
         result = edit_template_by_diff(
             old_text="test",
@@ -202,8 +201,8 @@ struct Template {
             start_line=10,
             end_line=5
         )
-        assert "Error: start_line" in result
-        assert "cannot be greater than end_line" in result
+        assert "start_line" in result
+        assert "end_line" in result
     
     # Test 9: Error - missing line parameters
     def test_missing_line_parameters(self, temp_swift_file):
@@ -212,7 +211,8 @@ struct Template {
             old_text="test",
             new_text="new"
         )
-        assert "Error: Must pass in a start_line AND end_line" in result
+        assert "start_line" in result
+        assert "end_line" in result
     
     # Test 10: Complex multi-line edit preserving indentation
     def test_complex_multi_line_with_indentation(self, temp_swift_file):

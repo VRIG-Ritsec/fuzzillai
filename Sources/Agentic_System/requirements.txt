@@ -1,7 +1,3 @@
-# Core agent framework (REQUIRED)
-smolagents
-smolagents[litellm]
-
 # Build tools (REQUIRED)
 wheel
 setuptools
@@ -17,13 +13,12 @@ requests
 
 # Vector database and embeddings (OPTIONAL - will fallback gracefully if not available)
 # Uncomment these if you need RAG functionality:
-chromadb
-langchain-community
 sentence-transformers
 faiss-cpu
 psycopg2-binary
 
 #Utilities
+tqdm
 pytz
 pygdbmi
 duckduckgo-search

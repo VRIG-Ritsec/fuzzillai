@@ -3,7 +3,7 @@
 from agents.BaseAgent import Agent
 from IkaCore.agents import IkaBaseAgent
 from pathlib import Path
-from tools.FoG_tools_ika import (
+from tools.FoG_tools import (
     run_python_tool,
     get_v8_path_tool,
     get_realpath_tool,
@@ -13,9 +13,9 @@ from tools.FoG_tools_ika import (
     read_file_tool,
     lift_fuzzil_to_js_tool,
     compile_js_to_fuzzil_tool,
-    write_rag_db_id_tool,
-    read_rag_db_id_tool,
-    get_runtime_db_ids_tool,
+    write_agent_memory_tool,
+    read_agent_memory_tool,
+    list_agent_memory_ids_tool,
     search_js_file_name_by_pattern_tool,
     get_js_entry_data_by_name_tool,
     get_all_js_file_names_tool,
@@ -43,7 +43,7 @@ from tools.FoG_tools_ika import (
     list_d8_flags_tool,
     remove_old_javascript_programs_tool,
 )
-from tools.rag_tools_ika import (
+from tools.RAG_tools import (
     search_knowledge_base_tool,
     search_knowledge_base_hybrid_tool,
     get_knowledge_doc_tool,
@@ -53,7 +53,7 @@ from tools.rag_tools_ika import (
     search_chromium_issues_rag_tool,
     search_chromium_issues_rag_hybrid_tool,
 )
-from tools.common_tools_ika import (
+from tools._shared import (
     web_search_tool,
     get_cfg_for_tool,
     get_call_graph_hashmap_tool,
@@ -86,8 +86,8 @@ class Father(Agent):
                 similar_template_swift_tool,
                 similar_template_fuzzil_tool,
                 web_search_tool,
-                read_rag_db_id_tool,
-                get_runtime_db_ids_tool,
+                read_agent_memory_tool,
+                list_agent_memory_ids_tool,
                 search_knowledge_base_tool,
                 search_knowledge_base_hybrid_tool,
                 get_knowledge_doc_tool,
@@ -168,11 +168,11 @@ class Father(Agent):
                 fuzzy_finder_tool,
                 ripgrep_tool,
                 tree_tool,
-                read_rag_db_id_tool,
-                write_rag_db_id_tool,
+                read_agent_memory_tool,
+                write_agent_memory_tool,
                 read_file_tool,
                 get_realpath_tool,
-                get_runtime_db_ids_tool,
+                list_agent_memory_ids_tool,
                 get_cfg_for_tool,
                 get_call_graph_hashmap_tool,
                 find_functions_by_simple_name_tool,
@@ -199,11 +199,11 @@ class Father(Agent):
                 search_knowledge_base_tool,
                 search_knowledge_base_hybrid_tool,
                 get_knowledge_doc_tool,
-                read_rag_db_id_tool,
+                read_agent_memory_tool,
                 search_v8_source_rag_tool,
                 search_v8_source_rag_hybrid_tool,
                 get_v8_source_rag_doc_tool,
-                get_runtime_db_ids_tool,
+                list_agent_memory_ids_tool,
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],

@@ -17,6 +17,7 @@ ProgramTemplates.swift
 ProgramTemplateWeights.swift
 fog_logs/
 ebg_logs/
+Sources/Agentic_System/agent_memory/
 .gemini/
 crashes/
 folder*/
@@ -29,3 +30,4 @@ package-lock.json
 
 # V8 build directory for testing
 v8_build_test/
+.__pycache__/*

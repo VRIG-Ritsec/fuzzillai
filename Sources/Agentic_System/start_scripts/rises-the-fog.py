@@ -36,7 +36,7 @@ est_timezone = pytz.timezone('US/Eastern')
 
 BASE_MODEL_ID = "deepseek-chat"
 
-# Prefer the project's virtualenv site-packages if present, so tools like chromadb are importable
+# Prefer the project's virtualenv site-packages if present, so RAG tools are importable
 try:
     # Repo root (unchanged despite this file moving one level deeper)
     _root = Path(__file__).resolve().parents[3]

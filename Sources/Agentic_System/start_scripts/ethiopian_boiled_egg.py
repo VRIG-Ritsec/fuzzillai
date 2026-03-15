@@ -36,7 +36,7 @@ DEEPSEEK_MODEL_ID = "deepseek"
 OPENAI_MODEL_ID = "gpt-4o"
 OPENROUTER_MODEL_ID = "openai/gpt-4o-mini"
 
-# Prefer the project's virtualenv site-packages if present, so tools like chromadb are importable
+# Prefer the project's virtualenv site-packages if present, so RAG tools are importable
 try:
     # Repo root (unchanged despite this file moving one level deeper)
     _root = Path(__file__).resolve().parents[3]

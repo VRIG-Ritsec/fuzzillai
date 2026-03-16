@@ -16,8 +16,8 @@ def _env_flag(name: str) -> bool:
 
 
 MODEL_NAME = os.getenv("KNOWLEDGE_RAG_MODEL", "all-MiniLM-L6-v2")
-DOC_BATCH_SIZE = max(1, int(os.getenv("KNOWLEDGE_RAG_DOC_BATCH", "32")))
-ENCODE_BATCH_SIZE = max(1, int(os.getenv("KNOWLEDGE_RAG_ENCODE_BATCH", "4")))
+DOC_BATCH_SIZE = max(1, int(os.getenv("KNOWLEDGE_RAG_DOC_BATCH", "64")))
+ENCODE_BATCH_SIZE = max(1, int(os.getenv("KNOWLEDGE_RAG_ENCODE_BATCH", "8")))
 INDEX_FLUSH_INTERVAL = max(1, int(os.getenv("KNOWLEDGE_RAG_FLUSH_INTERVAL", "4000")))
 CHUNK_SIZE = max(128, int(os.getenv("KNOWLEDGE_RAG_CHUNK_SIZE", "1000")))
 CHUNK_OVERLAP = max(0, int(os.getenv("KNOWLEDGE_RAG_CHUNK_OVERLAP", "200")))
@@ -484,7 +484,76 @@ def create_vector_db(
     print(f"\nTotal documents indexed: {total_count}")
 
 
+def recover_from_partial(output_dir: Path) -> bool:
+    temp_dir = output_dir / "temp_indices"
+    metadata_path = output_dir / "v8_knowlagebase_metadata.json"
+    final_index_path = output_dir / "v8_knowlagebase.index"
+
+    if not temp_dir.exists() or final_index_path.exists():
+        return False
+
+    intermediates = sorted(temp_dir.glob("intermediate_*.index"))
+    if not intermediates:
+        return False
+
+    print("Recovering from partial run...")
+    if metadata_path.exists():
+        with metadata_path.open("r+b") as mf:
+            mf.seek(-1, 2)
+            if mf.read(1) != b"]":
+                mf.seek(0, 2)
+                mf.write(b"]")
+                print("  Repaired metadata (appended missing ']')")
+
+    merged_index = None
+    for temp_path in tqdm(intermediates, desc="Merging indices", unit="index"):
+        temp_index = faiss.read_index(str(temp_path))
+        if merged_index is None:
+            merged_index = temp_index
+        else:
+            merged_index.merge_from(temp_index)
+        temp_path.unlink(missing_ok=True)
+        gc.collect()
+
+    temp_dir.rmdir()
+    faiss.write_index(merged_index, str(final_index_path))
+    with (output_dir / "v8_knowlagebase_model.pkl").open("wb") as f:
+        pickle.dump(MODEL_NAME, f)
+
+    total_count = merged_index.ntotal
+    del merged_index
+    gc.collect()
+
+    if create_bm25_index is not None and not DISABLE_BM25:
+        bm25_path = output_dir / "v8_knowlagebase_bm25.sqlite"
+
+        def _iter_bm25_docs() -> Iterator[Dict[str, str]]:
+            with metadata_path.open("r", encoding="utf-8") as f:
+                for doc in tqdm(
+                    _iter_json_array_prefix(f, metadata_path),
+                    desc="BM25 indexing",
+                    unit="doc",
+                ):
+                    doc_id = doc.get("doc_id")
+                    bm25_text = _embedding_text(doc)
+                    if doc_id and bm25_text.strip():
+                        yield {"doc_id": doc_id, "bm25_text": bm25_text}
+
+        create_bm25_index(_iter_bm25_docs(), bm25_path)
+        print("  - BM25: v8_knowlagebase_bm25.sqlite")
+
+    print(f"\nRecovery complete. {total_count} vectors in v8_knowlagebase.index")
+    return True
+
+
 def main() -> None:
+    output_dir = metadata_root() / "v8_knowlagebase"
+    if len(sys.argv) > 1 and sys.argv[1] == "--recover":
+        if recover_from_partial(output_dir):
+            return
+        print("Nothing to recover (no temp_indices or index already complete)")
+        sys.exit(1)
+
     if len(sys.argv) > 1:
         base_dir = Path(sys.argv[1]).expanduser()
     else:

@@ -31,3 +31,4 @@ package-lock.json
 # V8 build directory for testing
 v8_build_test/
 .__pycache__/*
+Sources/Agentic_System/RAG/data_sources/knowlage_docs/chromium_issues/chromium_issues_from_tracker.json

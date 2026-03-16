@@ -121,12 +121,18 @@ def chunk_ranges(
     while start < text_len:
         end = min(start + chunk_size, text_len)
         if end < text_len:
-            end = _find_split_point(content, start, end)
+            split_end = _find_split_point(content, start, end)
+            # Guard: if split point barely advances (e.g. a single newline
+            # near `start` followed by a very long line), fall back to the
+            # hard cut so we always make forward progress.
+            if split_end - start < max(1, chunk_size // 4):
+                split_end = end
+            end = split_end
         if content[start:end].strip():
             ranges.append((start, end))
         if end >= text_len:
             break
-        start = max(0, end - overlap)
+        start = max(start + 1, end - overlap)
     return ranges
 
 
@@ -327,7 +333,17 @@ def _subprocess_encode_worker(
     results: List[Tuple[Dict, "np.ndarray"]] = []
 
     for doc_idx, doc in enumerate(batch_docs):
-        content = str(doc.get("content", ""))
+        # Read file content from disk (not passed in doc to keep IPC small)
+        abs_path = doc.get("abs_path", "")
+        if not abs_path:
+            continue
+        try:
+            content = Path(abs_path).read_text(encoding="utf-8", errors="ignore")
+        except Exception as e:
+            print(f"    [child] Error reading {abs_path}: {e}", flush=True)
+            continue
+        if not content.strip():
+            continue
         ranges = chunk_ranges(content)
         if not ranges:
             continue
@@ -372,9 +388,13 @@ def _subprocess_encode_worker(
 
         file_embedding = (file_sum / file_chunk_count).astype("float32")
         doc["embedding_chunk_count"] = file_chunk_count
-        # Strip content before returning to parent — keeps IPC small
-        doc.pop("content", None)
-        doc.pop("context", None)
+        doc["start_char"] = 0
+        doc["end_char"] = len(content)
+        doc["start_line"] = 1
+        doc["end_line"] = content.count("\n") + 1
+        doc["char_range"] = f"0-{len(content)}"
+        # Strip fields that shouldn't go in metadata
+        doc.pop("abs_path", None)
         results.append((doc, file_embedding))
         del file_sum, content
 

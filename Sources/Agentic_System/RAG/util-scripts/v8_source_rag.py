@@ -24,7 +24,7 @@ def _env_flag(name: str) -> bool:
 MODEL_NAME = os.getenv("RAG_MODEL", "all-MiniLM-L6-v2")
 ENCODE_BATCH_SIZE = max(1, int(os.getenv("RAG_EMBED_BATCH", "2")))
 INDEX_FLUSH_INTERVAL = max(1, int(os.getenv("RAG_FLUSH_INTERVAL", "200")))
-CHUNK_SIZE = max(128, int(os.getenv("RAG_CHUNK_SIZE", "10000")))
+CHUNK_SIZE = max(128, int(os.getenv("RAG_CHUNK_SIZE", "1000")))
 CHUNK_OVERLAP = max(0, int(os.getenv("RAG_CHUNK_OVERLAP", "200")))
 MAX_FILES = int(os.getenv("RAG_MAX_FILES", "0") or "0") or None
 FORCE_CPU = _env_flag("RAG_FORCE_CPU")

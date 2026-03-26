@@ -31,13 +31,30 @@ public class JavaScriptParser {
     /// The path to the parse.js script that implements the actual parsing using babel.js.
     private let parserScriptPath: String
 
+    static func parserScriptPathForTesting() -> String? {
+        locateResource(
+            named: "parser",
+            withExtension: "js",
+            preferredDirectories: ["Parser", "Compiler/Parser", ""]
+        )
+    }
+
+    static func astProtobufDefinitionPathForTesting() -> String? {
+        locateResource(
+            named: "ast",
+            withExtension: "proto",
+            preferredDirectories: ["Protobuf", ""]
+        )
+    }
+
     public init?(executor: JavaScriptExecutor) {
         self.executor = executor
 
         // This will only work if the executor is node as we will need to use node modules.
-
-        // Parser files are in Compiler/Parser in the module bundle, see Package.swift.
-        self.parserScriptPath = Bundle.module.path(forResource: "parser", ofType: "js", inDirectory: "Compiler/Parser")!
+        guard let parserScriptPath = Self.parserScriptPathForTesting() else {
+            return nil
+        }
+        self.parserScriptPath = parserScriptPath
 
         // Check if the parser works. If not, it's likely because its node.js dependencies have not been installed.
         do {
@@ -48,7 +65,9 @@ public class JavaScriptParser {
     }
 
     public func parse(_ path: String) throws -> AST {
-        let astProtobufDefinitionPath = Bundle.module.path(forResource: "ast", ofType: "proto")!
+        guard let astProtobufDefinitionPath = Self.astProtobufDefinitionPathForTesting() else {
+            throw ParserError.parsingFailed("Could not locate ast.proto in the Fuzzilli module bundle")
+        }
         let outputFilePath = FileManager.default.temporaryDirectory.path + "/" + UUID().uuidString + ".ast.proto"
         try runParserScript(withArguments: [astProtobufDefinitionPath, path, outputFilePath])
         let data = try Data(contentsOf: URL(fileURLWithPath: outputFilePath))
@@ -64,6 +83,7 @@ public class JavaScriptParser {
         task.standardOutput = FileHandle.nullDevice
         task.standardError = output
         task.arguments = [parserScriptPath] + arguments
+        task.currentDirectoryURL = URL(fileURLWithPath: parserScriptPath).deletingLastPathComponent()
         // TODO: move this method into the NodeJS class instead of manually invoking the node.js binary here
         task.executableURL = URL(fileURLWithPath: executor.executablePath)
         try task.run()
@@ -73,6 +93,33 @@ public class JavaScriptParser {
         guard task.terminationStatus == 0 else {
             throw ParserError.parsingFailed(String(data: data, encoding: .utf8)!)
         }
+    }
+
+    private static func locateResource(named name: String, withExtension ext: String, preferredDirectories: [String]) -> String? {
+        let bundle = Bundle.module
+
+        for directory in preferredDirectories {
+            let normalizedDirectory = directory.isEmpty ? nil : directory
+            if let path = bundle.path(forResource: name, ofType: ext, inDirectory: normalizedDirectory) {
+                return path
+            }
+        }
+
+        guard let resourceURL = bundle.resourceURL else {
+            return nil
+        }
+
+        let fm = FileManager.default
+        for directory in preferredDirectories {
+            let candidateURL = directory.isEmpty
+                ? resourceURL.appendingPathComponent("\(name).\(ext)")
+                : resourceURL.appendingPathComponent(directory).appendingPathComponent("\(name).\(ext)")
+            if fm.fileExists(atPath: candidateURL.path) {
+                return candidateURL.path
+            }
+        }
+
+        return nil
     }
 
 }

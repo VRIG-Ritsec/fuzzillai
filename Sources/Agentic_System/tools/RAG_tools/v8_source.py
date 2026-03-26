@@ -22,6 +22,9 @@ from ._shared import (
     _bm25_search,
     _rrf_fuse,
     _maybe_cross_rerank,
+    _hydrate_doc,
+    _load_sentence_transformer,
+    _score_to_similarity,
     _format_rag_result,
 )
 
@@ -33,6 +36,135 @@ if FAISS_AVAILABLE:
 if FAISS_AVAILABLE:
     import faiss
     from sentence_transformers import SentenceTransformer
+
+
+V8_SOURCE_TOP_LEVEL_AREAS = [
+    "api",
+    "asmjs",
+    "ast",
+    "base",
+    "baseline",
+    "bigint",
+    "builtins",
+    "codegen",
+    "common",
+    "compiler",
+    "compiler-dispatcher",
+    "d8",
+    "date",
+    "debug",
+    "deoptimizer",
+    "diagnostics",
+    "dumpling",
+    "execution",
+    "extensions",
+    "flags",
+    "fuzzilli",
+    "handles",
+    "heap",
+    "ic",
+    "init",
+    "inspector",
+    "interpreter",
+    "json",
+    "libplatform",
+    "libsampler",
+    "logging",
+    "maglev",
+    "numbers",
+    "objects",
+    "parsing",
+    "profiler",
+    "regexp",
+    "roots",
+    "runtime",
+    "sandbox",
+    "snapshot",
+    "strings",
+    "tasks",
+    "torque",
+    "tracing",
+    "trap-handler",
+    "utils",
+    "wasm",
+    "zone",
+]
+
+_V8_SOURCE_TOP_LEVEL_AREAS_TEXT = ", ".join(V8_SOURCE_TOP_LEVEL_AREAS)
+_V8_SOURCE_FILTER_DESCRIPTION = (
+    "Filter by V8 source path prefix, not by semantic topic. Prefer `path_prefix_filters` "
+    "with one or more top-level areas such as "
+    f"{_V8_SOURCE_TOP_LEVEL_AREAS_TEXT}. "
+    "More specific prefixes like `compiler/turboshaft` are also allowed."
+)
+
+
+def _normalize_path_prefix(value) -> str:
+    if value is None:
+        return ""
+    prefix = str(value).strip().lower().replace("\\", "/")
+    if not prefix:
+        return ""
+    if prefix.startswith("v8/src/"):
+        prefix = prefix[len("v8/src/") :]
+    elif prefix.startswith("src/"):
+        prefix = prefix[len("src/") :]
+    if prefix.startswith("v8 "):
+        prefix = prefix[len("v8 ") :]
+    prefix = prefix.strip("/")
+    return prefix
+
+
+def _normalize_path_prefix_filters(values) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, (list, tuple, set)):
+        raw_values = list(values)
+    else:
+        raw_values = [values]
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in raw_values:
+        prefix = _normalize_path_prefix(value)
+        if not prefix or prefix in seen:
+            continue
+        seen.add(prefix)
+        normalized.append(prefix)
+    return normalized
+
+
+def _collect_path_prefix_filters(params: dict) -> list[str]:
+    combined: list[str] = []
+    for key in (
+        "path_prefix_filters",
+        "path_prefix",
+        "area_filters",
+        "area_filter",
+        "topic_filters",
+        "topic_filter",
+    ):
+        combined.extend(_normalize_path_prefix_filters(params.get(key)))
+    return _normalize_path_prefix_filters(combined)
+
+
+def _matches_path_prefix_filters(doc: dict, path_prefix_filters: list[str] | None) -> bool:
+    if not path_prefix_filters:
+        return True
+    path = _normalize_path_prefix(doc.get("path") or doc.get("parent_file") or "")
+    topic = _normalize_path_prefix(doc.get("topic") or "")
+    for prefix in path_prefix_filters:
+        if path and (path == prefix or path.startswith(prefix + "/")):
+            return True
+        if topic and (topic == prefix or topic.startswith(prefix + "/")):
+            return True
+    return False
+
+
+def _candidate_search_k(top_k: int, path_prefix_filters: list[str] | None) -> int:
+    if not path_prefix_filters:
+        return top_k
+    return top_k * max(3, len(path_prefix_filters) * 2)
 
 
 class FAISSV8SourceRag:
@@ -59,13 +191,7 @@ class FAISSV8SourceRag:
         self.bm25_db_path = base_dir / "v8_source_rag_bm25.sqlite"
         with open(model_file, "rb") as f:
             model_name = pickle.load(f)
-        try:
-            self.model = SentenceTransformer(model_name, device="cpu")
-        except (TypeError, ValueError):
-            self.model = SentenceTransformer(model_name)
-            self.model = self.model.to("cpu")
-        if hasattr(self.model, "eval"):
-            self.model.eval()
+        self.model = _load_sentence_transformer(model_name)
 
     @classmethod
     def get_instance(cls):
@@ -73,23 +199,25 @@ class FAISSV8SourceRag:
             cls._instance = cls()
         return cls._instance
 
-    def search_vector(self, query: str, top_k: int = 5, topic_filter: str = None):
+    def search_vector(self, query: str, top_k: int = 5, path_prefix_filters: list[str] | None = None):
+        if self.model is None:
+            return self.search_lexical(query, top_k, path_prefix_filters)
         query_embedding = self.model.encode([query], convert_to_numpy=True)
-        search_k = top_k * 3 if topic_filter else top_k
+        search_k = _candidate_search_k(top_k, path_prefix_filters)
         distances, indices = self.index.search(query_embedding.astype("float32"), search_k)
         results = []
         for idx, distance in zip(indices[0], distances[0]):
             if idx < len(self.metadata):
-                doc = self.metadata[idx]
-                if topic_filter and topic_filter.lower() not in doc["topic"].lower():
+                doc = _hydrate_doc(self.metadata[idx], self.bm25_db_path)
+                if not _matches_path_prefix_filters(doc, path_prefix_filters):
                     continue
                 similarity = 1.0 / (1.0 + distance)
                 results.append(
                     {
                         "doc_id": doc.get("doc_id"),
-                        "path": doc["path"],
-                        "topic": doc["topic"],
-                        "content": doc["content"],
+                        "path": doc.get("path"),
+                        "topic": doc.get("topic"),
+                        "content": doc.get("content", ""),
                         "parent_id": doc.get("parent_id"),
                         "chunk_index": doc.get("chunk_index"),
                         "total_chunks": doc.get("total_chunks"),
@@ -104,23 +232,54 @@ class FAISSV8SourceRag:
                     break
         return results
 
+    def search_lexical(self, query: str, top_k: int = 5, path_prefix_filters: list[str] | None = None):
+        results = []
+        search_k = _candidate_search_k(top_k, path_prefix_filters)
+        for doc_id, score in _bm25_search(self.bm25_db_path, query, search_k):
+            base_doc = self.doc_id_to_doc.get(doc_id)
+            doc = _hydrate_doc(base_doc, self.bm25_db_path) if base_doc else None
+            if not doc:
+                continue
+            if not _matches_path_prefix_filters(doc, path_prefix_filters):
+                continue
+            results.append(
+                {
+                    "doc_id": doc.get("doc_id"),
+                    "path": doc.get("path"),
+                    "topic": doc.get("topic"),
+                    "content": doc.get("content", ""),
+                    "parent_id": doc.get("parent_id"),
+                    "chunk_index": doc.get("chunk_index"),
+                    "total_chunks": doc.get("total_chunks"),
+                    "start_char": doc.get("start_char"),
+                    "end_char": doc.get("end_char"),
+                    "start_line": doc.get("start_line"),
+                    "end_line": doc.get("end_line"),
+                    "similarity": _score_to_similarity(score),
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
+
     def search_hybrid(
         self,
         query: str,
         top_k: int = 5,
-        topic_filter: str = None,
+        path_prefix_filters: list[str] | None = None,
         vector_k: int = 40,
         bm25_k: int = 60,
         rerank_k: int = 12,
     ):
-        vector_results = self.search_vector(query, vector_k, topic_filter)
+        vector_results = self.search_vector(query, vector_k, path_prefix_filters) if self.model is not None else []
         bm25_hits = _bm25_search(self.bm25_db_path, query, bm25_k)
         bm25_results = []
         for doc_id, score in bm25_hits:
-            doc = self.doc_id_to_doc.get(doc_id)
+            base_doc = self.doc_id_to_doc.get(doc_id)
+            doc = _hydrate_doc(base_doc, self.bm25_db_path) if base_doc else None
             if not doc:
                 continue
-            if topic_filter and topic_filter.lower() not in doc.get("topic", "").lower():
+            if not _matches_path_prefix_filters(doc, path_prefix_filters):
                 continue
             bm25_results.append(
                 {
@@ -138,19 +297,23 @@ class FAISSV8SourceRag:
                     "bm25_score": float(score),
                 }
             )
+        if not vector_results:
+            rerank_pool = bm25_results[: max(top_k, rerank_k)]
+            reranked = _maybe_cross_rerank(query, rerank_pool)
+            return reranked[:top_k]
         fused = _rrf_fuse([vector_results, bm25_results], rrf_k=60)
         rerank_pool = fused[: max(top_k, rerank_k)]
         reranked = _maybe_cross_rerank(query, rerank_pool)
         return reranked[:top_k]
 
-    def search(self, query: str, top_k: int = 5, topic_filter: str = None):
-        return self.search_vector(query, top_k, topic_filter)
+    def search(self, query: str, top_k: int = 5, path_prefix_filters: list[str] | None = None):
+        return self.search_vector(query, top_k, path_prefix_filters)
 
 
 def _search_v8_source_rag_executor(params: dict) -> str:
     query = params.get("query", "")
     top_k = params.get("top_k", 3)
-    topic_filter = params.get("topic_filter", "")
+    path_prefix_filters = _collect_path_prefix_filters(params)
     if not query:
         return json.dumps({"error": "query parameter is required"})
     if not FAISS_AVAILABLE:
@@ -160,7 +323,7 @@ def _search_v8_source_rag_executor(params: dict) -> str:
     try:
         kb = FAISSV8SourceRag.get_instance()
         top_k = max(1, min(10, int(top_k)))
-        results = kb.search(query, top_k, topic_filter if topic_filter else None)
+        results = kb.search(query, top_k, path_prefix_filters or None)
         output = []
         for result in results:
             formatted = _format_rag_result(result)
@@ -186,11 +349,38 @@ def _search_v8_source_rag_executor(params: dict) -> str:
 
 search_v8_source_rag_tool = IkaTools(
     name="search_v8_source_rag",
-    description="Semantic search over indexed V8 source. Use for code patterns, JIT logic, runtime behavior. Filter by topic: ic, compiler, runtime.",
+    description=(
+        "Semantic search over indexed V8 source. Use for code patterns, JIT logic, and runtime behavior. "
+        + _V8_SOURCE_FILTER_DESCRIPTION
+    ),
     parameters={
         "query": {"type": "string", "description": "Natural language query about V8 source code", "required": True},
         "top_k": {"type": "integer", "description": "Number of results to return (default 3, max 10)", "required": False},
-        "topic_filter": {"type": "string", "description": "Optional topic filter (e.g., 'ic', 'compiler', 'runtime')", "required": False},
+        "path_prefix_filters": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Optional list of V8 source path prefixes. Results match if a file path starts with any prefix in the list. "
+                f"Common top-level areas: {_V8_SOURCE_TOP_LEVEL_AREAS_TEXT}. "
+                "Specific prefixes such as `compiler/turboshaft` are also allowed."
+            ),
+            "required": False,
+        },
+        "path_prefix": {
+            "type": "string",
+            "description": (
+                "Optional single V8 source path prefix. Convenience alias for a one-item `path_prefix_filters` list."
+            ),
+            "required": False,
+        },
+        "topic_filter": {
+            "type": "string",
+            "description": (
+                "Deprecated backward-compatible alias. Historically this behaved like a coarse folder filter based on "
+                "the first path component. Prefer `path_prefix_filters`."
+            ),
+            "required": False,
+        },
     },
     execute_function=_search_v8_source_rag_executor,
 )
@@ -199,7 +389,7 @@ search_v8_source_rag_tool = IkaTools(
 def _search_v8_source_rag_hybrid_executor(params: dict) -> str:
     query = params.get("query", "")
     top_k = params.get("top_k", 6)
-    topic_filter = params.get("topic_filter", "")
+    path_prefix_filters = _collect_path_prefix_filters(params)
     vector_k = params.get("vector_k", 40)
     bm25_k = params.get("bm25_k", 60)
     rerank_k = params.get("rerank_k", 12)
@@ -215,7 +405,7 @@ def _search_v8_source_rag_hybrid_executor(params: dict) -> str:
         vector_k = max(top_k, min(80, int(vector_k)))
         bm25_k = max(top_k, min(120, int(bm25_k)))
         rerank_k = max(top_k, min(20, int(rerank_k)))
-        results = kb.search_hybrid(query, top_k, topic_filter if topic_filter else None, vector_k, bm25_k, rerank_k)
+        results = kb.search_hybrid(query, top_k, path_prefix_filters or None, vector_k, bm25_k, rerank_k)
         output = []
         for result in results:
             formatted = _format_rag_result(result)
@@ -241,11 +431,38 @@ def _search_v8_source_rag_hybrid_executor(params: dict) -> str:
 
 search_v8_source_rag_hybrid_tool = IkaTools(
     name="search_v8_source_rag_hybrid",
-    description="Hybrid search over V8 source for better recall. Use when search_v8_source_rag yields few hits.",
+    description=(
+        "Hybrid search over V8 source for better recall. Use when search_v8_source_rag yields few hits. "
+        + _V8_SOURCE_FILTER_DESCRIPTION
+    ),
     parameters={
         "query": {"type": "string", "description": "Natural language query about V8 source code", "required": True},
         "top_k": {"type": "integer", "description": "Number of results to return (default 6, max 8)", "required": False},
-        "topic_filter": {"type": "string", "description": "Optional topic filter (e.g., 'ic', 'compiler', 'runtime')", "required": False},
+        "path_prefix_filters": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Optional list of V8 source path prefixes. Results match if a file path starts with any prefix in the list. "
+                f"Common top-level areas: {_V8_SOURCE_TOP_LEVEL_AREAS_TEXT}. "
+                "Specific prefixes such as `compiler/turboshaft` are also allowed."
+            ),
+            "required": False,
+        },
+        "path_prefix": {
+            "type": "string",
+            "description": (
+                "Optional single V8 source path prefix. Convenience alias for a one-item `path_prefix_filters` list."
+            ),
+            "required": False,
+        },
+        "topic_filter": {
+            "type": "string",
+            "description": (
+                "Deprecated backward-compatible alias. Historically this behaved like a coarse folder filter based on "
+                "the first path component. Prefer `path_prefix_filters`."
+            ),
+            "required": False,
+        },
         "vector_k": {"type": "integer", "description": "Vector candidates to retrieve (default 40, max 80)", "required": False},
         "bm25_k": {"type": "integer", "description": "BM25 candidates to retrieve (default 60, max 120)", "required": False},
         "rerank_k": {"type": "integer", "description": "Candidates to rerank (default 12, max 20)", "required": False},
@@ -268,17 +485,18 @@ def _get_v8_source_rag_doc_executor(params: dict) -> str:
         matches.sort(key=lambda d: d.get("chunk_index", 0))
         output = []
         for doc in matches:
+            hydrated = _hydrate_doc(doc, kb.bm25_db_path)
             output.append(
                 {
-                    "topic": doc.get("topic"),
-                    "file": doc.get("path"),
-                    "chunk_index": doc.get("chunk_index"),
-                    "total_chunks": doc.get("total_chunks"),
-                    "start_char": doc.get("start_char"),
-                    "end_char": doc.get("end_char"),
-                    "start_line": doc.get("start_line"),
-                    "end_line": doc.get("end_line"),
-                    "content": doc.get("content", ""),
+                    "topic": hydrated.get("topic"),
+                    "file": hydrated.get("path"),
+                    "chunk_index": hydrated.get("chunk_index"),
+                    "total_chunks": hydrated.get("total_chunks"),
+                    "start_char": hydrated.get("start_char"),
+                    "end_char": hydrated.get("end_char"),
+                    "start_line": hydrated.get("start_line"),
+                    "end_line": hydrated.get("end_line"),
+                    "content": hydrated.get("content", ""),
                 }
             )
         return json.dumps(output, indent=2)

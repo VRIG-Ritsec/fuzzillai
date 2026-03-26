@@ -25,7 +25,12 @@ def _base_dir() -> Path:
 def _get_session_id() -> str:
     global _SESSION_ID
     if _SESSION_ID is None:
-        _SESSION_ID = os.environ.get("AGENT_MEMORY_SESSION") or datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Prefer the FoG session ID so agent memory is co-located with the run
+        _SESSION_ID = (
+            os.environ.get("FOG_SESSION_ID")
+            or os.environ.get("AGENT_MEMORY_SESSION")
+            or datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
     return _SESSION_ID
 
 

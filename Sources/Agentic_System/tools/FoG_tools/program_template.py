@@ -1,9 +1,13 @@
 """
-FoG program template tools: write, list, remove, edit, compile, execute, list_d8_flags, remove_old_js.
+FoG program template tools: list, edit, compile, execute, list_d8_flags.
 """
 
 import os
 import re
+import shlex
+import shutil
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 _agentic_dir = Path(__file__).resolve().parent.parent.parent
@@ -14,211 +18,382 @@ if str(_ikacore_src) not in sys.path:
 
 from IkaCore.tools import IkaTools
 
+from tools._shared import resolve_js_path
+
 from ._shared import (
-    SWIFT_PATH,
-    D8_PATH,
+    FOG_SESSION_ID,
     GENERATED_TEMPLATE_DIR,
-    run_command,
+    PROGRAM_TEMPLATES_FILE,
+    PROGRAM_WEIGHTS_FILE,
+    TEMPLATE_BACKUP_DIR,
+    _init_session,
+    _next_attempt,
     get_output,
+    run_command,
+    run_d8_command,
 )
 
 
-def _write_program_template_executor(params: dict) -> str:
-    program_template = params.get("program_template", "")
-    if not program_template:
-        return "Error: program_template parameter is required"
-    program_templates_file = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplates.swift")
-    if not os.path.exists(program_templates_file):
-        return f"Error: ProgramTemplates.swift not found at {program_templates_file}"
+_ALLOWED_RELATIVE_PATHS = (
+    "Sources/Fuzzilli/CodeGen/ProgramTemplates.swift",
+    "Sources/Fuzzilli/CodeGen/ProgramTemplateWeights.swift",
+)
+_UNIFIED_HUNK_HEADER_RE = re.compile(
+    r"^@@\s*-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s*@@(?:\s*(.*))?$"
+)
+_PATCH_METADATA_PREFIXES = (
+    "diff --git ",
+    "index ",
+    "--- ",
+    "+++ ",
+    "new file mode ",
+    "deleted file mode ",
+    "rename from ",
+    "rename to ",
+    "similarity index ",
+    "dissimilarity index ",
+    "old mode ",
+    "new mode ",
+)
+_SUPPORTED_D8_FLAGS_CACHE: set[str] | None = None
+
+
+@dataclass
+class _PatchHunk:
+    anchor: str | None
+    old_lines: list[str]
+    new_lines: list[str]
+
+
+def _allowed_program_template_paths() -> dict[str, Path]:
+    return {
+        _ALLOWED_RELATIVE_PATHS[0]: PROGRAM_TEMPLATES_FILE,
+        _ALLOWED_RELATIVE_PATHS[1]: PROGRAM_WEIGHTS_FILE,
+    }
+
+
+def _take_file_snapshot(path: Path, label: str) -> str:
+    """
+    Copy a target file into TEMPLATE_BACKUP_DIR before modification.
+    Returns the snapshot path, or empty string on failure.
+    """
+    if not path.exists():
+        return ""
+    TEMPLATE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    dest = TEMPLATE_BACKUP_DIR / f"{label}_{path.stem}_{timestamp}{path.suffix}"
     try:
-        with open(program_templates_file, "r") as f:
-            content = f.read()
-    except Exception as e:
-        return f"Error reading ProgramTemplates.swift: {e}"
-    content = content.rstrip()
-    if not content.endswith("]"):
-        return "Error: ProgramTemplates.swift does not end with closing bracket"
-    template_code = program_template.strip()
-    if not template_code.endswith(","):
-        template_code += ","
-    content = content[:-1] + "\n\n    " + template_code + "\n]"
+        shutil.copy2(str(path), str(dest))
+        return str(dest)
+    except Exception:
+        return ""
+
+
+def _resolve_program_template_path(raw_path: str) -> tuple[str, Path]:
+    candidate = (raw_path or "").strip()
+    if not candidate:
+        raise ValueError("path parameter is required")
+
+    path_obj = Path(candidate)
+    if path_obj.is_absolute():
+        resolved = path_obj.resolve()
+        for rel_path, actual_path in _allowed_program_template_paths().items():
+            if resolved == actual_path.resolve():
+                return rel_path, actual_path
+
+    for rel_path, actual_path in _allowed_program_template_paths().items():
+        if candidate == rel_path or path_obj.name == Path(rel_path).name:
+            return rel_path, actual_path
+
+    allowed = ", ".join(_ALLOWED_RELATIVE_PATHS)
+    raise ValueError(f"path must target one of: {allowed}")
+
+
+def _is_diff_content_line(line: str) -> bool:
+    if not line:
+        return False
+    if line.startswith(" "):
+        return True
+    if line.startswith("+"):
+        return not line.startswith("+++ ")
+    if line.startswith("-"):
+        return not line.startswith("--- ")
+    return False
+
+
+def _normalize_patch_diff(diff: str) -> list[str]:
+    lines = diff.splitlines()
+
+    while lines and lines[-1].strip() == "" and not _is_diff_content_line(lines[-1]):
+        lines.pop()
+
+    if lines and lines[0].strip().startswith("*** Begin Patch"):
+        lines = lines[1:]
+    if lines and lines[0].strip() == "***":
+        lines = lines[1:]
+    if lines and lines[-1].strip().startswith("*** End Patch"):
+        lines = lines[:-1]
+    if lines and lines[-1].strip() == "***":
+        lines = lines[:-1]
+
+    normalized: list[str] = []
+    for line in lines:
+        if _is_diff_content_line(line):
+            normalized.append(line)
+            continue
+
+        trimmed = line.strip()
+        if trimmed.startswith("*** Update File:"):
+            continue
+        if trimmed.startswith("*** Add File:"):
+            continue
+        if trimmed.startswith("*** Delete File:"):
+            continue
+        if any(trimmed.startswith(prefix) for prefix in _PATCH_METADATA_PREFIXES):
+            continue
+
+        normalized.append(line)
+
+    return normalized
+
+
+def _parse_hunk_anchor(header: str) -> str | None:
+    trimmed = header.strip()
+    if trimmed in {"@@", "@@ @@"}:
+        return None
+
+    unified_match = _UNIFIED_HUNK_HEADER_RE.match(trimmed)
+    if unified_match:
+        anchor = (unified_match.group(1) or "").strip()
+        return anchor or None
+
+    anchor = trimmed[2:].strip()
+    if anchor.endswith("@@"):
+        anchor = anchor[:-2].strip()
+    return anchor or None
+
+
+def _parse_patch_hunks(diff: str) -> list[_PatchHunk]:
+    lines = _normalize_patch_diff(diff)
+    if not lines:
+        raise ValueError("Diff does not contain any hunks.")
+
+    hunks: list[_PatchHunk] = []
+    index = 0
+    while index < len(lines):
+        header = lines[index].rstrip()
+        if not header.startswith("@@"):
+            raise ValueError(
+                f"Invalid diff format at line {index + 1}: expected a hunk header starting with @@."
+            )
+
+        anchor = _parse_hunk_anchor(header)
+        index += 1
+
+        body: list[str] = []
+        while index < len(lines) and not lines[index].startswith("@@"):
+            if lines[index].strip() == "*** End of File":
+                index += 1
+                continue
+            body.append(lines[index])
+            index += 1
+
+        if not body:
+            raise ValueError("Each hunk must include at least one body line.")
+
+        old_lines: list[str] = []
+        new_lines: list[str] = []
+        saw_change = False
+        for body_line in body:
+            if not body_line:
+                raise ValueError("Diff body lines must start with a space, +, or -.")
+            prefix = body_line[0]
+            if prefix not in {" ", "+", "-"}:
+                raise ValueError(
+                    f"Invalid diff line '{body_line}'. Body lines must start with a space, +, or -."
+                )
+            text = body_line[1:]
+            if prefix in {" ", "-"}:
+                old_lines.append(text)
+            if prefix in {" ", "+"}:
+                new_lines.append(text)
+            if prefix in {"+", "-"}:
+                saw_change = True
+
+        if not saw_change:
+            raise ValueError("Each hunk must include at least one addition or removal.")
+
+        hunks.append(_PatchHunk(anchor=anchor, old_lines=old_lines, new_lines=new_lines))
+
+    return hunks
+
+
+def _read_lines_with_format(path: Path) -> tuple[list[str], str, bool]:
+    content = path.read_text()
+    line_ending = "\r\n" if "\r\n" in content else "\n"
+    has_trailing_newline = content.endswith("\n") or content.endswith("\r")
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    lines = normalized.split("\n")
+    if has_trailing_newline and lines and lines[-1] == "":
+        lines.pop()
+    return lines, line_ending, has_trailing_newline
+
+
+def _write_lines_with_format(
+    path: Path,
+    lines: list[str],
+    line_ending: str,
+    has_trailing_newline: bool,
+) -> None:
+    content = "\n".join(lines)
+    if has_trailing_newline:
+        content += "\n"
+    content = content.replace("\n", line_ending)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def _find_exact_matches(lines: list[str], needle: list[str]) -> list[int]:
+    if not needle:
+        return []
+    matches: list[int] = []
+    limit = len(lines) - len(needle) + 1
+    for start in range(max(limit, 0)):
+        if lines[start : start + len(needle)] == needle:
+            matches.append(start)
+    return matches
+
+
+def _filter_matches_by_anchor(
+    lines: list[str],
+    matches: list[int],
+    needle: list[str],
+    anchor: str | None,
+) -> list[int]:
+    if not anchor:
+        return matches
+
+    filtered: list[int] = []
+    for start in matches:
+        end = start + max(len(needle), 1)
+        window = lines[max(0, start - 2) : min(len(lines), end + 2)]
+        if any(anchor in line for line in window):
+            filtered.append(start)
+    return filtered
+
+
+def _apply_patch_hunks(lines: list[str], hunks: list[_PatchHunk]) -> list[str]:
+    updated = list(lines)
+
+    for index, hunk in enumerate(hunks, start=1):
+        if hunk.old_lines:
+            matches = _find_exact_matches(updated, hunk.old_lines)
+            matches = _filter_matches_by_anchor(updated, matches, hunk.old_lines, hunk.anchor)
+            if not matches:
+                raise ValueError(
+                    f"No match found for hunk {index}. Re-read the file and use a more exact anchor/context."
+                )
+            if len(matches) > 1:
+                raise ValueError(
+                    f"Found multiple matches for hunk {index}. Add more context lines or a more specific anchor."
+                )
+
+            start = matches[0]
+            end = start + len(hunk.old_lines)
+            updated = updated[:start] + hunk.new_lines + updated[end:]
+            continue
+
+        if not hunk.anchor:
+            raise ValueError(
+                f"Hunk {index} has no removable context. Add context lines or a specific @@ anchor."
+            )
+
+        anchor_matches = [line_index for line_index, line in enumerate(updated) if hunk.anchor in line]
+        if not anchor_matches:
+            raise ValueError(
+                f"No match found for hunk {index}. Re-read the file and use a more exact anchor/context."
+            )
+        if len(anchor_matches) > 1:
+            raise ValueError(
+                f"Found multiple matches for hunk {index}. Add more context lines or a more specific anchor."
+            )
+
+        insert_at = anchor_matches[0] + 1
+        updated = updated[:insert_at] + hunk.new_lines + updated[insert_at:]
+
+    return updated
+
+
+def _edit_program_template_file_executor(params: dict) -> str:
+    raw_path = params.get("path", "")
+    op = (params.get("op") or "update").strip()
+    rename = params.get("rename")
+    diff = params.get("diff")
+
+    if op not in {"create", "delete", "update"}:
+        return f"Error: Unsupported op '{op}'. Use create, update, or delete."
+
     try:
-        with open(program_templates_file, "w") as f:
-            f.write(content)
-        ret = f"OK: Successfully wrote program template to {program_templates_file}"
-    except Exception as e:
-        return f"Error writing to ProgramTemplates.swift: {e}"
-    program_template_weights_file = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplateWeights.swift")
-    template_name_pattern = r'(?:WasmProgramTemplate|ProgramTemplate)\s*\("([^"]+)"\)'
-    name_match = re.search(template_name_pattern, program_template)
-    if not name_match:
-        return ret + "\nWarning: Could not extract template name to update weights."
-    template_name = name_match.group(1)
-    if not os.path.exists(program_template_weights_file):
-        return ret + "\nWarning: ProgramTemplateWeights.swift not found"
+        rel_path, target_path = _resolve_program_template_path(raw_path)
+        rename_rel_path = None
+        rename_path = None
+        if rename:
+            rename_rel_path, rename_path = _resolve_program_template_path(rename)
+    except ValueError as exc:
+        return f"Error: {exc}"
+
+    if op in {"create", "update"} and not isinstance(diff, str):
+        return "Error: diff parameter is required for create and update operations."
+    if op == "delete" and rename:
+        return "Error: rename is only supported together with op='update'."
+
+    _init_session()
+    snapshot = _take_file_snapshot(target_path, "pre_edit")
+
     try:
-        with open(program_template_weights_file, "r") as f:
-            content_weights = f.read()
-        content_weights = content_weights.rstrip()
-        if content_weights.endswith("]"):
-            new_weight_entry = f'\n\t"{template_name}": 2,'
-            content_weights = content_weights[:-1] + new_weight_entry + "\n]"
-            with open(program_template_weights_file, "w") as f:
-                f.write(content_weights)
-            return ret + "\nOK: Successfully wrote template weight"
-    except Exception as e:
-        return ret + f"\nWarning: Error updating weights: {e}"
-    return ret
+        if op == "create":
+            if target_path.exists():
+                return f"Error: {rel_path} already exists."
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(diff)
+            message = f"OK: Created {rel_path}."
+        elif op == "delete":
+            if not target_path.exists():
+                return f"Error: {rel_path} does not exist."
+            target_path.unlink()
+            message = f"OK: Deleted {rel_path}."
+        else:
+            if not target_path.exists():
+                return f"Error: {rel_path} does not exist."
+
+            current_lines, line_ending, has_trailing_newline = _read_lines_with_format(target_path)
+            hunks = _parse_patch_hunks(diff)
+            updated_lines = _apply_patch_hunks(current_lines, hunks)
+
+            output_path = rename_path or target_path
+            _write_lines_with_format(output_path, updated_lines, line_ending, has_trailing_newline)
+            if rename_path and rename_path != target_path:
+                target_path.unlink()
+                message = f"OK: Updated and renamed {rel_path} to {rename_rel_path}."
+            else:
+                message = f"OK: Updated {rel_path}."
+
+        snapshot_msg = f" Snapshot: {snapshot}." if snapshot else ""
+        return message + snapshot_msg
+    except Exception as exc:
+        return f"Error: {exc}"
 
 
 def _list_program_templates_executor(params: dict) -> str:
-    program_templates_file = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplates.swift")
-    if not os.path.exists(program_templates_file):
-        return f"Error: ProgramTemplates.swift not found at {program_templates_file}"
+    if not PROGRAM_TEMPLATES_FILE.exists():
+        return f"Error: ProgramTemplates.swift not found at {PROGRAM_TEMPLATES_FILE}"
     try:
-        with open(program_templates_file, "r") as f:
-            content = f.read()
-    except Exception as e:
-        return f"Error reading ProgramTemplates.swift: {e}"
+        content = PROGRAM_TEMPLATES_FILE.read_text()
+    except Exception as exc:
+        return f"Error reading ProgramTemplates.swift: {exc}"
     pattern = r'(?:WasmProgramTemplate|ProgramTemplate)\s*\("([^"]+)"\)'
     program_templates = re.findall(pattern, content)
     return f"Found program templates: {program_templates}"
-
-
-def _remove_program_template_executor(params: dict) -> str:
-    program_template = params.get("program_template", "")
-    if not program_template:
-        return "Error: program_template parameter is required"
-    default_templates = ["Codegen100", "Codegen50", "WasmCodegen50", "WasmCodegen100",
-                        "MixedJsAndWasm1", "MixedJsAndWasm2", "JSPI",
-                        "ThrowInWasmCatchInJS", "WasmReturnCalls", "JIT1Function",
-                        "JIT2Functions", "JITTrickyFunction", "JSONFuzzer"]
-    if program_template in default_templates:
-        return f"Cannot remove default template. Defaults: {default_templates}"
-    program_templates_file = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplates.swift")
-    if not os.path.exists(program_templates_file):
-        return "Error: ProgramTemplates.swift not found"
-    try:
-        with open(program_templates_file, "r") as f:
-            content = f.read()
-    except Exception as e:
-        return f"Error reading file: {e}"
-    block_start_pattern = re.compile(
-        r'^\s*(?:WasmProgramTemplate|ProgramTemplate)\s*\(\s*"' + re.escape(program_template) + r'"\s*\)\s*\{',
-        re.MULTILINE,
-    )
-    start_match = block_start_pattern.search(content)
-    if not start_match:
-        return f"Error: Template '{program_template}' not found"
-    start_index = start_match.start()
-    brace_count = 1
-    end_index = -1
-    for i in range(start_match.end(), len(content)):
-        if content[i] == "{":
-            brace_count += 1
-        elif content[i] == "}":
-            brace_count -= 1
-            if brace_count == 0:
-                end_index = i
-                break
-    if end_index == -1:
-        return f"Error: Could not find closing brace for template '{program_template}'"
-    separator_after_match = re.search(r"^\s*,\s*", content[end_index + 1 :], re.MULTILINE | re.DOTALL)
-    if separator_after_match:
-        end_of_block = end_index + 1 + separator_after_match.end()
-    else:
-        return "Failed to remove template - separator not found"
-    content = content[:start_index] + content[end_of_block:]
-    try:
-        with open(program_templates_file, "w") as f:
-            f.write(content)
-        return f"OK: Removed template {program_template}"
-    except Exception as e:
-        return f"Error writing file: {e}"
-
-
-def _remove_program_template_weight_executor(params: dict) -> str:
-    program_template = params.get("program_template", "")
-    if not program_template:
-        return "Error: program_template parameter is required"
-    default_templates = ["Codegen100", "Codegen50", "WasmCodegen50", "WasmCodegen100",
-                        "MixedJsAndWasm1", "MixedJsAndWasm2", "JSPI",
-                        "ThrowInWasmCatchInJS", "WasmReturnCalls", "JIT1Function",
-                        "JIT2Functions", "JITTrickyFunction", "JSONFuzzer"]
-    if program_template in default_templates:
-        return "Cannot remove default template weight"
-    weights_file = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplateWeights.swift")
-    if not os.path.exists(weights_file):
-        return "Error: ProgramTemplateWeights.swift not found"
-    try:
-        with open(weights_file, "r") as f:
-            content = f.read()
-        pattern = re.compile(r'^\s*"' + re.escape(program_template) + r'"\s*:\s*\d+\s*,\s*$', re.MULTILINE)
-        content = pattern.sub("", content)
-        content = re.sub(r"\n\s*\n", "\n", content)
-        with open(weights_file, "w") as f:
-            f.write(content)
-        return f"OK: Removed weight for {program_template}"
-    except Exception as e:
-        return f"Error: {e}"
-
-
-def _edit_template_by_diff_executor(params: dict) -> str:
-    old_text = params.get("old_text", "")
-    new_text = params.get("new_text", "")
-    start_line = params.get("start_line")
-    end_line = params.get("end_line")
-    if not old_text:
-        return "Error: old_text parameter is required"
-    filepath = os.path.join(SWIFT_PATH, "CodeGen", "ProgramTemplates.swift")
-    if not os.path.exists(filepath):
-        return f"Error: File not found at {filepath}"
-    try:
-        with open(filepath, "r") as f:
-            content = f.read()
-    except Exception as e:
-        return f"Error reading file: {e}"
-    lines = content.splitlines()
-    total_lines = len(lines)
-    if not (start_line and end_line):
-        return "Error: Must provide start_line AND end_line"
-    try:
-        start_line = int(start_line)
-        end_line = int(end_line)
-    except (ValueError, TypeError):
-        return "Error: start_line and end_line must be integers"
-    if start_line < 1 or start_line > total_lines:
-        return f"Error: Invalid start_line ({start_line}). File has {total_lines} lines."
-    if end_line < 1 or end_line > total_lines:
-        return f"Error: Invalid end_line ({end_line}). File has {total_lines} lines."
-    if start_line > end_line:
-        return f"Error: start_line ({start_line}) > end_line ({end_line})"
-    section_lines = lines[start_line - 1 : end_line]
-    section_content = "\n".join(section_lines)
-    if old_text not in section_content:
-        return f"Error: old_text not found in lines {start_line}-{end_line}"
-    if section_content.count(old_text) > 1:
-        return "Error: Multiple occurrences of old_text found. Make it more specific."
-    updated_section = section_content.replace(old_text, new_text)
-    updated_lines = lines[: start_line - 1] + updated_section.split("\n") + lines[end_line:]
-    updated_content = "\n".join(updated_lines)
-    if content.endswith("\n"):
-        updated_content += "\n"
-    try:
-        with open(filepath, "w") as f:
-            f.write(updated_content)
-        return f"OK: Successfully updated lines {start_line}-{end_line}"
-    except Exception as e:
-        return f"Error writing file: {e}"
-
-
-def edit_template_by_diff(old_text: str, new_text: str, start_line: int = None, end_line: int = None) -> str:
-    return _edit_template_by_diff_executor({
-        "old_text": old_text,
-        "new_text": new_text,
-        "start_line": start_line,
-        "end_line": end_line,
-    })
 
 
 def _compile_program_template_executor(params: dict) -> str:
@@ -226,32 +401,30 @@ def _compile_program_template_executor(params: dict) -> str:
     if not template:
         return "Error: template parameter is required"
     build = run_command(f'swift run FuzzILTool --compileTemplate="{template}" fake_path')
-    if build.stderr and not build.stdout:
-        return f"Swift build failed: {build.stderr}"
-    javascript = build.stdout
-    path = f"{GENERATED_TEMPLATE_DIR}{template}-{hash(javascript)}.js"
+    stdout = build.stdout or ""
+    stderr = build.stderr or ""
+    return_code = getattr(build, "returncode", 0)
+
+    if return_code != 0:
+        details = stderr.strip() or stdout.strip() or f"exit code {return_code}"
+        return f"Swift build failed: {details}"
+
+    javascript = stdout
+    if not javascript.strip():
+        details = stderr.strip() or "FuzzILTool completed without emitting JavaScript."
+        return f"Swift build failed: {details}"
+
+    attempt = _next_attempt(template)
+    filename = f"{template}_{FOG_SESSION_ID}_{attempt:03d}.js"
+    gen_dir = Path(GENERATED_TEMPLATE_DIR.rstrip(os.sep))
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    path = str(gen_dir / filename)
     try:
-        with open(path, "w") as f:
-            f.write(javascript)
-    except Exception as e:
-        return f"Error writing JS file: {e}"
+        with open(path, "w") as file_handle:
+            file_handle.write(javascript)
+    except Exception as exc:
+        return f"Error writing JS file: {exc}"
     return f"Generated JavaScript from {template}, stored at {path}.\nJavaScript:\n{javascript}"
-
-
-def execute_javascript_program(template_js_path: str, d8_flags: str) -> str:
-    if "--allow-natives-syntax" not in d8_flags:
-        d8_flags += " --allow-natives-syntax"
-    d8_flags = d8_flags.strip()
-    result = run_command(f"{D8_PATH} {d8_flags} {template_js_path}")
-    return f"Program execution result:\n[flags used] {d8_flags}\n{result.stderr}\n{result.stdout}"
-
-
-def execute_javascript_program(template_js_path: str, d8_flags: str) -> str:
-    if "--allow-natives-syntax" not in d8_flags:
-        d8_flags += " --allow-natives-syntax"
-    d8_flags = d8_flags.strip()
-    result = run_command(f"{D8_PATH} {d8_flags} {template_js_path}")
-    return f"Program execution result:\n[flags used] {d8_flags}\n{result.stderr}\n{result.stdout}"
 
 
 def _execute_javascript_program_executor(params: dict) -> str:
@@ -259,63 +432,110 @@ def _execute_javascript_program_executor(params: dict) -> str:
     d8_flags = params.get("d8_flags", "")
     if not template_js_path:
         return "Error: template_js_path parameter is required"
-    required_flags = [
-        "--trace-opt",
-        "--trace-deopt",
-        "--trace-maglev-graph-building",
-        "--print-bytecode",
-    ]
-    for flag in required_flags:
-        if flag not in d8_flags:
-            d8_flags += f" {flag}"
-    return execute_javascript_program(template_js_path, d8_flags)
+    resolved_js_path = resolve_js_path(template_js_path) or template_js_path
+    requested_flags = shlex.split(d8_flags) if d8_flags else []
+    supported_flags = _get_supported_d8_flags()
+    requested_flags, dropped_flags = _sanitize_d8_flags(requested_flags, supported_flags)
+    requested_flag_names = {flag.split("=", 1)[0] for flag in requested_flags if flag.startswith("--")}
+
+    default_flags = ["--allow-natives-syntax", "--print-bytecode", "--trace-opt", "--trace-deopt"]
+    optional_defaults = ["--trace-osr", "--trace-turbo", "--trace-maglev-graph-building"]
+    for flag in default_flags + optional_defaults:
+        if supported_flags and flag not in supported_flags:
+            continue
+        if flag not in requested_flag_names:
+            requested_flags.append(flag)
+            requested_flag_names.add(flag)
+
+    result = run_d8_command(requested_flags + [resolved_js_path])
+    used_flags = " ".join(requested_flags)
+    notes = ""
+    if dropped_flags:
+        notes = f"\n[dropped unsupported/problematic flags] {' '.join(dropped_flags)}"
+    return f"Program execution result:\n[flags used] {used_flags}{notes}\n{result.stderr}\n{result.stdout}"
 
 
 def _list_d8_flags_executor(params: dict) -> str:
     filter_str = params.get("filter", "")
     if not filter_str:
         return "Error: filter parameter is required"
-    d8 = run_command(f'{D8_PATH} --help | grep -i "{filter_str}"')
-    return f"Available flags for filter '{filter_str}':\n{d8.stdout}"
+    d8 = run_d8_command(["--help"])
+    if d8.returncode != 0:
+        return get_output(d8)
+    matches = [line for line in d8.stdout.splitlines() if filter_str.lower() in line.lower()]
+    return f"Available flags for filter '{filter_str}':\n" + "\n".join(matches)
 
 
-def _remove_old_javascript_programs_executor(params: dict) -> str:
-    template_js_path = params.get("template_js_path", "")
-    if not template_js_path:
-        return "Error: template_js_path parameter is required"
-    dir_path = os.path.dirname(template_js_path)
-    filename = os.path.basename(template_js_path)
-    if not dir_path:
-        return f"Error: Could not extract directory from {template_js_path}"
-    base_name = os.path.splitext(filename)[0]
-    parts = base_name.rsplit("-", 1)
-    if len(parts) != 2:
-        return f"Error: Filename '{filename}' doesn't match expected format"
-    template_name = parts[0]
-    hash_to_keep = parts[1]
-    removed_count = 0
-    try:
-        for item in os.listdir(dir_path):
-            if item.endswith(".js"):
-                item_base = os.path.splitext(item)[0]
-                if item_base.startswith(f"{template_name}-"):
-                    current_hash = item_base.rsplit("-", 1)[-1]
-                    if current_hash != hash_to_keep:
-                        try:
-                            os.remove(os.path.join(dir_path, item))
-                            removed_count += 1
-                        except OSError:
-                            pass
-        return f"OK: Removed {removed_count} old JS files for '{template_name}'"
-    except Exception as e:
-        return f"Error: {e}"
+def _get_supported_d8_flags() -> set[str]:
+    global _SUPPORTED_D8_FLAGS_CACHE
+    if _SUPPORTED_D8_FLAGS_CACHE is not None:
+        return _SUPPORTED_D8_FLAGS_CACHE
+
+    d8 = run_d8_command(["--help"])
+    if d8.returncode != 0:
+        _SUPPORTED_D8_FLAGS_CACHE = set()
+        return _SUPPORTED_D8_FLAGS_CACHE
+
+    supported_flags = set()
+    for token in re.findall(r"--[A-Za-z0-9][A-Za-z0-9-]*(?:=[A-Za-z0-9_<>,.-]+)?", get_output(d8)):
+        supported_flags.add(token.split("=", 1)[0])
+
+    _SUPPORTED_D8_FLAGS_CACHE = supported_flags
+    return _SUPPORTED_D8_FLAGS_CACHE
 
 
-write_program_template_tool = IkaTools(
-    name="write_program_template",
-    description="Add a new Swift program template to ProgramTemplates.swift and register its weight in ProgramTemplateWeights.swift",
-    parameters={"program_template": {"type": "string", "description": "Full Swift template code (WasmProgramTemplate or ProgramTemplate closure)", "required": True}},
-    execute_function=_write_program_template_executor,
+def _sanitize_d8_flags(flags: list[str], supported_flags: set[str]) -> tuple[list[str], list[str]]:
+    sanitized: list[str] = []
+    dropped: list[str] = []
+    for flag in flags:
+        flag_name = flag.split("=", 1)[0]
+        if flag_name == "--print-code":
+            dropped.append(flag)
+            continue
+        if supported_flags and flag_name.startswith("--") and flag_name not in supported_flags:
+            dropped.append(flag)
+            continue
+        sanitized.append(flag)
+    return sanitized, dropped
+
+
+edit_program_template_file_tool = IkaTools(
+    name="edit_program_template_file",
+    description=(
+        "Patch ProgramTemplates.swift or ProgramTemplateWeights.swift using an "
+        "oh-my-pi-style file editor interface. For updates, pass diff hunks with "
+        "@@ headers and lines prefixed by space, +, or -. Read the file first and "
+        "copy anchors/context verbatim. A session snapshot is saved before edits."
+    ),
+    parameters={
+        "path": {
+            "type": "string",
+            "description": (
+                "Target file. Use Sources/Fuzzilli/CodeGen/ProgramTemplates.swift or "
+                "Sources/Fuzzilli/CodeGen/ProgramTemplateWeights.swift."
+            ),
+            "required": True,
+        },
+        "op": {
+            "type": "string",
+            "description": "Operation: update (default), create, or delete.",
+            "required": False,
+        },
+        "rename": {
+            "type": "string",
+            "description": "Optional rename destination for update operations.",
+            "required": False,
+        },
+        "diff": {
+            "type": "string",
+            "description": (
+                "For update: diff hunks with @@ headers. For create: full file content. "
+                "Delete operations do not use diff."
+            ),
+            "required": False,
+        },
+    },
+    execute_function=_edit_program_template_file_executor,
 )
 
 list_program_templates_tool = IkaTools(
@@ -325,45 +545,19 @@ list_program_templates_tool = IkaTools(
     execute_function=_list_program_templates_executor,
 )
 
-remove_program_template_tool = IkaTools(
-    name="remove_program_template",
-    description="Remove a non-default program template from ProgramTemplates.swift (defaults like Codegen100 cannot be removed)",
-    parameters={"program_template": {"type": "string", "description": "Template name to remove (e.g. 'MyCustomTemplate')", "required": True}},
-    execute_function=_remove_program_template_executor,
-)
-
-remove_program_template_weight_tool = IkaTools(
-    name="remove_program_template_weight",
-    description="Remove the weight entry for a template from ProgramTemplateWeights.swift",
-    parameters={"program_template": {"type": "string", "description": "Template name whose weight to remove", "required": True}},
-    execute_function=_remove_program_template_weight_executor,
-)
-
-edit_template_by_diff_tool = IkaTools(
-    name="edit_template_by_diff",
-    description="Replace exact text in ProgramTemplates.swift between start_line and end_line. Use when modifying existing template code.",
-    parameters={
-        "old_text": {"type": "string", "description": "Exact substring to find (must match uniquely in the line range)", "required": True},
-        "new_text": {"type": "string", "description": "Replacement text (can be empty to delete)", "required": True},
-        "start_line": {"type": "integer", "description": "First line of range (1-indexed)", "required": True},
-        "end_line": {"type": "integer", "description": "Last line of range (1-indexed)", "required": True},
-    },
-    execute_function=_edit_template_by_diff_executor,
-)
-
 compile_program_template_tool = IkaTools(
     name="compile_program_template",
-    description="Compile a Swift program template to JavaScript via FuzzILTool (writes JS to GENERATED_TEMPLATE_DIR)",
+    description="Compile a Swift program template to JavaScript via FuzzILTool. Output is saved to the session's generated_templates directory with a unique name.",
     parameters={"template": {"type": "string", "description": "Template name to compile (e.g. 'Codegen100')", "required": True}},
     execute_function=_compile_program_template_executor,
 )
 
 execute_javascript_program_tool = IkaTools(
     name="execute_javascript_program",
-    description="Run a JavaScript file with d8 (adds --allow-natives-syntax and trace flags if needed). Use to test compiled templates.",
+    description="Run a JavaScript file with d8 (adds --allow-natives-syntax and trace flags automatically). Accepts absolute paths or file names written into the current generate folder.",
     parameters={
-        "template_js_path": {"type": "string", "description": "Absolute path to the .js file", "required": True},
-        "d8_flags": {"type": "string", "description": "Optional d8 flags (e.g. '--trace-opt --trace-deopt')", "required": False},
+        "template_js_path": {"type": "string", "description": "Absolute path or generated file name for the .js file", "required": True},
+        "d8_flags": {"type": "string", "description": "Optional extra d8 flags (e.g. '--turbofan')", "required": False},
     },
     execute_function=_execute_javascript_program_executor,
 )
@@ -373,11 +567,4 @@ list_d8_flags_tool = IkaTools(
     description="List d8 command-line flags that match a grep pattern. Use to discover trace/debug options.",
     parameters={"filter": {"type": "string", "description": "Substring to match in d8 --help (e.g. 'trace', 'maglev')", "required": True}},
     execute_function=_list_d8_flags_executor,
-)
-
-remove_old_javascript_programs_tool = IkaTools(
-    name="remove_old_javascript_programs",
-    description="Delete older JS files for a template, keeping only the one at template_js_path. Use after compile to avoid clutter.",
-    parameters={"template_js_path": {"type": "string", "description": "Full path to the .js file to keep (others for same template deleted)", "required": True}},
-    execute_function=_remove_old_javascript_programs_executor,
 )

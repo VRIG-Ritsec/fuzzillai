@@ -20,9 +20,10 @@ Plateau/root-cause work belongs in `prompts/EBG-plateau-prompts/debugger.txt`.
 
 ## STAGE 2: Controlled Reproduction
 - Prefer this order:
-  1) `start_mi_debug_session`
-  2) `mi_run`
-  3) Inspect stop state/result
+  1) `start_mi_debug_session` (needs **D8_PATH**; with **V8_PATH** set to the V8 **src** root, GDB gets `set substitute-path` + `directory` for line breakpoints)
+  2) Optional: `gdb_set_breakpoint` with absolute path under `V8_PATH`, or `d8/d8.cc`-style relative, or `../../src/...`; line = **GDB** line, or use `gdb_run_command` `break <symbol>`
+  3) `mi_run`
+  4) Inspect stop state with `gdb_run_command` (`frame`, `info registers`, …)
 - If the inferior is already exited, DO NOT run stack/register/vmmap commands repeatedly.
 - Only use commands valid for the current debugger state.
 

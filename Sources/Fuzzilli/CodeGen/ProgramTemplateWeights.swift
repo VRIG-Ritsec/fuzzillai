@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 /// Default weights for the builtin program templates.
 public let programTemplateWeights = [
     "Codegen100":            2,
@@ -25,6 +24,8 @@ public let programTemplateWeights = [
     "JIT1Function":          3,
     "JIT2Functions":         3,
     "JITTrickyFunction":     2,
-    "JSONFuzzer":            1,
-    "WasmReturnCalls":       2,
+    "MaglevResumableSuspendResume": 2,
+    "WasmReturnCalls": 2,
+    "JSONFuzzer": 1,
+    "MaglevResumableAwaitThenableLoops": 2,
 ]

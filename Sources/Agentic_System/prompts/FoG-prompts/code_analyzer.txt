@@ -67,11 +67,10 @@ ONCE !
 
 Analyze the relation between the validated interesting code blocks and the side-effects provided by the interesting JavaScript programs in the corpus. 
 
-Here is the JSON object that you MUST send to Father of George/parent agent:
+Here is the JSON object that you MUST send to the root manager / parent agent:
 
 {
     ANALYSIS: "[YOUR ANALYSIS OF THE RELATION BETWEEN THE INTERESTING CODE BLOCKS AND JAVASCRIPT PROGRAMS IN THE CORPUS]"
 }
-
 
 

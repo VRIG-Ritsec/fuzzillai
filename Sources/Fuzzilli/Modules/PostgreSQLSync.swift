@@ -1,9 +1,16 @@
 import Foundation
 
 public class PostgreSQLSync: Module {
+    public enum SyncMode: String {
+        case shared = "shared"
+        case generated = "generated"
+        case push = "push"
+    }
+
     private let storage: PostgresSQLStorage
     private let fuzzerInstanceId: String
     private let enableLogging: Bool
+    private let syncMode: SyncMode
     private var lastSyncCursor: (insertedAt: Date, hash: String)
     
     private let logger = Logger(withLabel: "PostgreSQLSync")
@@ -19,10 +26,11 @@ public class PostgreSQLSync: Module {
     private var mutatorCache: [String: [String]] = [:]
     private var contributorCache: [String: [String]] = [:]
 
-    public init(storage: PostgresSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false) {
+    public init(storage: PostgresSQLStorage, fuzzerInstanceId: String, enableLogging: Bool = false, syncMode: SyncMode = .generated) {
         self.storage = storage
         self.fuzzerInstanceId = fuzzerInstanceId
         self.enableLogging = enableLogging
+        self.syncMode = syncMode
         self.lastSyncCursor = (insertedAt: Date(timeIntervalSince1970: 0), hash: "")
     }
     
@@ -57,31 +65,40 @@ public class PostgreSQLSync: Module {
                     logger.info("Fuzzer registered with PostgreSQL database: fuzzerId \(self.cachedFuzzerId ?? -1)")
                 }
                 
-                // Registration complete 
+                // Registration complete
                 registrationSemaphore.signal()
 
-                // Step 2: Sync corpus from database to in-memory basicCorpus (can be async)
-                let programs = try await storage.syncCorpusFromDatabase()
-                logger.info("Found: \(programs.count) programs from db")
-                if enableLogging {
-                    logger.info("Syncing \(programs.count) programs from database to corpus")
-                }
-
-                if let latestCursor = try await storage.fetchLatestProgramSyncCursor() {
-                    self.lastSyncCursor = latestCursor
-                }
-
-                // Import each program into the fuzzer's corpus
-                for program in programs {
-                    fuzzer.async {
-                        // changing from full to interestingOnly(shouldMinimize: true)
-                        // watch results for this and change back to .full if needed 
-                        fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: true)), enableDropout: false)
+                // Step 2: Perform the selected pull behavior.
+                switch self.syncMode {
+                case .push:
+                    if enableLogging {
+                        logger.info("Push-only mode: skipping initial corpus pull from database")
                     }
-                }
+                case .shared:
+                    let programs = try await storage.syncCorpusFromDatabase()
+                    logger.info("Found: \(programs.count) programs from db")
+                    if enableLogging {
+                        logger.info("Syncing \(programs.count) programs from database to corpus")
+                    }
 
-                if enableLogging {
-                    logger.info("Corpus synchronization complete: imported \(programs.count) programs")
+                    if let latestCursor = try await storage.fetchLatestProgramSyncCursor() {
+                        self.lastSyncCursor = latestCursor
+                    }
+
+                    // Import each program into the fuzzer's corpus
+                    for program in programs {
+                        fuzzer.async {
+                            // changing from full to interestingOnly(shouldMinimize: true)
+                            // watch results for this and change back to .full if needed
+                            fuzzer.importProgram(program, origin: .corpusImport(mode: .interestingOnly(shouldMinimize: true)), enableDropout: false)
+                        }
+                    }
+
+                    if enableLogging {
+                        logger.info("Corpus synchronization complete: imported \(programs.count) programs")
+                    }
+                case .generated:
+                    await self.syncGeneratedQueue(fuzzer)
                 }
             } catch {
                 logger.error("Failed to register fuzzer with PostgreSQL database: \(String(reflecting: error))")
@@ -369,10 +386,23 @@ public class PostgreSQLSync: Module {
             }
         }
         
-        // Periodic Sync (Pull) from Database
-        fuzzer.timers.scheduleTask(every: 15 * Minutes) {
-            Task {
-                await self.syncWithDatabase(fuzzer)
+        // Periodic pull from PostgreSQL, according to the selected sync mode.
+        switch syncMode {
+        case .shared:
+            fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+                Task {
+                    await self.syncSharedCorpus(fuzzer)
+                }
+            }
+        case .generated:
+            fuzzer.timers.scheduleTask(every: 15 * Minutes) {
+                Task {
+                    await self.syncGeneratedQueue(fuzzer)
+                }
+            }
+        case .push:
+            if enableLogging {
+                logger.info("Push-only mode: periodic corpus pull from database disabled")
             }
         }
 
@@ -412,9 +442,9 @@ public class PostgreSQLSync: Module {
         }
     }
     
-    private func syncWithDatabase(_ fuzzer: Fuzzer) async {
+    private func syncSharedCorpus(_ fuzzer: Fuzzer) async {
         if enableLogging {
-            logger.info("Starting periodic sync with database. Last sync cursor: \(lastSyncCursor.insertedAt) / \(lastSyncCursor.hash)")
+            logger.info("Starting shared corpus sync with database. Last sync cursor: \(lastSyncCursor.insertedAt) / \(lastSyncCursor.hash)")
         }
         do {
             while true {
@@ -440,7 +470,41 @@ public class PostgreSQLSync: Module {
                 }
             }
         } catch {
-            logger.error("Failed to sync with database: \(String(reflecting: error))")
+            logger.error("Failed to sync shared corpus with database: \(String(reflecting: error))")
+        }
+    }
+
+    private func syncGeneratedQueue(_ fuzzer: Fuzzer) async {
+        guard let fuzzerId = self.cachedFuzzerId else {
+            logger.error("Cannot sync generated queue before fuzzer registration completes")
+            return
+        }
+
+        if enableLogging {
+            logger.info("Starting generated queue sync for fuzzer_id \(fuzzerId)")
+        }
+
+        do {
+            while true {
+                let generatedPrograms = try await storage.dequeueGeneratedPrograms(targetFuzzerId: fuzzerId, limit: 2000)
+                guard !generatedPrograms.isEmpty else { return }
+
+                if enableLogging {
+                    logger.info("Pulled \(generatedPrograms.count) generated programs for fuzzer_id \(fuzzerId)")
+                }
+
+                for record in generatedPrograms {
+                    fuzzer.async {
+                        fuzzer.importProgram(record.program, origin: .corpusImport(mode: .full), enableDropout: false)
+                    }
+                }
+
+                if generatedPrograms.count < 2000 {
+                    return
+                }
+            }
+        } catch {
+            logger.error("Failed to sync generated queue: \(String(reflecting: error))")
         }
     }
 

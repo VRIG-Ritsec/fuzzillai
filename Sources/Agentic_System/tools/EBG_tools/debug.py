@@ -34,10 +34,23 @@ read_file_tool = IkaTools(
 
 start_mi_debug_session_tool = IkaTools(
     name="start_mi_debug_session",
-    description="Start a GDB MI debug session with d8 loading a JavaScript file. Must be called before mi_run, mi_step, mi_next, or mi_continue.",
+    description=(
+        "Start a GDB MI4 session: loads D8_PATH under gdb, sets program args (default fuzz flags + js_path). "
+        "If V8_PATH is set to the V8 **src** root (directory containing d8/, third_party/, etc.), runs "
+        "`set substitute-path <prefix> <V8_PATH>` (prefix from GDB_DWARF_SRC_PREFIX, default ../../src) and "
+        "`directory <V8_PATH>` so line breakpoints and source listings resolve. Requires pygdbmi and D8_PATH."
+    ),
     parameters={
-        "js_path": {"type": "string", "description": "Path to the JavaScript file to debug", "required": True},
-        "d8_args": {"type": "string", "description": "Optional d8 flags (e.g., --allow-natives-syntax)", "required": False},
+        "js_path": {
+            "type": "string",
+            "description": "Absolute path to the .js file, or a name resolvable via generate_folder / cwd",
+            "required": True,
+        },
+        "d8_args": {
+            "type": "string",
+            "description": "Extra d8 flags after built-in defaults (allow-natives-syntax, experimental-fuzzing, expose-gc)",
+            "required": False,
+        },
     },
     parallel=False,
     limit_calls=2,
@@ -54,7 +67,11 @@ stop_mi_debug_session_tool = IkaTools(
 
 mi_exec_tool = IkaTools(
     name="mi_exec",
-    description="Execute a GDB Machine Interface (MI) command. Use for MI-specific commands (e.g., -exec-next, -stack-list-frames).",
+    description=(
+        "Execute a GDB MI command on the active session. Preferred for inspection when stopped "
+        "(-data-evaluate-expression, -stack-list-frames, -data-list-register-values, -data-disassemble, etc.); "
+        "does not implicitly restart the debuggee unless the command does (e.g. -exec-run)."
+    ),
     parameters={
         "command": {"type": "string", "description": "MI command string (e.g., -exec-next)", "required": True},
     },
@@ -101,7 +118,11 @@ mi_step_tool = IkaTools(
 
 gdb_run_command_tool = IkaTools(
     name="gdb_run_command",
-    description="Run a GDB or pwndbg command. Use for: info registers, context, vmmap, backtrace, x/10gx, disassemble. Do NOT use for shell commands (pip, apt, cd).",
+    description=(
+        "Run a GDB console command (not shell). Prefer **mi_exec**, **gdb_print_value**, and **pwndbg_*** tools "
+        "for inspection when stopped; they are MI-based and do not restart the debuggee. Use this for commands "
+        "without a good MI mapping (e.g. info breakpoints, symbol-only break)."
+    ),
     parameters={
         "command": {"type": "string", "description": "GDB/pwndbg command", "required": True},
     },
@@ -112,10 +133,21 @@ gdb_run_command_tool = IkaTools(
 
 gdb_set_breakpoint_tool = IkaTools(
     name="gdb_set_breakpoint",
-    description="Set a breakpoint at a source file and line. Execution stops when this line is hit.",
+    description=(
+        "Set a breakpoint on a C++ source line. Rewrites paths for GN/d8 DWARF: if V8_PATH is set, an absolute "
+        "file under V8_PATH (e.g. .../src/d8/d8.cc) or a path relative to V8_PATH (e.g. d8/d8.cc) becomes "
+        "break ../../src/<relpath>:line (prefix overridable via GDB_DWARF_SRC_PREFIX). "
+        "Paths already starting with ../ are sent to GDB unchanged. "
+        "Line numbers must match **GDB debug info** (often differ from editor); use break main + MI breakpoint line or gdb list. "
+        "For symbol stops use gdb_run_command e.g. break v8::Shell::Main."
+    ),
     parameters={
-        "source_file": {"type": "string", "description": "Path to source file (e.g., runtime/runtime.cc)", "required": True},
-        "line": {"type": "number", "description": "Line number where to break", "required": True},
+        "source_file": {
+            "type": "string",
+            "description": "Absolute path under V8_PATH, or V8-relative (d8/d8.cc), or DWARF path (../../src/d8/d8.cc)",
+            "required": True,
+        },
+        "line": {"type": "number", "description": "1-based line number in GDB's view of that compilation unit", "required": True},
     },
     parallel=False,
     limit_calls=6,
@@ -124,7 +156,10 @@ gdb_set_breakpoint_tool = IkaTools(
 
 gdb_print_value_tool = IkaTools(
     name="gdb_print_value",
-    description="Evaluate and print a variable or expression in GDB (e.g., variable name, *ptr, obj->field).",
+    description=(
+        "MI **-data-evaluate-expression**: evaluate a C/C++ expression when the inferior is stopped. "
+        "Does not call -exec-run or restart the program."
+    ),
     parameters={
         "expression": {"type": "string", "description": "Variable name or C/C++ expression", "required": True},
     },
@@ -135,7 +170,10 @@ gdb_print_value_tool = IkaTools(
 
 pwndbg_context_tool = IkaTools(
     name="pwndbg_context",
-    description="Display pwndbg context: registers, stack, backtrace, and disassembly around current instruction.",
+    description=(
+        "MI-backed snapshot: stack frames, register values (-data-list-register-values x), and disassembly near $pc. "
+        "Safe when stopped; does not restart the debuggee."
+    ),
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -144,7 +182,10 @@ pwndbg_context_tool = IkaTools(
 
 pwndbg_vmmap_tool = IkaTools(
     name="pwndbg_vmmap",
-    description="Display memory map (virtual address space layout) from pwndbg.",
+    description=(
+        "Process memory map via MI **-interpreter-exec console** `info proc mappings` (no standard MI vmmap). "
+        "Safe when stopped; does not restart the debuggee."
+    ),
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -153,7 +194,9 @@ pwndbg_vmmap_tool = IkaTools(
 
 pwndbg_regs_tool = IkaTools(
     name="pwndbg_regs",
-    description="Display CPU register values (rax, rsp, rip, etc.) from pwndbg.",
+    description=(
+        "MI **-data-list-register-values x**: general-purpose registers when stopped. Does not restart the debuggee."
+    ),
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -162,7 +205,10 @@ pwndbg_regs_tool = IkaTools(
 
 pwndbg_nearpc_tool = IkaTools(
     name="pwndbg_nearpc",
-    description="Disassemble instructions near the program counter. Shows execution context around current EIP/RIP.",
+    description=(
+        "MI disassembly from current $pc (-data-evaluate-expression + -data-disassemble). Safe when stopped; "
+        "does not restart the debuggee."
+    ),
     parameters={
         "count": {"type": "number", "description": "Number of instructions to show (default 10)", "required": False},
     },

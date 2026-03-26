@@ -26,6 +26,22 @@ import Foundation
 ///  - The new JavaScript code is again executed inside the same engine and the output again recorded
 ///  - The test passes if there are no errors along the way and if the output of both executions is identical
 class CompilerTests: XCTestCase {
+    func testJavaScriptParserBundleResourcesExist() throws {
+        guard let parserScriptPath = JavaScriptParser.parserScriptPathForTesting() else {
+            XCTFail("Could not locate parser.js in the Fuzzilli module bundle")
+            return
+        }
+        guard let astProtobufDefinitionPath = JavaScriptParser.astProtobufDefinitionPathForTesting() else {
+            XCTFail("Could not locate ast.proto in the Fuzzilli module bundle")
+            return
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: parserScriptPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: astProtobufDefinitionPath))
+        XCTAssertTrue(parserScriptPath.hasSuffix("/parser.js"))
+        XCTAssertTrue(astProtobufDefinitionPath.hasSuffix("/ast.proto"))
+    }
+
     func testFuzzILCompiler() throws {
         guard let nodejs = JavaScriptExecutor(type: .nodejs, withArguments: ["--allow-natives-syntax"]) else {
             throw XCTSkip("Could not find NodeJS executable. See Sources/Fuzzilli/Compiler/Parser/README.md for details on how to set up the parser.")

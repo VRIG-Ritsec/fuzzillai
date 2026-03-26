@@ -1,5 +1,5 @@
 """
-FoG tools package. Re-exports all IkaTools and plain functions get_v8_path, edit_template_by_diff.
+FoG tools package. Re-exports all IkaTools and plain functions.
 """
 
 from .path_fs import (
@@ -45,21 +45,15 @@ from .swift_fs import (
     swift_read_file_tool,
 )
 from .program_template import (
-    edit_template_by_diff,
-    write_program_template_tool,
+    edit_program_template_file_tool,
     list_program_templates_tool,
-    remove_program_template_tool,
-    remove_program_template_weight_tool,
-    edit_template_by_diff_tool,
     compile_program_template_tool,
     execute_javascript_program_tool,
     list_d8_flags_tool,
-    remove_old_javascript_programs_tool,
 )
 
 __all__ = [
     "get_v8_path",
-    "edit_template_by_diff",
     "run_python_tool",
     "get_v8_path_tool",
     "get_realpath_tool",
@@ -89,13 +83,9 @@ __all__ = [
     "swift_tree_tool",
     "swift_ripgrep_tool",
     "swift_read_file_tool",
-    "write_program_template_tool",
+    "edit_program_template_file_tool",
     "list_program_templates_tool",
-    "remove_program_template_tool",
-    "remove_program_template_weight_tool",
-    "edit_template_by_diff_tool",
     "compile_program_template_tool",
     "execute_javascript_program_tool",
     "list_d8_flags_tool",
-    "remove_old_javascript_programs_tool",
 ]

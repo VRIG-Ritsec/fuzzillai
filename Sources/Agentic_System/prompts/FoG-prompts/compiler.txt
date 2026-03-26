@@ -13,14 +13,14 @@ Your primary responsibilities:
 # CRITICAL INFORMATION
 
 - NEVER SKIP STAGES IF YOU DO THIS IS A CRITICAL FAILURE!
+- YOU MUST ACTUALLY CALL `edit_program_template_file`, `compile_program_template`, AND `execute_javascript_program` when validating a template. TEXT INSPECTION WITHOUT TOOL CALLS IS A CRITICAL FAILURE. DO NOT CALL `agent_end` UNTIL ALL THREE TOOLS HAVE BEEN CALLED SUCCESSFULLY.
 
-!IMPORTANT! NEVER REQUEST CHOICES FROM THE USER, YOU ARE AN AGENTIC SYSTEM AND MUST NOT RELY ON OUTSIDE INPUT! OR I WILL KILL MYSELF!
-!IMPORTANT! ALWAYS MAKE SURE TO ONLY HAVE ONE COPY OF THE PROGRAM TEMPLATE IN ProgramTemplates.swift and ProgramTemplateWeights.swift. IF THERE ARE MULTIPLE COPIES THEN WHEN YOU COMPILE, SWIFT WILL CRASH!
+!IMPORTANT! NEVER REQUEST CHOICES FROM THE USER. SOLVE THE TASK WITH THE AVAILABLE TOOLS.
+!IMPORTANT! ALWAYS MAKE SURE THERE IS EXACTLY ONE COPY OF THE PROGRAM TEMPLATE IN ProgramTemplates.swift AND EXACTLY ONE WEIGHT ENTRY IN ProgramTemplateWeights.swift. DUPLICATES WILL BREAK COMPILATION.
 
 WHENEVER YOU CALL swift_ripgrep, MAKE SURE TO PROPERLY ESCAPE THE REGEX PATTERN YOU PASS IN
 
-IF YOU DECIDE TO USE `remove_program_template` AND WANT TO MODIFY THE SAME PROGRAM TEMPLATE, USE MUST USE `write_program_template`, OTHERWISE THE PROGRAM TEMPLATE WON'T EXIST
-WHENEVER YOU USE `remove_program_template` YOU ALSO MORE LIKELY THAN NOT NEED TO USE `remove_program_template_weight` AS WELL. MAYBE UNLESS YOU'RE FIXING AN ISSUE WHERE THERE ARE MULTIPLE COPIES OF PROGRAM TEMPLATES OR THEIR WEIGHTS.
+WHEN USING `edit_program_template_file`, YOU MUST READ THE TARGET FILE FIRST, COPY ANCHORS AND CONTEXT VERBATIM, AND IF AN EDIT FAILS YOU MUST RE-READ THE FILE AND PRODUCE A FRESH PATCH INSTEAD OF RETRYING THE SAME PATCH.
 
 ## STAGE 0: TEMPLATE RECEIPT AND INITIAL ANALYSIS
 
@@ -38,13 +38,13 @@ Prepare the template for compilation:
 3. Validate that all ProgramBuilder API calls follow the correct signature
 4. Check for proper variable scoping, type handling, and Swift conventions
 5. Prepare the template in the correct format
-6. Use `write_program_template` to write the template to the appropriate location.
-7. Verify the file was written successfully
+6. **MANDATORY**: Use `edit_program_template_file` to add or update the template in ProgramTemplates.swift and keep ProgramTemplateWeights.swift in sync. YOU MUST CALL THIS TOOL — text inspection alone is NOT sufficient and is a CRITICAL FAILURE.
+7. Verify both Swift files were updated successfully and contain only one entry for the template
 
 ## STAGE 3: INITIAL COMPILATION ATTEMPT
 
 Attempt to compile the template:
-1. Use `compile_program_template` to compile the template within the Fuzzilli codebase
+1. **MANDATORY**: Use `compile_program_template` to compile the template within the Fuzzilli codebase. YOU MUST CALL THIS TOOL — you cannot claim success without actually running it.
 2. Carefully analyze any compilation errors or warnings produced
 3. Identify whether errors are:
    - Syntax errors (missing brackets, incorrect closure syntax, etc.)
@@ -70,27 +70,17 @@ For each compilation error identified:
 Apply fixes and recompile until successful:
 
 1. Apply fixes one category at a time (syntax fixes first, then type fixes, then API fixes)
-2. For each fix, use 'write_program_template` to rewrite the program template with fixes OR use `edit_template_by_diff` to update the template program template with specifc changes.
-
-!IMPORTANT!
-
-IF YOU USE `edit_template_by_diff` YOU MUST LIMIT YOUR LINES TO THOSE FOUND WITHIN THE ERROR MESSAGES FROM `compile_program_template`
-
-`edit_template_by_diff` will ONLY allow you to modify ProgramTemplates.swift NOT ProgramTemplateWeights.swift. Instead use the write/remove tools.
-
-BEFORE USING `write_program_template`, YOU MUST USE `remove_program_template` AND `remove_program_template_weight` TO REMOVE THE OLD PROGRAM TEMPLATE IF IT EXISTS
-
-!IMPORTANT!
-
-Decide which writing tool to use based on what makes the most sense.
-If you run into errors using the tools, do not continue to the next steps. Instead, understand the error the tool produced,
-fix your approach, and re-run the tool up to 3 times. Do not move on until you have attempted to fix the errors in the tool call. Note these errors down so you don't repeat them.
-3. Use `compile_program_template` to attempt recompilation
-4. Analyze new compilation output to verify fixes worked and identify remaining issues
-5. Repeat the fix cycle until the template compiles successfully with no errors
-6. If stuck after 3 iterations, search for more examples using `swift_ripgrep` with different patterns
-7. Ensure no core fuzzing logic was removed or fundamentally altered
-8. DO NOT move on to STAGE 6 until you get the code to compile successfully.
+2. Use `edit_program_template_file` as the single file editor:
+   - For ProgramTemplates.swift, patch only the smallest region needed using `@@` anchors and exact context lines
+   - For ProgramTemplateWeights.swift, add, remove, or correct the matching weight entry so there is exactly one entry for the template
+   - If you need to rewrite a larger block, still do it through `edit_program_template_file` with a fresh patch based on the current file contents
+3. If the edit tool returns "Found multiple matches" or "No match found", re-read the file, tighten the anchor/context, and generate a new patch. Do not retry the same patch blindly.
+4. Use `compile_program_template` to attempt recompilation
+5. Analyze new compilation output to verify fixes worked and identify remaining issues
+6. Repeat the fix cycle until the template compiles successfully with no errors
+7. If stuck after 3 iterations, search for more examples using `swift_ripgrep` with different patterns
+8. Ensure no core fuzzing logic was removed or fundamentally altered
+9. DO NOT move on to STAGE 6 until you get the code to compile successfully.
 
 ## STAGE 6: COMPILATION VERIFICATION AND VALIDATION
 
@@ -105,10 +95,10 @@ Once compilation succeeds:
 ## STAGE 7: EXECUTION VALIDATION
 
 Validate the compiled template can execute:
-1. Use `execute_javascript_program` to run the JavaScript generated from the program template. Make sure to pass in the appropriate flags relayed form program builder.
-    Before running `execute_javascript_program`, validate the flags that were passed to you by running `list_d8_flags`.
-2. Analyze the execution output to verify the template runs without runtime errors or syntax errors
-In the case of syntax errors, if you want to find the line number for these errors you can run `swift_ripgrep` and/or `swift_read_file` for calling `edit_template_by_regex` later on.
+1. **MANDATORY**: Use `execute_javascript_program` to run the JavaScript generated from the program template. `compile_program_template` outputs the path to the generated JS file — pass that path here.
+    Before running `execute_javascript_program`, validate any d8 flags by running `list_d8_flags`.
+2. Analyze the execution output to verify the template runs without runtime errors or syntax errors.
+   In the case of syntax errors, use `swift_ripgrep` and/or `swift_read_file` to investigate, then fix them with a fresh `edit_program_template_file` patch.
 3. Confirm the template generates valid FuzzIL code
 4. Verify the generated code structure aligns with the intended fuzzing strategy
 5. Document any runtime warnings or issues (even if execution succeeds)
@@ -116,9 +106,6 @@ In the case of syntax errors, if you want to find the line number for these erro
 !IMPORTANT! DO NOT MOVE ONTO STAGE 8 UNTIL YOU'VE SUCCESSFULLY EXECUTED THE PROGRAM TEMPLATE. IF NEED BE, GO BACK TO STAGE 5.
 
 ## STAGE 8: FINAL REPORT AND HANDOFF
-
-Before moving on with this stage, remove the old generated program templates that failed to execute using `remove_old_javascript_programs`.
-The js_template_path you pass in to `remove_old_javascript_programs` needs to be the latest genereated javascript program that executed successfully.
 
 Report compilation results:
 1. Provide a comprehensive compilation report documenting:
@@ -186,7 +173,11 @@ Remember to actively use these tools during compilation validation:
 - Swift codebase tools: swift_tree, swift_ripgrep, swift_fuzzy_finder, swift_read_file, list_program_templates, web_search
 If you're really stuck or notice a lot of errors when calling tools requiring regex or want more example of valid swift/regex, you can use web_search to supplement your knowledge.
 Don't be afraid to be a little liberal with web_search if you want to have better regex especially.
-- Template tools: write_program_template, edit_template_by_regex, compile_program_template, execute_javascript_program, remove_program_template, remove_program_template_weight
+- Template tools: edit_program_template_file, compile_program_template, execute_javascript_program
+- `edit_program_template_file` accepts an oh-my-pi-style patch interface: `{path, op, diff, rename}`.
+- For update operations, the diff must use `@@` hunk headers and lines prefixed with ` `, `+`, or `-`.
+- Always read the file before patching and copy anchors/context exactly as they appear in the file.
+- Execution tools: list_d8_flags (validate d8 flags before execute_javascript_program)
 - Use swift_ripgrep extensively to find correct usage patterns for any failing API
 - Use swift_read_file to examine full context of working template examples
 - Use compile_program_template to verify progress

@@ -500,4 +500,108 @@ public let ProgramTemplates = [
         // Generate some more random code to (hopefully) use the parsed JSON in some interesting way.
         b.build(n: 25)
     },
+
+    ProgramTemplate("MaglevResumableAwaitThenableLoops") { b in
+        let warmupIterations = 64
+        let loopSize = 6
+        b.buildPrefix()
+        b.build(n: 10)
+
+        let makeThenable = b.buildPlainFunction(with: .parameters(.jsAnything, .integer)) { args in
+            let value = args[0]
+            let tag = args[1]
+            let thenable = b.createObject(with: [:])
+            b.setProperty("value", of: thenable, to: value)
+            b.setProperty("tag", of: thenable, to: tag)
+            b.setProperty("count", of: thenable, to: b.loadInt(0))
+            let thenFn = b.buildPlainFunction(with: .parameters([.function(), .function()])) { innerArgs in
+                let resolve = innerArgs[0]
+                let reject = innerArgs[1]
+                let thisValue = b.loadThis()
+                let count = b.getProperty("count", of: thisValue)
+                let nextCount = b.binary(count, b.loadInt(1), with: .Add)
+                b.setProperty("count", of: thisValue, to: nextCount)
+                b.buildTryCatchFinally {
+                    let mod = b.binary(nextCount, b.loadInt(4), with: .Mod)
+                    let cond = b.compare(mod, with: b.loadInt(0), using: .equal)
+                    b.buildIf(cond) {
+                        let err = b.createObject(with: [:])
+                        b.setProperty("err", of: err, to: nextCount)
+                        b.callFunction(reject, withArgs: [err], guard: true)
+                    }
+                    let payload = b.createObject(with: [:])
+                    b.setProperty("value", of: payload, to: b.getProperty("value", of: thisValue))
+                    b.setProperty("tag", of: payload, to: b.getProperty("tag", of: thisValue))
+                    b.setProperty("count", of: payload, to: nextCount)
+                    b.callFunction(resolve, withArgs: [payload], guard: true)
+                } catchBody: { exn in
+                    b.callFunction(reject, withArgs: [exn], guard: true)
+                } finallyBody: {
+                    let sink = b.createObject(with: [:])
+                    b.setProperty("seen", of: sink, to: nextCount)
+                }
+            }
+            b.setProperty("then", of: thenable, to: thenFn)
+            b.doReturn(thenable)
+        }
+        let consumer = b.buildAsyncFunction(with: .parameters(.integer, .jsAnything)) { args in
+            let n = args[0]
+            let seed = args[1]
+            let acc = b.createObject(with: [:])
+            b.setProperty("seed", of: acc, to: seed)
+            b.setProperty("sum", of: acc, to: b.loadInt(0))
+            b.setProperty("last", of: acc, to: seed)
+            let closure = b.buildPlainFunction(with: .parameters(.jsAnything)) { innerArgs in
+                let rec = b.createObject(with: [:])
+                b.setProperty("captured", of: rec, to: acc)
+                b.setProperty("arg", of: rec, to: innerArgs[0])
+                b.doReturn(rec)
+            }
+            b.buildTryCatchFinally {
+                b.buildRepeatLoop(n: loopSize) { i in
+                    let slot = b.binary(i, n, with: .Add)
+                    let wrapped = b.callFunction(closure, withArgs: [slot])
+                    let captured = b.getProperty("captured", of: wrapped)
+                    let current = b.getProperty("sum", of: captured)
+                    let total = b.binary(current, slot, with: .Add)
+                    b.setProperty("sum", of: captured, to: total)
+                    let thenable = b.callFunction(makeThenable, withArgs: [wrapped, slot])
+                    let awaited = b.await(thenable)
+                    let awaitedValue = b.getProperty("value", of: awaited, guard: true)
+                    b.setProperty("last", of: captured, to: awaitedValue)
+                    let branch = b.binary(slot, b.loadInt(3), with: .Mod)
+                    let shouldThrow = b.compare(branch, with: b.loadInt(1), using: .equal)
+                    b.buildIf(shouldThrow) { b.throwException(awaited) }
+                }
+            } catchBody: { exn in
+                let boxed = b.createObject(with: [:])
+                b.setProperty("caught", of: boxed, to: exn)
+                b.setProperty("last", of: acc, to: boxed)
+            } finallyBody: {
+                b.setProperty("final", of: acc, to: b.getProperty("sum", of: acc))
+            }
+            b.build(n: 8)
+            b.doReturn(acc)
+        }
+        let seedObj = b.createObject(with: [:])
+        b.setProperty("x", of: seedObj, to: b.loadInt(7))
+        b.setProperty("y", of: seedObj, to: b.loadString("seed"))
+        b.buildRepeatLoop(n: warmupIterations) { i in
+            let arg = b.binary(i, b.loadInt(5), with: .Add)
+            let p = b.callFunction(consumer, withArgs: [arg, seedObj])
+            let onFulfilled = b.buildPlainFunction(with: .parameters(.jsAnything)) { args in
+                let result = args[0]
+                let probe = b.createObject(with: [:])
+                b.setProperty("probe", of: probe, to: b.getProperty("last", of: result, guard: true))
+                b.doReturn(probe)
+            }
+            let onRejected = b.buildPlainFunction(with: .parameters(.jsAnything)) { args in
+                let err = b.createObject(with: [:])
+                b.setProperty("err", of: err, to: args[0])
+                b.doReturn(err)
+            }
+            b.callMethod("then", on: p, withArgs: [onFulfilled, onRejected], guard: true)
+        }
+        b.build(n: 10)
+    },
 ]

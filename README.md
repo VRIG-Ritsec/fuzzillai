@@ -21,6 +21,16 @@ The basic steps for running the fuzzilAI fuzzer is:
 1. `docker build -t fuzzillai -f Cloud/VRIG/Dockerfile .`
 2. `docker run fuzzillai:latest`
 
+### PostgreSQL Generated Corpus Sync
+
+The PostgreSQL sync path supports three modes through `FuzzilliCli`:
+
+* `--postgresSyncMode=generated`: the default. Each fuzzer polls its own generated-seed inbox every 15 minutes, imports any queued programs into its in-memory runtime corpus, and clears the pulled rows from PostgreSQL.
+* `--postgresSyncMode=shared`: legacy behavior. The fuzzer pulls from the shared `program` corpus table.
+* `--postgresSyncMode=push`: disables all PostgreSQL pull behavior and only pushes local findings.
+
+Agent-generated seeds are no longer inserted directly into the shared corpus table. They are queued in `generated_program_queue` for a specific target fuzzer and consumed by that fuzzer's next generated-corpus sync cycle.
+
 ### Hacking
 
 Check out [main.swift](Sources/FuzzilliCli/main.swift) to see a usage example of the Fuzzilli library and play with the various configuration options. Next, take a look at [Fuzzer.swift](Sources/Fuzzilli/Fuzzer.swift) for the highlevel fuzzing logic. From there dive into any part that seems interesting.

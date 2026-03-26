@@ -22,6 +22,9 @@ from ._shared import (
     _bm25_search,
     _rrf_fuse,
     _maybe_cross_rerank,
+    _hydrate_doc,
+    _load_sentence_transformer,
+    _score_to_similarity,
     _format_rag_result,
 )
 
@@ -59,13 +62,7 @@ class FAISSChromiumIssuesRag:
         self.bm25_db_path = base_dir / "chromium_issues_rag_bm25.sqlite"
         with open(model_file, "rb") as f:
             model_name = pickle.load(f)
-        try:
-            self.model = SentenceTransformer(model_name, device="cpu")
-        except (TypeError, ValueError):
-            self.model = SentenceTransformer(model_name)
-            self.model = self.model.to("cpu")
-        if hasattr(self.model, "eval"):
-            self.model.eval()
+        self.model = _load_sentence_transformer(model_name)
 
     @classmethod
     def get_instance(cls):
@@ -74,12 +71,14 @@ class FAISSChromiumIssuesRag:
         return cls._instance
 
     def search_vector(self, query: str, top_k: int = 5):
+        if self.model is None:
+            return self.search_lexical(query, top_k)
         query_embedding = self.model.encode([query], convert_to_numpy=True)
         distances, indices = self.index.search(query_embedding.astype("float32"), top_k)
         results = []
         for idx, distance in zip(indices[0], distances[0]):
             if idx < len(self.metadata):
-                doc = self.metadata[idx]
+                doc = _hydrate_doc(self.metadata[idx], self.bm25_db_path)
                 similarity = 1.0 / (1.0 + distance)
                 results.append(
                     {
@@ -99,6 +98,33 @@ class FAISSChromiumIssuesRag:
                 )
         return results
 
+    def search_lexical(self, query: str, top_k: int = 5):
+        results = []
+        for doc_id, score in _bm25_search(self.bm25_db_path, query, top_k):
+            base_doc = self.doc_id_to_doc.get(doc_id)
+            doc = _hydrate_doc(base_doc, self.bm25_db_path) if base_doc else None
+            if not doc:
+                continue
+            results.append(
+                {
+                    "doc_id": doc.get("doc_id"),
+                    "issue_id": doc.get("issue_id"),
+                    "url": doc.get("url"),
+                    "topic": doc.get("topic"),
+                    "content": doc.get("content", ""),
+                    "chunk_index": doc.get("chunk_index"),
+                    "total_chunks": doc.get("total_chunks"),
+                    "start_char": doc.get("start_char"),
+                    "end_char": doc.get("end_char"),
+                    "start_line": doc.get("start_line"),
+                    "end_line": doc.get("end_line"),
+                    "similarity": _score_to_similarity(score),
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
+
     def search_hybrid(
         self,
         query: str,
@@ -107,11 +133,12 @@ class FAISSChromiumIssuesRag:
         bm25_k: int = 60,
         rerank_k: int = 12,
     ):
-        vector_results = self.search_vector(query, vector_k)
+        vector_results = self.search_vector(query, vector_k) if self.model is not None else []
         bm25_hits = _bm25_search(self.bm25_db_path, query, bm25_k)
         bm25_results = []
         for doc_id, score in bm25_hits:
-            doc = self.doc_id_to_doc.get(doc_id)
+            base_doc = self.doc_id_to_doc.get(doc_id)
+            doc = _hydrate_doc(base_doc, self.bm25_db_path) if base_doc else None
             if not doc:
                 continue
             bm25_results.append(
@@ -130,6 +157,10 @@ class FAISSChromiumIssuesRag:
                     "bm25_score": float(score),
                 }
             )
+        if not vector_results:
+            rerank_pool = bm25_results[: max(top_k, rerank_k)]
+            reranked = _maybe_cross_rerank(query, rerank_pool)
+            return reranked[:top_k]
         fused = _rrf_fuse([vector_results, bm25_results], rrf_k=60)
         rerank_pool = fused[: max(top_k, rerank_k)]
         reranked = _maybe_cross_rerank(query, rerank_pool)

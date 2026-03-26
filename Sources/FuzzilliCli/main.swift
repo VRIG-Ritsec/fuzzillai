@@ -103,6 +103,11 @@ Options:
     --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
     --postgres-url=url           : PostgreSQL connection string for PostgreSQL corpus (e.g., postgresql://user:pass@host:port/db).
     --disablePostgresSync        : Disable PostgreSQL synchronization even when --corpus=postgresql is selected.
+    --postgresSyncMode=mode      : PostgreSQL synchronization mode. Possible values:
+                                                 generated : pull only per-fuzzer generated corpus seeds (default).
+                                                    shared : pull the shared corpus from PostgreSQL (legacy behavior).
+                                                      push : do not pull any corpus from PostgreSQL, only push local findings.
+    --postgresPushOnly           : Deprecated alias for --postgresSyncMode=push.
     --validate-before-cache      : Enable program validation before caching in PostgreSQL corpus (default: true).
     --execution-history-size=n   : Number of recent executions to keep in memory for PostgreSQL corpus (default: 10).
     --postgres-logging           : Enable PostgreSQL database operation logging.
@@ -166,6 +171,8 @@ let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
 let postgresUrl = args["--postgres-url"] ?? ProcessInfo.processInfo.environment["POSTGRES_URL"]
 let postgresLogging = args.has("--postgres-logging")
 let disablePostgresSync = args.has("--disablePostgresSync")
+let postgresPushOnly = args.has("--postgresPushOnly")
+let postgresSyncModeName = args["--postgresSyncMode"] ?? (postgresPushOnly ? "push" : "generated")
 
 var timeout : Timeout
 if let raw_timeout = args.string(for: "--timeout") {
@@ -248,6 +255,14 @@ if corpusName == "markov" && staticCorpus {
 if corpusName == "postgresql" {
     if !disablePostgresSync && postgresUrl == nil {
         configError("PostgreSQL corpus requires --postgres-url (or POSTGRES_URL environment variable)")
+    }
+
+    let validPostgresSyncModes = ["generated", "shared", "push"]
+    if !validPostgresSyncModes.contains(postgresSyncModeName) {
+        configError("--postgresSyncMode must be one of \(validPostgresSyncModes)")
+    }
+    if postgresPushOnly && args["--postgresSyncMode"] != nil && postgresSyncModeName != "push" {
+        configError("--postgresPushOnly is an alias for --postgresSyncMode=push and cannot be combined with another sync mode")
     }
 }
 
@@ -689,10 +704,13 @@ fuzzer.sync {
         do {
             let databasePool = try DatabasePool(connectionString: url, maxConnections: 3, enableLogging: postgresLogging)
             let storage = PostgresSQLStorage(databasePool: databasePool, enableLogging: postgresLogging)
-            let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging)
+            guard let postgresSyncMode = PostgreSQLSync.SyncMode(rawValue: postgresSyncModeName) else {
+                logger.fatal("Invalid PostgreSQL sync mode: \(postgresSyncModeName)")
+            }
+            let postgresSync = PostgreSQLSync(storage: storage, fuzzerInstanceId: fuzzerInstanceId, enableLogging: postgresLogging, syncMode: postgresSyncMode)
             fuzzer.addModule(postgresSync)
-            
-            logger.info("Added PostgreSQL synchronization module with instance ID: \(fuzzerInstanceId)")
+
+            logger.info("Added PostgreSQL synchronization module with instance ID: \(fuzzerInstanceId), sync mode: \(postgresSyncMode.rawValue)")
         } catch {
             logger.fatal("Failed to initialize PostgreSQL connection: \(error)")
         }

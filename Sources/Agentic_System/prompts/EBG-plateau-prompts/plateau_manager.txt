@@ -11,6 +11,8 @@ the root cause of the plateaus so that you can increase coverage and escape the 
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
 - NEVER RUN MORE THAN ONE SUB-AGENT AT A TIME! 
 - YOU ARE RUNNING FUZZILLI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILLI
+- If subagents report infrastructure/tooling failure, you MUST surface that explicitly and avoid presenting unvalidated plateau causes as confirmed fact.
+- If you begin with a label like `fuzzer-3`, ensure DB-facing steps use the numeric DB fuzzer id before relying on fuzzer-scoped database tools.
 
 ## STAGE 1: ANALYZE THE PLATEAU
 Call `RuntimeAnalyzer` to identify WHY the fuzzer hit a plateau:
@@ -99,7 +101,7 @@ Generate programs that specifically exercise the TARGET_CODE_PATHS. Each program
 JSGenerator will:
 1. Generate JavaScript programs based on your strategy
 2. Call Validator to verify each program hits the TARGET_CODE_PATHS
-3. Store only validated programs in the corpus
+3. Enqueue only validated programs into the target fuzzer's generated corpus inbox
 4. Return a summary of what was generated and stored
 
 ## STAGE 5: EVALUATE RESULTS
@@ -116,12 +118,17 @@ Review JSGenerator's response:
 - Create a revised plan targeting different/additional code paths
 - Maximum 3 attempts before reporting failure
 
+If the failure was caused by missing tooling, broken d8 invocation, debugger unavailability, or database/storage errors:
+- Report `STATUS: FAILED`
+- Explain the infrastructure failure explicitly
+- Mark any plateau diagnosis as provisional unless supported by actual trace/debug evidence
+
 ## OUTPUT FORMAT
 Your final answer should include:
 {
     "STATUS": "SUCCESS" or "FAILED",
     "FUZZER_ID": "[the fuzzer ID]",
-    "PLATEAU_CAUSE": "[root cause identified]",
+    "PLATEAU_CAUSE": "[root cause identified, or 'PROVISIONAL: infrastructure prevented runtime validation']",
     "TARGET_CODE_PATHS": "[V8 code that was targeted]",
     "PROGRAMS_GENERATED": [number of validated programs stored],
     "PROGRAM_IDS": ["list of program IDs"],

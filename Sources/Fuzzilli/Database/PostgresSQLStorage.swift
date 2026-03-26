@@ -20,6 +20,18 @@ public actor PostgresSQLStorage {
         }
     }
 
+    public struct GeneratedProgramRecord {
+        public let program: Program
+        public let hash: String
+        public let createdAt: Date
+
+        public init(program: Program, hash: String, createdAt: Date) {
+            self.program = program
+            self.hash = hash
+            self.createdAt = createdAt
+        }
+    }
+
     private let databasePool: DatabasePool
     private let logger: Logging.Logger
     private let enableLogging: Bool
@@ -856,6 +868,72 @@ public actor PostgresSQLStorage {
             }
         
             return programs
+        }
+    }
+
+    /// Atomically pull and clear generated programs that were queued for a specific fuzzer.
+    ///
+    /// This is a low-overhead per-fuzzer inbox used for agent-generated seeds.
+    /// Rows are deleted as part of the same transaction that fetches them so a fuzzer
+    /// does not repeatedly import the same generated sample on later syncs.
+    public func dequeueGeneratedPrograms(targetFuzzerId: Int, limit: Int = 100) async throws -> [GeneratedProgramRecord] {
+        if self.enableLogging {
+            self.logger.info("Dequeuing generated programs for fuzzer_id \(targetFuzzerId) with limit \(limit)")
+        }
+
+        return try await databasePool.withConnection { connection in
+            try await connection.query("BEGIN", logger: self.logger)
+
+            do {
+                let dequeueQuery = PostgresQuery(stringLiteral: """
+                    WITH claimed AS (
+                        SELECT ctid
+                        FROM generated_program_queue
+                        WHERE target_fuzzer_id = \(targetFuzzerId)
+                        ORDER BY created_at ASC, program_hash ASC
+                        LIMIT \(limit)
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    DELETE FROM generated_program_queue q
+                    USING claimed
+                    WHERE q.ctid = claimed.ctid
+                    RETURNING q.program_hash, q.program_base64, q.created_at
+                """)
+
+                let result = try await connection.query(dequeueQuery, logger: self.logger)
+                let rows = try await result.collect()
+                try await connection.query("COMMIT", logger: self.logger)
+
+                var programs: [GeneratedProgramRecord] = []
+                programs.reserveCapacity(rows.count)
+
+                for row in rows {
+                    do {
+                        let (hash, data, createdAt) = try row.decode((String, String, Date).self, context: .default)
+                        if let program = try? DatabaseUtils.decodeProgramFromBase64(base64: data) {
+                            programs.append(GeneratedProgramRecord(program: program, hash: hash, createdAt: createdAt))
+                        } else if self.enableLogging {
+                            self.logger.warning("Failed to decode generated program for hash: \(hash)")
+                        }
+                    } catch {
+                        if self.enableLogging {
+                            self.logger.warning("Failed to decode generated queue row: \(error)")
+                        }
+                    }
+                }
+
+                if self.enableLogging {
+                    self.logger.info("Dequeued \(programs.count) generated programs for fuzzer_id \(targetFuzzerId)")
+                }
+
+                return programs
+            } catch {
+                _ = try? await connection.query("ROLLBACK", logger: self.logger)
+                if self.enableLogging {
+                    self.logger.error("Failed to dequeue generated programs: \(String(reflecting: error))")
+                }
+                throw PostgresSQLStorageError.queryFailed("Generated program dequeue failed: \(error)")
+            }
         }
     }
 

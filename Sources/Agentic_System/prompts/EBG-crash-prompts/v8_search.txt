@@ -45,7 +45,7 @@ the code region.
 ## STAGE 6 
 AFTER YOU HAVE WRITTEN EVERYTHING YOU THINK IS RELEVANT TO THE TASK PLEASE RETURN BACK TO THE MANAGER ALL THE WRITTEN DB ID'S AND A SHORT EXPLANATION 
 REGARDING WHAT THEY CONTAIN. YOU MUST USE read_agent_memory IF YOU ARE LISTING ANY VALUE HERE, ALL IDS MUST BE FULLY WRITTEN TO THE agent memory !!!! USE THE COMMAND 
-get_runtime_db_ids to validate the ID's you have WRITTEN
+list_agent_memory_ids to list stored entry ids, then read_agent_memory as needed to validate what you have written
 
 
 STRICT OUTPUT RULES FOR write_agent_memory:

@@ -19,9 +19,17 @@ def create_generate_folder() -> str:
 def write_to_generate_folder(file_name: str, content: str) -> str:
     folder = _get_varianal_folder()
     os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, file_name), "w") as f:
+    file_path = os.path.join(folder, file_name)
+    with open(file_path, "w") as f:
         f.write(content)
-    return json.dumps({"message": f"File {file_name} written to folder {folder} with content:\n\n {content[:500]}..."})
+    return json.dumps(
+        {
+            "message": f"File {file_name} written to folder {folder} with content:\n\n {content[:500]}...",
+            "file_name": file_name,
+            "folder": folder,
+            "file_path": file_path,
+        }
+    )
 
 
 def read_from_generate_folder(file_name: str) -> str:

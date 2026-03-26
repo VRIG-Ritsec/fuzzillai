@@ -4,13 +4,12 @@ Execution tools: trace_v8_analysis, list_v8_trace_options, write_and_execute_js.
 
 import os
 import json
-import subprocess
 
 from IkaCore.tools import IkaTools
 
 from .db import fetch_program_js_from_db
 from ._shared import _get_varianal_folder, json_serial
-from tools._shared import D8_PATH, run_command, get_output
+from tools._shared import run_d8
 
 V8_TRACE_PRESETS = {
     "tiering": [
@@ -194,17 +193,8 @@ def trace_v8_analysis(
 
     flags = list(dict.fromkeys(flags))
 
-    cmd_parts = [D8_PATH] + flags + [filepath_js]
-    cmd = " ".join(cmd_parts)
-
     try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds
-        )
+        result = run_d8(filepath_js, flags=flags, timeout=timeout_seconds)
 
         output_data = {
             "stdout": result.stdout,
@@ -217,6 +207,8 @@ def trace_v8_analysis(
             "program_hash": program_hash,
             "js_file": filepath_js
         }
+        if result.returncode == 127 and result.stderr.startswith("Error:"):
+            output_data["infrastructure_error"] = result.stderr
 
         if turbo_path and os.path.isdir(turbo_path):
             turbo_files = os.listdir(turbo_path)
@@ -234,12 +226,6 @@ def trace_v8_analysis(
 
         return json.dumps(output_data, default=json_serial)
 
-    except subprocess.TimeoutExpired:
-        return json.dumps({
-            "error": f"Execution timed out after {timeout_seconds} seconds",
-            "flags_used": flags,
-            "program_hash": program_hash
-        })
     except Exception as e:
         return json.dumps({"error": f"Execution error: {e}", "flags_used": flags})
     finally:
@@ -311,14 +297,17 @@ def write_and_execute_js(js_code: str, file_name: str = None, d8_flags: str = ""
         if "--allow-natives-syntax" not in d8_flags:
             d8_flags += " --allow-natives-syntax"
         d8_flags = d8_flags.strip()
-        result = run_command(f"{D8_PATH} {d8_flags} {abs_path}")
+        flags = d8_flags.split() if d8_flags else []
+        result = run_d8(abs_path, flags=flags)
         execution_result = f"Program execution result:\n{result.stderr}\n{result.stdout}"
-
-        return json.dumps({
+        payload = {
             "file_path": abs_path,
             "file_name": file_name,
-            "execution_result": execution_result
-        }, indent=2)
+            "execution_result": execution_result,
+        }
+        if result.returncode == 127 and result.stderr.startswith("Error:"):
+            payload["error"] = result.stderr
+        return json.dumps(payload, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Failed to write or execute JS: {str(e)}"}, indent=2)
 

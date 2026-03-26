@@ -5,8 +5,19 @@
 - `D8_PATH` => points to the d8 binary
 - `FUZZILLI_TOOL_BIN` => points to the FuzzILTool binary, typically under .build in Fuzzilli's root
 - `FUZZILLI_PATH` => points to Fuzzilli's root directory, where you land after cloning and cd'ing into the repo
-3. Put your OpenAI key into a `keys.cfg` in Sources/Agentic_System
-4. run `python3 start_scripts/rises-the-fog.py (--debug)`
+3. install debugger/runtime deps used by validation, especially `pygdbmi`, and ensure `gdb` is on `PATH` if you want MI breakpoint validation. For **GDB file:line** breaks on V8, **V8_PATH** must be the **src** root (contains `d8/`); `start_mi_debug_session` runs `set substitute-path ../../src $V8_PATH` (override with **GDB_DWARF_SRC_PREFIX** if your GN build records a different prefix). **D8_PATH** must be a debug **d8** binary.
+4. Put your OpenAI key into a `keys.cfg` in Sources/Agentic_System
+5. run `python3 start_scripts/rises-the-fog.py (--debug)`
+
+### Runtime preflight
+- Both `start_scripts/rises-the-fog.py` and `start_scripts/ethiopian_boiled_egg.py` now fail fast if `V8_PATH`, `D8_PATH`, `FUZZILLI_PATH`, or `FUZZILLI_TOOL_BIN` are missing or point at invalid paths.
+- Plateau mode also emits startup warnings when `pygdbmi` or `gdb` are unavailable, since debugger-based validation will be degraded.
+- This is intentional: missing tooling should surface as infrastructure failure before the agents start reasoning about plateau causes or validation results.
+
+### Generated corpus queue
+- Validated EBG-generated JavaScript is compiled to FuzzIL and enqueued into PostgreSQL's `generated_program_queue` for a specific target fuzzer.
+- The target fuzzer pulls only its own queued generated seeds during its periodic generated-corpus sync and removes them from the queue after a successful dequeue.
+- This generated-seed path is intentionally separate from the shared `program` table so agent-produced samples do not get broadcast to every fuzzer by default.
 
 ### Technical flow
 #### The first multi agent system is implemented and starts by initializing a root manager whose goal is to actually orchestrate the creation of program templates. It starts by selecting a "code region" that it determines to be interesting; this is done by querying a RAG DB (json file) that contains over 8000 regression tests, their FuzzIL form, and execution data via trace flags.  We instruct the system to select a code region by using the execution data. On top of that, the system has access to a vector RAG DB with: V8 docs, JS MDM docs, C++ docs, and various research papers that it can query to gather more information. The vectorization library we use is META’s FAISS -"Facebook AI Similarity Search". After this is done it will select a code region such as: "Keyed array element access & elements-kind transitions (KeyedStoreIC/KeyedLoadIC, ElementsTransition, GrowElements/CopyElements, and Array builtin fast paths)".
@@ -28,7 +39,7 @@ The old top-level `knowlage_docs` path is kept as a compatibility symlink, but `
 ```
 >> Start Initializaiton
 -> PickSection -> FoG -> CodeAnalyzer: Reviewer_of_Code, V8_Search -> FoG 
--> ProgramBuilder: Corpus_Generator, Runtime_Analyzer, Corpus_Validator, DB_Analyzer, George_Foreman, Compiler 
+-> ProgramBuilder: Corpus_Generator, Runtime_Analyzer, Corpus_Validator, DB_Analyzer, static_verfication, Compiler 
 >> End Initialization []
 ```
 
@@ -46,19 +57,19 @@ The old top-level `knowlage_docs` path is kept as a compatibility symlink, but `
     - Runtime_Analyzer:
     - Corpus_Validator:
     - Compiler:
-- George Foreman: Verification agent used to validate that results and 
-        trajectory of other agents are inline with their goals.
+- static_verfication: Static verification agent used to validate that results and
+        trajectory of other agents stay aligned with their goals.
 
 
 ```
 The below is wrong for now btw
 
-FatherOfGeorge (L0 Manager)
+RootManager (L0 Manager)
 ├── CodeAnalyzer (L1 Manager)
-│   ├── RetrieverOfCode (L2 Worker) → GeorgeForeman
+│   ├── RetrieverOfCode (L2 Worker) → static_verfication
 │   └── V8Search (L2 Worker)
 └── ProgramBuilder (L1 Manager)
-    └── GeorgeForeman (L1 Manager)
+    └── static_verfication (L1 Manager)
         ├── CorpusGenerator (L2 Worker)
         ├── RuntimeAnalyzer (L2 Manager)
         │   └── CodeAnalyzer (L3 Worker)

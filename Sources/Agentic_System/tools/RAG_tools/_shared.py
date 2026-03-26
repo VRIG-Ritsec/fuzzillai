@@ -5,11 +5,18 @@ RAG tools shared helpers: tokenization, BM25, RRF, rerank, formatting.
 import os
 import re
 import sqlite3
+import inspect
 from pathlib import Path
 from typing import List, Dict, Tuple
 
 _tools_dir = Path(__file__).resolve().parent.parent
 _agentic_dir = _tools_dir.parent
+
+import sys
+if str(_agentic_dir) not in sys.path:
+    sys.path.insert(0, str(_agentic_dir))
+
+from RAG.paths import metadata_root
 
 try:
     import numpy as np
@@ -23,10 +30,14 @@ except ImportError:
     FAISS_AVAILABLE = False
 
 
+_BM25_CONTENT_CACHE: Dict[Tuple[str, str], str] = {}
+
+
 def _rag_base_dir() -> Path:
-    default = _agentic_dir / "rag_db"
-    base = Path(os.getenv("RAG_BASE_DIR", str(default))).expanduser()
-    return base
+    base = metadata_root()
+    if base.exists():
+        return base
+    return _agentic_dir / "RAG" / "meta_data"
 
 
 def _tokenize(text: str) -> List[str]:
@@ -71,6 +82,99 @@ def _bm25_search(db_path: Path, query: str, top_k: int) -> List[Tuple[str, float
         return [(row["doc_id"], float(row["score"])) for row in cur.fetchall()]
     finally:
         conn.close()
+
+
+def _lookup_bm25_content(db_path: Path, doc_id: str) -> str:
+    if not db_path.exists() or not doc_id:
+        return ""
+    cache_key = (str(db_path), doc_id)
+    cached = _BM25_CONTENT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        conn = sqlite3.connect(str(db_path))
+    except sqlite3.Error:
+        return ""
+    try:
+        cur = conn.execute("SELECT content FROM docs WHERE doc_id = ?", (doc_id,))
+        row = cur.fetchone()
+        content = str(row[0]) if row and row[0] is not None else ""
+    except sqlite3.Error:
+        content = ""
+    finally:
+        conn.close()
+    _BM25_CONTENT_CACHE[cache_key] = content
+    return content
+
+
+def _score_to_similarity(score: float) -> float:
+    return 1.0 / (1.0 + abs(float(score)))
+
+
+def _load_sentence_transformer(model_name: str):
+    if not FAISS_AVAILABLE:
+        return None
+    kwargs = {"device": "cpu"}
+    try:
+        if "local_files_only" in inspect.signature(SentenceTransformer.__init__).parameters:
+            kwargs["local_files_only"] = True
+    except Exception:
+        pass
+    try:
+        model = SentenceTransformer(model_name, **kwargs)
+    except Exception:
+        return None
+    try:
+        model = model.to("cpu")
+    except Exception:
+        pass
+    if hasattr(model, "eval"):
+        model.eval()
+    return model
+
+
+def _strip_embedded_context(doc: Dict[str, object], content: str) -> str:
+    if not content:
+        return ""
+    context = str(doc.get("context") or "").strip()
+    if context and content.startswith(context):
+        stripped = content[len(context):].lstrip("\n")
+        if stripped:
+            return stripped
+    if str(doc.get("source") or "").lower() == "v8_source" and content.startswith("Topic:"):
+        _, sep, remainder = content.partition("\n\n")
+        if sep and remainder.strip():
+            return remainder
+    return content
+
+
+def _resolve_doc_content(doc: Dict[str, object], bm25_db_path: Path | None = None) -> str:
+    content = str(doc.get("content") or "")
+    if content:
+        return content
+
+    doc_id = str(doc.get("doc_id") or "")
+    if bm25_db_path is not None:
+        content = _lookup_bm25_content(bm25_db_path, doc_id)
+        if content:
+            return _strip_embedded_context(doc, content)
+
+    rel_path = str(doc.get("path") or doc.get("parent_file") or "")
+    v8_root = os.getenv("V8_PATH", "").strip()
+    if rel_path and v8_root and str(doc.get("source") or "").lower() == "v8_source":
+        file_path = Path(v8_root).expanduser() / rel_path
+        try:
+            return file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            pass
+
+    return str(doc.get("context") or "")
+
+
+def _hydrate_doc(doc: Dict[str, object], bm25_db_path: Path | None = None) -> Dict[str, object]:
+    hydrated = dict(doc)
+    hydrated["content"] = _resolve_doc_content(hydrated, bm25_db_path)
+    return hydrated
 
 
 def _rrf_fuse(

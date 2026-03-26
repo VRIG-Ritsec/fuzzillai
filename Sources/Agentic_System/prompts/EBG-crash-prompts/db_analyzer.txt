@@ -21,6 +21,12 @@ In this stage, your job is to analyze and think about the answer from stage 2. C
 prove why your answer is correct. If you have even the slightest doubt, return back to STAGE 1 to gather more information from the tool calls provided to you. Only after you 
 are confident that your answer is specific enough and contains rigorous evidence, should you move onto to stage 4.
 
+## IMPORTANT: Converting crash programs to JavaScript
+To convert a crash program to JavaScript, use `db_get_crash_program_as_js(program_hash)` which fetches and converts in one atomic step.
+Do NOT manually fetch program_base64 from the database and then call `base64_program_to_js` — that two-step pattern fails because crash programs
+contain large embedded metadata (CRASH INFO, stderr, bytecode dumps) that makes the base64 string too large for the tool-call interface, causing truncation
+and padding errors.
+
 ## STAGE 4
 During this stage please log every piece of key information, please make sure to write JS test files to the tool calls and 
 also ensure that the manager agent has a clear understanding of what you did and generated 

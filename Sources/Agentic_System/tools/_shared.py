@@ -19,7 +19,7 @@ if str(_ikacore_src) not in sys.path:
 from IkaCore.tools import IkaTools
 
 V8_PATH = os.getenv("V8_PATH", "")
-D8_PATH = os.getenv("D8_PATH", "")
+D8_PATH = os.getenv("D8_PATH", "/mnt/vdc/v8_vrig/v8/out/fuzzbuild/d8")
 FUZZILLI_PATH = os.getenv("FUZZILLI_PATH", "")
 FUZZILLI_TOOL_BIN = os.getenv("FUZZILLI_TOOL_BIN", "")
 SWIFT_PATH = os.path.join(FUZZILLI_PATH, "Sources", "Fuzzilli") if FUZZILLI_PATH else ""
@@ -63,6 +63,25 @@ def run_command(command: str, timeout: int = 90):
                 self.returncode = -1
                 self.args = cmd
         return TimeoutResult(timeout, command)
+
+
+def _error_process(args, message: str, returncode: int = 127):
+    return subprocess.CompletedProcess(args=args, returncode=returncode, stdout="", stderr=message)
+
+
+def run_process(args: list[str], timeout: int = 90, cwd: str | None = None):
+    if not args:
+        return _error_process(args, "Error: no command provided")
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cwd,
+        )
+    except subprocess.TimeoutExpired:
+        return _error_process(args, f"Command timed out after {timeout} seconds: {' '.join(args)}", returncode=-1)
 
 
 def get_output(completed_process) -> str:
@@ -148,6 +167,44 @@ DEBUG_SESSION = {"js_path": "", "d8_args": ""}
 MI_CONTROLLER = None
 
 
+def resolve_js_path(js_path: str) -> str:
+    candidate = (js_path or "").strip()
+    if not candidate:
+        return ""
+
+    raw_path = Path(candidate).expanduser()
+    search_paths: list[Path] = []
+
+    if raw_path.is_absolute():
+        search_paths.append(raw_path)
+    else:
+        search_paths.append(Path.cwd() / raw_path)
+        try:
+            from tools.EBG_tools._shared import _get_varianal_folder
+
+            search_paths.append(Path(_get_varianal_folder()) / raw_path)
+        except Exception:
+            pass
+        try:
+            from tools.FoG_tools._shared import GENERATED_TEMPLATE_DIR
+
+            if GENERATED_TEMPLATE_DIR:
+                search_paths.append(Path(GENERATED_TEMPLATE_DIR) / raw_path)
+        except Exception:
+            pass
+
+    seen = set()
+    for path in search_paths:
+        resolved = str(path.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if path.exists():
+            return resolved
+
+    return str(raw_path.resolve()) if raw_path.is_absolute() else ""
+
+
 def _check_v8_binary():
     if not D8_PATH:
         return "Error: D8_PATH is not set"
@@ -156,14 +213,21 @@ def _check_v8_binary():
     return None
 
 
-def _check_js_path(js_path: str):
-    if not js_path:
-        return "Error: js_path required"
-    if not os.path.isabs(js_path):
-        return f"Error: js_path must be absolute: {js_path}"
-    if not os.path.exists(js_path):
-        return f"Error: JS file not found: {js_path}"
+def _check_fuzzilli_tool_bin():
+    if not FUZZILLI_TOOL_BIN:
+        return "Error: FUZZILLI_TOOL_BIN is not set"
+    if not os.path.exists(FUZZILLI_TOOL_BIN):
+        return f"Error: FuzzILTool not found at '{FUZZILLI_TOOL_BIN}'"
     return None
+
+
+def _prepare_js_path(js_path: str):
+    if not js_path:
+        return None, "Error: js_path required"
+    resolved_js_path = resolve_js_path(js_path)
+    if not resolved_js_path or not os.path.exists(resolved_js_path):
+        return None, f"Error: JS file not found: {js_path}"
+    return resolved_js_path, None
 
 
 def _format_args(js_path, d8_args):
@@ -173,11 +237,89 @@ def _format_args(js_path, d8_args):
     return f"{D8_COMMON_FLAGS} {user}".strip()
 
 
+def run_d8_command(extra_args: list[str], timeout: int = 90):
+    err = _check_v8_binary()
+    if err:
+        return _error_process([D8_PATH, *extra_args], err)
+    return run_process([D8_PATH, *extra_args], timeout=timeout)
+
+
+def run_d8(js_path: str, flags: list[str] | None = None, timeout: int = 90):
+    resolved_js_path, err = _prepare_js_path(js_path)
+    if err:
+        return _error_process([D8_PATH, *(flags or []), js_path], err)
+    return run_d8_command([*(flags or []), resolved_js_path], timeout=timeout)
+
+
+def run_fuzzilli_tool(extra_args: list[str], timeout: int = 90, cwd: str | None = None):
+    err = _check_fuzzilli_tool_bin()
+    if err:
+        return _error_process([FUZZILLI_TOOL_BIN, *extra_args], err)
+    return run_process([FUZZILLI_TOOL_BIN, *extra_args], timeout=timeout, cwd=cwd)
+
+
 def _format_mi_responses(resp):
     try:
         return json.dumps(resp, indent=2)
     except Exception:
         return str(resp)
+
+
+def _gdb_dwarf_src_prefix() -> str:
+    """Path prefix stored in V8/d8 DWARF (relative to GN out dir), e.g. ../../src."""
+    p = (os.getenv("GDB_DWARF_SRC_PREFIX") or "../../src").strip()
+    return p if p else "../../src"
+
+
+def _resolve_break_location(source_file: str, line: int) -> tuple[str, list[str]]:
+    """
+    Build a GDB 'break location' (file:line) that matches DWARF paths.
+    Chromium GN builds record sources as ../../src/<path-under-src>/file.cc.
+    """
+    notes: list[str] = []
+    sf = (source_file or "").strip()
+    if not sf:
+        return "", ["empty source_file"]
+
+    norm_sf = sf.replace("\\", "/")
+
+    if norm_sf.startswith("../"):
+        return f"{norm_sf}:{line}", notes
+
+    dwarf_p = _gdb_dwarf_src_prefix().rstrip("/")
+    vp = os.getenv("V8_PATH", "").strip()
+    if not vp:
+        notes.append(
+            "V8_PATH is not set: cannot rewrite to ../../src/...; use a DWARF path "
+            "(e.g. ../../src/d8/d8.cc) or set V8_PATH to your V8 src root and use an absolute file path."
+        )
+        return f"{norm_sf}:{line}", notes
+
+    v8_root = Path(vp).expanduser().resolve()
+    if not v8_root.is_dir():
+        notes.append("V8_PATH is not a directory; breakpoint path not rewritten.")
+        return f"{norm_sf}:{line}", notes
+
+    in_path = Path(norm_sf)
+    if in_path.is_absolute():
+        try:
+            rel = in_path.resolve().relative_to(v8_root)
+        except ValueError:
+            notes.append(
+                "source_file is absolute but not under V8_PATH; passing through unchanged "
+                "(likely to fail unless you use gdb_run_command with a matching DWARF path)."
+            )
+            return f"{norm_sf}:{line}", notes
+    else:
+        rel = Path(norm_sf)
+
+    rel_posix = rel.as_posix().lstrip("./")
+    loc_path = f"{dwarf_p}/{rel_posix}"
+    notes.append(
+        f"Using break {loc_path}:{line} (DWARF prefix {dwarf_p!r} + path under V8_PATH). "
+        f"start_mi_debug_session runs set substitute-path {dwarf_p} <V8_PATH> when V8_PATH is set."
+    )
+    return f"{loc_path}:{line}", notes
 
 
 def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
@@ -187,10 +329,10 @@ def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
     err = _check_v8_binary()
     if err:
         return err
-    err = _check_js_path(js_path)
+    resolved_js_path, err = _prepare_js_path(js_path)
     if err:
         return err
-    DEBUG_SESSION["js_path"] = js_path
+    DEBUG_SESSION["js_path"] = resolved_js_path
     DEBUG_SESSION["d8_args"] = d8_args or ""
     if MI_CONTROLLER is not None:
         try:
@@ -206,12 +348,25 @@ def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
             "-gdb-set mi-async on",
             f"-file-exec-and-symbols {D8_PATH}",
         ]
-        args = _format_args(js_path, d8_args)
+        args = _format_args(resolved_js_path, d8_args)
         init_cmds.append(f"set args {args}")
         results = []
         for cmd in init_cmds:
             res = MI_CONTROLLER.write(cmd, timeout_sec=7.0)
             results.append({"cmd": cmd, "resp": res})
+
+        vp = os.getenv("V8_PATH", "").strip()
+        if vp:
+            vp_abs = str(Path(vp).expanduser().resolve())
+            if os.path.isdir(vp_abs):
+                prefix = _gdb_dwarf_src_prefix()
+                for extra in (
+                    f"set substitute-path {prefix} {vp_abs}",
+                    f"directory {vp_abs}",
+                ):
+                    res = MI_CONTROLLER.write(extra, timeout_sec=7.0)
+                    results.append({"cmd": extra, "resp": res})
+
         return "MI debug session started.\n" + _format_mi_responses(results)
     except Exception as e:
         MI_CONTROLLER = None
@@ -284,49 +439,83 @@ def gdb_set_breakpoint(source_file: str, line: int) -> str:
         return "Error: source_file required"
     if line <= 0:
         return "Error: line must be positive"
-    r = gdb_run_command(f"break {source_file}:{line}")
-    if r.startswith("Error"):
-        return r
-    return gdb_run_command("info breakpoints")
+    loc, notes = _resolve_break_location(source_file, line)
+    if not loc:
+        return "Error: could not resolve breakpoint location"
+    br = gdb_run_command(f"break {loc}")
+    if br.startswith("Error"):
+        return br
+    info = gdb_run_command("info breakpoints")
+    if notes:
+        hdr = "Breakpoint routing:\n" + "\n".join(f"- {n}" for n in notes) + "\n\n"
+        return hdr + "break:\n" + br + "\ninfo breakpoints:\n" + info
+    return br + "\n" + info
+
+
+def _mi_quote_c_string(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _extract_eval_hex_address(mi_response: str) -> str | None:
+    m = re.search(r'"value"\s*:\s*"(0x[0-9a-fA-F]+)"', mi_response)
+    return m.group(1) if m else None
+
+
+def _mi_disassemble_near_pc(count: int) -> str:
+    pc_raw = mi_exec('-data-evaluate-expression "$pc"')
+    if pc_raw.startswith("Error"):
+        return pc_raw
+    addr = _extract_eval_hex_address(pc_raw)
+    if not addr:
+        return (
+            "Could not parse $pc from -data-evaluate-expression.\n"
+            + pc_raw
+        )
+    try:
+        start_i = int(addr, 16)
+    except ValueError:
+        return pc_raw
+    span = max(32, min(512, count * 16))
+    end_hex = hex(start_i + span)
+    dis = mi_exec(f"-data-disassemble -s {addr} -e {end_hex}")
+    return f"--- $pc eval ---\n{pc_raw}\n\n--- disassemble ---\n{dis}"
+
+
+def _mi_inspection_join(parts: list[str]) -> str:
+    return "\n\n".join(parts)
 
 
 def gdb_print_value(expression: str) -> str:
     if not expression:
         return "Error: expression required"
-    r = mi_run()
-    if "Error" in r:
-        return r
-    return gdb_run_command(f"print {expression}")
+    expr = expression.strip()
+    return mi_exec("-data-evaluate-expression " + _mi_quote_c_string(expr))
 
 
 def pwndbg_context() -> str:
-    r = mi_run()
-    if "Error" in r:
-        return r
-    return gdb_run_command("context")
+    return _mi_inspection_join(
+        [
+            "--- stack-list-frames ---",
+            mi_exec("-stack-list-frames"),
+            "--- data-list-register-values x ---",
+            mi_exec("-data-list-register-values x"),
+            _mi_disassemble_near_pc(8),
+        ]
+    )
 
 
 def pwndbg_vmmap() -> str:
-    r = mi_run()
-    if "Error" in r:
-        return r
-    return gdb_run_command("vmmap")
+    return mi_exec('-interpreter-exec console "info proc mappings"')
 
 
 def pwndbg_regs() -> str:
-    r = mi_run()
-    if "Error" in r:
-        return r
-    return gdb_run_command("regs")
+    return mi_exec("-data-list-register-values x")
 
 
 def pwndbg_nearpc(count: int = 10) -> str:
     if count <= 0:
         return "Error: count must be positive"
-    r = mi_run()
-    if "Error" in r:
-        return r
-    return gdb_run_command(f"nearpc {count}")
+    return _mi_disassemble_near_pc(count)
 
 
 def _web_search_executor(params: dict) -> str:
@@ -444,10 +633,13 @@ read_file_tool = IkaTools(
 
 start_mi_debug_session_tool = IkaTools(
     name="start_mi_debug_session",
-    description="Start a GDB/MI debug session for a JavaScript file. Launches d8 under GDB for breakpoint debugging.",
+    description=(
+        "GDB MI4 + d8: set args, load symbols. With V8_PATH set, applies set substitute-path (GDB_DWARF_SRC_PREFIX "
+        "default ../../src) and directory so file:line breakpoints work. Needs D8_PATH, pygdbmi."
+    ),
     parameters={
-        "js_path": {"type": "string", "description": "Path to the JS file to debug", "required": True},
-        "d8_args": {"type": "string", "description": "Optional d8 flags (e.g. --allow-natives-syntax)", "required": False},
+        "js_path": {"type": "string", "description": "Absolute .js path or resolvable generated file name", "required": True},
+        "d8_args": {"type": "string", "description": "Extra d8 CLI flags after defaults", "required": False},
     },
     parallel=False,
     limit_calls=2,
@@ -464,7 +656,9 @@ stop_mi_debug_session_tool = IkaTools(
 
 mi_exec_tool = IkaTools(
     name="mi_exec",
-    description="Execute a GDB Machine Interface (MI) command in the active debug session",
+    description=(
+        "GDB MI on active session. Use for stopped-state inspection; no implicit -exec-run unless you pass it."
+    ),
     parameters={"command": {"type": "string", "description": "MI command string", "required": True}},
     parallel=False,
     limit_calls=12,
@@ -509,7 +703,10 @@ mi_step_tool = IkaTools(
 
 gdb_run_command_tool = IkaTools(
     name="gdb_run_command",
-    description="Run a GDB or pwndbg command (e.g. info registers, context, vmmap, backtrace). Do NOT run shell commands (pip, apt, cd).",
+    description=(
+        "GDB console command (not shell). Prefer **mi_exec**, **gdb_print_value**, **pwndbg_*** for post-stop inspection "
+        "(MI-based, no implicit -exec-run). Use for gaps like **info breakpoints** or symbol-only **break**."
+    ),
     parameters={"command": {"type": "string", "description": "GDB/pwndbg command", "required": True}},
     parallel=False,
     limit_calls=12,
@@ -518,10 +715,18 @@ gdb_run_command_tool = IkaTools(
 
 gdb_set_breakpoint_tool = IkaTools(
     name="gdb_set_breakpoint",
-    description="Set a GDB breakpoint at a specific source file and line number",
+    description=(
+        "Source line breakpoint: rewrites absolute/relative paths under V8_PATH to ../../src/... for DWARF. "
+        "Requires V8_PATH + prior start_mi_debug_session (applies substitute-path). "
+        "Use gdb_run_command for symbol-only breaks."
+    ),
     parameters={
-        "source_file": {"type": "string", "description": "Path to source file", "required": True},
-        "line": {"type": "number", "description": "1-based line number", "required": True},
+        "source_file": {
+            "type": "string",
+            "description": "Absolute under V8_PATH, or relative to V8_PATH (d8/d8.cc), or DWARF path starting with ../",
+            "required": True,
+        },
+        "line": {"type": "number", "description": "GDB line number (debug info), not always editor line", "required": True},
     },
     parallel=False,
     limit_calls=6,
@@ -530,7 +735,7 @@ gdb_set_breakpoint_tool = IkaTools(
 
 gdb_print_value_tool = IkaTools(
     name="gdb_print_value",
-    description="Evaluate and print a variable or expression in GDB",
+    description="MI -data-evaluate-expression when stopped; does not restart the inferior",
     parameters={"expression": {"type": "string", "description": "Variable name or C expression", "required": True}},
     parallel=False,
     limit_calls=6,
@@ -539,7 +744,7 @@ gdb_print_value_tool = IkaTools(
 
 pwndbg_context_tool = IkaTools(
     name="pwndbg_context",
-    description="Display pwndbg context (registers, stack, disassembly around current instruction)",
+    description="MI stack-list-frames + register list + disassemble near $pc; safe when stopped, no restart",
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -548,7 +753,7 @@ pwndbg_context_tool = IkaTools(
 
 pwndbg_vmmap_tool = IkaTools(
     name="pwndbg_vmmap",
-    description="Display virtual memory map (mappings, permissions, addresses)",
+    description="MI -interpreter-exec console `info proc mappings`; safe when stopped, no restart",
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -557,7 +762,7 @@ pwndbg_vmmap_tool = IkaTools(
 
 pwndbg_regs_tool = IkaTools(
     name="pwndbg_regs",
-    description="Display CPU register values",
+    description="MI -data-list-register-values x when stopped; does not restart",
     parameters={"N/A": "N/A"},
     parallel=False,
     limit_calls=3,
@@ -566,7 +771,7 @@ pwndbg_regs_tool = IkaTools(
 
 pwndbg_nearpc_tool = IkaTools(
     name="pwndbg_nearpc",
-    description="Disassemble instructions near the program counter",
+    description="MI disassemble window from $pc when stopped; does not restart",
     parameters={"count": {"type": "number", "description": "Number of instructions to show before/after PC", "required": False}},
     parallel=False,
     limit_calls=4,

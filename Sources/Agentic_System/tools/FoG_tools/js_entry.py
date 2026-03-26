@@ -18,20 +18,25 @@ from ._shared import _load_regressions_once
 
 
 def _search_js_file_name_by_pattern_executor(params: dict) -> str:
-    pattern = params.get("pattern", "")
+    pattern = str(params.get("pattern", ""))
     if not pattern:
         return "Error: pattern parameter is required"
     data = _load_regressions_once()
-    found = [k for k in data.keys() if pattern.lower() in k.lower()]
+    found = [str(k) for k in data.keys() if pattern.lower() in str(k).lower()]
     return "\n".join(found) if found else "No results found"
 
 
 def _get_js_entry_data_by_name_executor(params: dict) -> str:
-    file_name = params.get("file_name", "")
+    file_name = str(params.get("file_name", ""))
     if not file_name:
         return "Error: file_name parameter is required"
     data = _load_regressions_once()
     entry = data.get(file_name)
+    if entry is None:
+        for key, value in data.items():
+            if str(key) == file_name:
+                entry = value
+                break
     return json.dumps(entry) if entry else f"No results found for {file_name}"
 
 

@@ -35,6 +35,24 @@ CREATE INDEX idx_program_contributors ON program USING GIN(contributors);  -- GI
 CREATE INDEX idx_program_parent ON program(parent_program_hash);
 CREATE INDEX idx_program_fuzzer_created ON program(fuzzer_id, created_at DESC);
 
+-- Per-fuzzer generated corpus inbox.
+-- Agent-generated seeds are queued here for a specific target fuzzer and removed
+-- after the fuzzer successfully pulls them into its in-memory runtime corpus.
+CREATE TABLE IF NOT EXISTS generated_program_queue (
+    target_fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
+    program_hash VARCHAR(64) NOT NULL,
+    program_base64 TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    source VARCHAR(32) DEFAULT 'agentic',
+    metadata JSONB,
+    PRIMARY KEY (target_fuzzer_id, program_hash)
+);
+
+CREATE INDEX idx_generated_program_queue_target_created
+    ON generated_program_queue(target_fuzzer_id, created_at ASC, program_hash ASC);
+CREATE INDEX idx_generated_program_queue_created
+    ON generated_program_queue(created_at DESC);
+
 -- Mutator type lookup table (must be created before mutator_stats references it)
 CREATE TABLE IF NOT EXISTS mutator_type (
     id SMALLINT PRIMARY KEY,

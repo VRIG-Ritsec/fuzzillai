@@ -9,8 +9,10 @@ from IkaCore.agents import IkaBaseAgent
 from pathlib import Path
 from tools.EBG_tools import (
     base64_program_to_js_tool,
+    db_get_crash_program_as_js_tool,
     db_query_tool,
     db_list_programs_tool,
+    db_resolve_fuzzer_id_tool,
     db_get_fuzzer_performance_summary_tool,
     db_list_fuzzers_tool,
     db_get_crash_diversity_tool,
@@ -68,12 +70,12 @@ import sys
 import os
 from typing import Optional
 
-MANAGER_MODEL = "deepseek/deepseek-v3.2"
-WORKER_MODEL = "deepseek/deepseek-v3.2"
+MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
+WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5-mini")
 TOKENS = 30000 # 10k max output in an given message
 
-if os.environ.get("FUZZILLI_PATH"):
-    FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH")
+FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH", str(Path(__file__).resolve().parents[3]))
+_AGENTIC_ROOT = Path(__file__).resolve().parents[1]
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -90,6 +92,7 @@ class EBG_Plateau(Agent):
             fuzzer_id = getattr(self, 'fuzzer_id', None)
         if fuzzer_id is None:
             return
+        checkpoint_kwargs = self.get_checkpoint_kwargs("ebg_plateau")
 
         root_manager_prompt = self.get_prompt("plateau_manager.txt")
         root_manager_prompt = root_manager_prompt.replace("[ENTER THE PLATEAUED FUZZER]", fuzzer_id)
@@ -124,6 +127,7 @@ class EBG_Plateau(Agent):
             maxsteps=50,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['validator'] = IkaBaseAgent(
@@ -167,11 +171,12 @@ class EBG_Plateau(Agent):
             maxsteps=30,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         db_prompt = self.get_prompt("db_analyzer.txt")
-        with open(FUZZILLI_PATH + "/postgres-init.sql", "r") as f:
-            db_prompt = db_prompt + "\n Here is the latest programs from the database: " + f.read()
+        with open(_AGENTIC_ROOT / "postgres-init.sql", "r") as f:
+            db_prompt = db_prompt + "\nHere is the current PostgreSQL schema/init SQL for reference:\n" + f.read()
 
         self.agents['db_analyzer'] = IkaBaseAgent(
             name="DBAnalyzer",
@@ -179,9 +184,11 @@ class EBG_Plateau(Agent):
             prompt=db_prompt,
             system_prompt="You are DBAnalyzer.",
             tools=[
+                db_get_crash_program_as_js_tool,
                 base64_program_to_js_tool,
                 db_query_tool,
                 db_list_programs_tool,
+                db_resolve_fuzzer_id_tool,
                 db_get_fuzzer_performance_summary_tool,
                 db_list_fuzzers_tool,
                 db_get_crash_diversity_tool,
@@ -198,11 +205,12 @@ class EBG_Plateau(Agent):
             maxsteps=30,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['debugger'] = IkaBaseAgent(
             name="Debugger",
-            description="L2 Worker responsible for debugging a crash",
+            description="L2 Worker responsible for plateau-focused V8 debugging and execution-state inspection",
             prompt=self.get_prompt("debugger.txt"),
             system_prompt="You are Debugger.",
             tools=[
@@ -234,11 +242,12 @@ class EBG_Plateau(Agent):
             maxsteps=30,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['JS_Generator'] = IkaBaseAgent(
             name="JSGenerator",
-            description="L1 Manager responsible for generating JavaScript program seeds from a crash PoC",
+            description="L1 Manager responsible for generating JavaScript program seeds to break a coverage plateau",
             prompt=self.get_prompt("JS_generator.txt"),
             system_prompt="You are JSGenerator.",
             tools=[
@@ -260,6 +269,7 @@ class EBG_Plateau(Agent):
             maxsteps=100,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['runtime_analyzer'] = IkaBaseAgent(
@@ -274,6 +284,7 @@ class EBG_Plateau(Agent):
                 trace_v8_analysis_tool,
                 get_program_js_from_hash_tool,
                 read_from_generate_folder_tool,
+                write_to_generate_folder_tool,
                 list_generate_folder_tool,
                 search_v8_source_rag_tool,
                 search_v8_source_rag_hybrid_tool,
@@ -282,9 +293,10 @@ class EBG_Plateau(Agent):
             model_id=manager_model,
             api_key=self.api_key,
             subagents=[self.agents['v8_search'], self.agents['db_analyzer'], self.agents['debugger']],
-            maxsteps=30,
+            maxsteps=60,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         root_managed = [self.agents['runtime_analyzer'], self.agents['JS_Generator'], self.agents['v8_search']]
@@ -298,9 +310,10 @@ class EBG_Plateau(Agent):
             model_id=manager_model,
             api_key=self.api_key,
             subagents=root_managed,
-            maxsteps=30,
+            maxsteps=60,
             max_tokens=TOKENS,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
     def get_prompt(self, prompt_name: str) -> str:
@@ -311,9 +324,10 @@ class EBG_Plateau(Agent):
         result = self.run_task(
             task_description="Initialize EBG Plateau orchestration for runtime analysis and seed verification",
             context={
-                "RuntimeAnalyzer": "Analyze program runtime, coverage, and execution state",
-                "CorpusValidator": "Validate corpus quality and integrity",
-                "DBAnalyzer": "Analyze PostgreSQL database for execution information"
+                "RuntimeAnalyzer": "Analyze program runtime, coverage, and execution state (delegates V8Search, DBAnalyzer, Debugger)",
+                "JSGenerator": "Generate and validate JS seeds (delegates Validator)",
+                "V8Search": "Locate exact V8 source locations for target code paths",
+                "DBAnalyzer": "Retrieve PostgreSQL corpus and execution data for the plateaued fuzzer",
             }
         )
         print("EBG Plateau start result:")
@@ -330,17 +344,22 @@ def main():
     anthropic_key = get_anthropic_api_key()
     deepseek_key = get_deepseek_api_key()
 
+    if not openai_key:
+        raise RuntimeError("EBG Plateau now requires OPENAI_API_KEY for gpt-5-mini/gpt-5.4 execution")
+
+    os.environ["OPENAI_API_KEY"] = openai_key
     if deepseek_key:
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
 
-    system = EBG_Plateau(model=None, api_key=deepseek_key, anthropic_api_key=anthropic_key, fuzzer_id="fuzzer-1")
+    system = EBG_Plateau(model=None, api_key=openai_key, anthropic_api_key=anthropic_key, fuzzer_id="fuzzer-1")
 
     result = system.run_task(
         task_description="Verify and test JavaScript program seeds",
         context={
             "RuntimeAnalyzer": "Analyze program execution and coverage",
-            "CorpusValidator": "Validate corpus quality and integrity",
-            "DBAnalyzer": "Analyze database for execution information"
+            "JSGenerator": "Generate and validate JS seeds",
+            "V8Search": "Search V8 source for code locations",
+            "DBAnalyzer": "Analyze database for execution information",
         }
     )
 

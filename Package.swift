@@ -64,9 +64,7 @@ let package = Package(
                     "Protobuf/gen_programproto.py"],
                 resources: [
                     .copy("Protobuf/ast.proto"),
-                    .copy("Compiler/Parser/parser.js"),
-                    .copy("Compiler/Parser/package.json"),
-                    .copy("Compiler/Parser/README.md")]),
+                    .copy("Compiler/Parser")]),
 
         .executableTarget(name: "REPRLRun",
                 dependencies: ["libreprl"]),

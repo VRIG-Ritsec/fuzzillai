@@ -33,15 +33,11 @@ from tools.FoG_tools import (
     swift_tree_tool,
     swift_ripgrep_tool,
     swift_read_file_tool,
-    write_program_template_tool,
+    edit_program_template_file_tool,
     list_program_templates_tool,
-    remove_program_template_tool,
-    remove_program_template_weight_tool,
-    edit_template_by_diff_tool,
     compile_program_template_tool,
     execute_javascript_program_tool,
     list_d8_flags_tool,
-    remove_old_javascript_programs_tool,
 )
 from tools.RAG_tools import (
     search_knowledge_base_tool,
@@ -62,6 +58,7 @@ from tools._shared import (
     get_call_graph_node_tool,
 )
 from tools.FoG_tools import get_v8_path
+from tools.FoG_tools._shared import _init_session
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 
 import sys
@@ -69,14 +66,19 @@ import os
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+WORKER_MODEL = os.environ.get("FOG_WORKER_MODEL", "gpt-5.4-mini")
+MANAGER_MODEL = os.environ.get("FOG_MANAGER_MODEL", "gpt-5.4")
+
 class Father(Agent):
 
     def setup_agents(self):
-        self.agents['george_foreman'] = IkaBaseAgent(
-            name="GeorgeForeman",
-            description="L2 Worker responsible for validating program templates built by the program builder",
-            prompt=self.get_prompt("george_foreman.txt"),
-            system_prompt="You are GeorgeForeman.",
+        _init_session()
+        checkpoint_kwargs = self.get_checkpoint_kwargs("fog")
+        self.agents['static_verfication'] = IkaBaseAgent(
+            name="static_verfication",
+            description="L2 Worker responsible for static verification of program templates produced by ProgramBuilder",
+            prompt=self.get_prompt("static_verfication.txt"),
+            system_prompt="You are static_verfication, the static verification worker.",
             tools=[
                 get_all_template_names_from_json_tool,
                 get_template_from_json_by_name_tool,
@@ -97,12 +99,14 @@ class Father(Agent):
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=WORKER_MODEL,
             api_key=self.api_key,
+            step_timeout=9000,
             maxsteps=20,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
-        self.agents['george_foreman']._base_prompt = self.get_prompt("george_foreman.txt")
+        self.agents['static_verfication']._base_prompt = self.get_prompt("static_verfication.txt")
 
         self.agents['compiler'] = IkaBaseAgent(
             name="Compiler",
@@ -114,21 +118,19 @@ class Father(Agent):
                 swift_tree_tool,
                 swift_ripgrep_tool,
                 swift_read_file_tool,
-                write_program_template_tool,
-                edit_template_by_diff_tool,
-                remove_program_template_tool,
-                remove_program_template_weight_tool,
+                edit_program_template_file_tool,
                 compile_program_template_tool,
                 execute_javascript_program_tool,
                 list_program_templates_tool,
                 web_search_tool,
-                remove_old_javascript_programs_tool,
                 list_d8_flags_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=WORKER_MODEL,
             api_key=self.api_key,
+            step_timeout=9000,
             maxsteps=100,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['compiler']._base_prompt = self.get_prompt("compiler.txt")
 
@@ -150,10 +152,11 @@ class Father(Agent):
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=20,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['reviewer_of_code']._base_prompt = self.get_prompt("reviewer_of_code.txt")
 
@@ -179,10 +182,11 @@ class Father(Agent):
                 find_functions_by_fully_qualified_name_tool,
                 get_call_graph_node_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=50,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['v8_search']._base_prompt = v8_txt
 
@@ -207,11 +211,12 @@ class Father(Agent):
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=MANAGER_MODEL,
             api_key=self.api_key,
             subagents=[self.agents['reviewer_of_code'], self.agents['v8_search']],
             maxsteps=15,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['code_analyzer']._base_prompt = self.get_prompt("code_analyzer.txt")
 
@@ -232,11 +237,13 @@ class Father(Agent):
                 similar_template_swift_tool,
                 similar_template_fuzzil_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=MANAGER_MODEL,
             api_key=self.api_key,
-            subagents=[self.agents['george_foreman'], self.agents['compiler']],
+            subagents=[self.agents['static_verfication'], self.agents['compiler']],
             maxsteps=30,
+            step_timeout=9000,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['program_builder']._base_prompt = self.get_prompt("program_builder.txt")
 
@@ -257,18 +264,19 @@ class Father(Agent):
                 list_program_templates_tool,
                 list_d8_flags_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=MANAGER_MODEL,
             api_key=self.api_key,
             maxsteps=30,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
         self.agents['pick_section']._base_prompt = self.get_prompt("pick_section.txt")
 
-        self.agents['father_of_george'] = IkaBaseAgent(
-            name="FatherOfGeorge",
+        self.agents['root_manager'] = IkaBaseAgent(
+            name="RootManager",
             description="L0 Manager responsible for orchestrating code analysis and program building operations",
             prompt=self.get_prompt("root_manager.txt"),
-            system_prompt="You are FatherOfGeorge, the root manager.",
+            system_prompt="You are RootManager, the top-level orchestration manager.",
             tools=[
                 search_knowledge_base_tool,
                 search_knowledge_base_hybrid_tool,
@@ -280,27 +288,29 @@ class Father(Agent):
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],
-            model_id="deepseek-chat",
+            model_id=MANAGER_MODEL,
             api_key=self.api_key,
             subagents=[self.agents['code_analyzer'], self.agents['program_builder'], self.agents['pick_section']],
             maxsteps=30,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
-        self.agents['father_of_george']._base_prompt = self.get_prompt("root_manager.txt")
+        self.agents['root_manager']._base_prompt = self.get_prompt("root_manager.txt")
 
     def get_prompt(self, prompt_name: str) -> str:
         with open(Path(__file__).parent.parent / "prompts" / "FoG-prompts" / prompt_name, 'r') as f:
             return f.read()
 
-    def start_system(self):
+    def start_system(self, checkpoint_uid=None):
         result = self.run_task(
             task_description="Initialize Root Manager orchestration",
             context={
                 "PickSection": "Select a promising V8 code region to analyze",
-                "FatherOfGeorge": "Primary orchestrator of the system, coordinates between analysis and program generation",
+                "RootManager": "Primary orchestrator of the system, coordinates between analysis and program generation",
                 "CodeAnalyzer": "Analyze V8 code and knowledge bases to guide the program template building",
                 "ProgramBuilder": "Generate Fuzzilli program templates for fuzzing a specific code region"
-            }
+            },
+            checkpoint_uid=checkpoint_uid,
         )
         print("FoG start result:")
         print(f"Completed: {result['completed']}")
@@ -316,10 +326,15 @@ def main():
     anthropic_key = get_anthropic_api_key()
     deepseek_key = get_deepseek_api_key()
 
+    if not openai_key:
+        raise RuntimeError("FoG now requires OPENAI_API_KEY for gpt-5-mini/gpt-5.4 execution")
+
     if deepseek_key:
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
+    if openai_key:
+        os.environ["OPENAI_API_KEY"] = openai_key
 
-    system = Father(model=None, api_key=deepseek_key, anthropic_api_key=anthropic_key)
+    system = Father(model=None, api_key=openai_key, anthropic_api_key=anthropic_key)
 
     result = system.run_task(
         task_description="Initialize corpus generation for V8 fuzzing",

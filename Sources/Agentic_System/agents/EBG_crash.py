@@ -19,6 +19,7 @@ from agents.BaseAgent import Agent
 from IkaCore.agents import IkaBaseAgent
 from tools.EBG_tools import (
     base64_program_to_js_tool,
+    db_get_crash_program_as_js_tool,
     db_query_tool,
     db_list_programs_tool,
     db_get_fuzzer_performance_summary_tool,
@@ -76,10 +77,10 @@ import argparse
 import logging
 import pytz
 
-# Default to OpenAI, keep DeepSeek/OpenRouter available via env overrides.
-MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-4o")
-WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-4o-mini")
-API_URL = os.environ.get("EBG_API_URL", "https://api.openai.com/v1/chat/completions")
+# Default to OpenAI GPT-5 models. IkaCore routes these through the Responses API.
+MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
+WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5-mini")
+API_URL = os.environ.get("EBG_API_URL", "https://api.openai.com/v1/responses")
 
 
 logger = logging.getLogger("boiled_eggs")
@@ -87,12 +88,12 @@ if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = False
 logger.disabled = True
-est_timezone = pytz.timezone('US/Eastern')
+est_timezone = pytz.timezone("America/New_York")
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-if os.environ.get("FUZZILLI_PATH"):
-    FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH")
+FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH", str(Path(__file__).resolve().parents[3]))
+_AGENTIC_ROOT = Path(__file__).resolve().parents[1]
 
 class EBG_Crash(Agent):
 
@@ -114,6 +115,7 @@ class EBG_Crash(Agent):
             crash_program_hash = getattr(self, 'crash_program_hash', None)
         if crash_program_hash is None:
             crash_program_hash = "Manual File System Scanning"
+        checkpoint_kwargs = self.get_checkpoint_kwargs("ebg_crash")
 
         root_manager_prompt = self.get_prompt("variant_manager.txt")
         root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", crash_program_hash)
@@ -146,10 +148,11 @@ class EBG_Crash(Agent):
             maxsteps=50,
             step_timeout=300,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         db_prompt = self.get_prompt("db_analyzer.txt")
-        with open(FUZZILLI_PATH + "/Sources/Agentic_System/postgres-init.sql", "r") as f:
+        with open(_AGENTIC_ROOT / "postgres-init.sql", "r") as f:
             db_prompt = db_prompt + "\n Here is the latest programs from the database: " + f.read()
 
         self.agents['db_analyzer'] = IkaBaseAgent(
@@ -158,6 +161,7 @@ class EBG_Crash(Agent):
             prompt=db_prompt,
             system_prompt="You are DBAnalyzer.",
             tools=[
+                db_get_crash_program_as_js_tool,
                 base64_program_to_js_tool,
                 db_query_tool,
                 db_list_programs_tool,
@@ -179,6 +183,7 @@ class EBG_Crash(Agent):
             step_timeout=300,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['debugger'] = IkaBaseAgent(
@@ -215,6 +220,7 @@ class EBG_Crash(Agent):
             step_timeout=180,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['JS_Generator'] = IkaBaseAgent(
@@ -229,6 +235,7 @@ class EBG_Crash(Agent):
             step_timeout=180,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['runtime_analyzer'] = IkaBaseAgent(
@@ -251,6 +258,7 @@ class EBG_Crash(Agent):
             step_timeout=420,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         self.agents['variant_analysis'] = IkaBaseAgent(
@@ -273,6 +281,7 @@ class EBG_Crash(Agent):
             step_timeout=300,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
         root_managed = [self.agents['runtime_analyzer'], self.agents['variant_analysis']]
@@ -290,6 +299,7 @@ class EBG_Crash(Agent):
             step_timeout=600,
             api_url=API_URL,
             logging_level=self.logging_level,
+            **checkpoint_kwargs,
         )
 
     def get_prompt(self, prompt_name: str) -> str:
@@ -397,9 +407,12 @@ def main():
         os.environ["OPENROUTER_API_KEY"] = openrouter_key
         os.environ["OPENROUTER_API_URL"] = "https://openrouter.ai/api/v1/chat/completions"
 
+    if not openai_key:
+        raise RuntimeError("EBG Crash now requires OPENAI_API_KEY for gpt-5-mini/gpt-5.4 execution")
+
     system = EBG_Crash(
         model=None,
-        api_key=openai_key or deepseek_key or openrouter_key,
+        api_key=openai_key,
         anthropic_api_key=anthropic_key,
         crash_program_hash=args.crash_program_hash,
     )

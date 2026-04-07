@@ -882,6 +882,7 @@ public actor PostgresSQLStorage {
         }
 
         return try await databasePool.withConnection { connection in
+            try await self.ensureGeneratedQueueSchema(connection: connection)
             try await connection.query("BEGIN", logger: self.logger)
 
             do {
@@ -935,6 +936,35 @@ public actor PostgresSQLStorage {
                 throw PostgresSQLStorageError.queryFailed("Generated program dequeue failed: \(error)")
             }
         }
+    }
+
+    private func ensureGeneratedQueueSchema(connection: PostgresConnection) async throws {
+        let createTableQuery = PostgresQuery(stringLiteral: """
+            CREATE TABLE IF NOT EXISTS generated_program_queue (
+                queue_id BIGSERIAL PRIMARY KEY,
+                target_fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
+                program_hash VARCHAR(64) NOT NULL,
+                program_base64 TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'agentic',
+                metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE (target_fuzzer_id, program_hash)
+            )
+        """)
+
+        let createIdxTargetCreated = PostgresQuery(stringLiteral: """
+            CREATE INDEX IF NOT EXISTS idx_generated_queue_target_created
+            ON generated_program_queue(target_fuzzer_id, created_at ASC)
+        """)
+
+        let createIdxHash = PostgresQuery(stringLiteral: """
+            CREATE INDEX IF NOT EXISTS idx_generated_queue_hash
+            ON generated_program_queue(program_hash)
+        """)
+
+        try await connection.query(createTableQuery, logger: self.logger)
+        try await connection.query(createIdxTargetCreated, logger: self.logger)
+        try await connection.query(createIdxHash, logger: self.logger)
     }
 
     public func refreshMaterializedViews() async throws {

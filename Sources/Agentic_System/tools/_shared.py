@@ -69,7 +69,7 @@ def _error_process(args, message: str, returncode: int = 127):
     return subprocess.CompletedProcess(args=args, returncode=returncode, stdout="", stderr=message)
 
 
-def run_process(args: list[str], timeout: int = 90, cwd: str | None = None):
+def run_process(args: list[str], timeout: int = 90, cwd: str | None = None, env: dict | None = None):
     if not args:
         return _error_process(args, "Error: no command provided")
     try:
@@ -79,6 +79,7 @@ def run_process(args: list[str], timeout: int = 90, cwd: str | None = None):
             text=True,
             timeout=timeout,
             cwd=cwd,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return _error_process(args, f"Command timed out after {timeout} seconds: {' '.join(args)}", returncode=-1)
@@ -251,11 +252,11 @@ def run_d8(js_path: str, flags: list[str] | None = None, timeout: int = 90):
     return run_d8_command([*(flags or []), resolved_js_path], timeout=timeout)
 
 
-def run_fuzzilli_tool(extra_args: list[str], timeout: int = 90, cwd: str | None = None):
+def run_fuzzilli_tool(extra_args: list[str], timeout: int = 90, cwd: str | None = None, env: dict | None = None):
     err = _check_fuzzilli_tool_bin()
     if err:
         return _error_process([FUZZILLI_TOOL_BIN, *extra_args], err)
-    return run_process([FUZZILLI_TOOL_BIN, *extra_args], timeout=timeout, cwd=cwd)
+    return run_process([FUZZILLI_TOOL_BIN, *extra_args], timeout=timeout, cwd=cwd, env=env)
 
 
 def _format_mi_responses(resp):

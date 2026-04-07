@@ -35,6 +35,10 @@ public class CovEdgeSet: ProgramAspects {
         return numEdges //+ (hasFeedbackNexusDelta ? 1 : 0) + (hasOptimizationDelta ? 1 : 0)
     }
 
+    public override var hasCoverageNovelty: Bool {
+        return true
+    }
+
     public override var description: String {
         var desc = "new coverage: \(numEdges) newly discovered edge\(numEdges > 1 ? "s" : "") in the CFG of the target"
         if hasFeedbackNexusDelta {

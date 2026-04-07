@@ -194,26 +194,38 @@ function parse(script, proto) {
                     let key = visitMemberKey(method);
                     field.method = make('ClassMethod', { key, isStatic, parameters, body });
                 } else if (method.kind === 'get') {
-                    assert(!method.computed, 'Expected method.computed to be false');
-                    assert(method.key.type === 'Identifier', "Expected method.key.type to be exactly 'Identifier'");
                     assert(method.params.length === 0, "Expected method.params.length to be exactly 0");
                     assert(!method.generator && !method.async, "Expected both conditions to hold: !method.generator and !method.async");
                     assert(method.body.type === 'BlockStatement', "Expected method.body.type to be exactly 'BlockStatement'");
 
-                    let body = visitBody(method.body);
-                    const name = method.key.name;
-                    field.getter = make('ClassGetter', { name, isStatic, body });
+                    if (method.computed) {
+                        let parameters = visitParameters(method.params);
+                        let body = visitBody(method.body);
+                        let key = visitMemberKey(method);
+                        field.method = make('ClassMethod', { key, isStatic, parameters, body });
+                    } else {
+                        assert(method.key.type === 'Identifier', "Expected method.key.type to be exactly 'Identifier'");
+                        let body = visitBody(method.body);
+                        const name = method.key.name;
+                        field.getter = make('ClassGetter', { name, isStatic, body });
+                    }
                 } else if (method.kind === 'set') {
-                    assert(!method.computed, 'Expected method.computed to be false');
-                    assert(method.key.type === 'Identifier', "Expected method.key.type to be exactly 'Identifier'");
                     assert(method.params.length === 1, "Expected method.params.length to be exactly 1");
                     assert(!method.generator && !method.async, "Expected both conditions to hold: !method.generator and !method.async");
                     assert(method.body.type === 'BlockStatement', "Expected method.body.type to be exactly 'BlockStatement'");
 
-                    let parameter = visitParameter(method.params[0]);
-                    let body = visitBody(method.body);
-                    const name = method.key.name;
-                    field.setter = make('ClassSetter', { name, isStatic, parameter, body });
+                    if (method.computed) {
+                        let parameters = visitParameters(method.params);
+                        let body = visitBody(method.body);
+                        let key = visitMemberKey(method);
+                        field.method = make('ClassMethod', { key, isStatic, parameters, body });
+                    } else {
+                        assert(method.key.type === 'Identifier', "Expected method.key.type to be exactly 'Identifier'");
+                        let parameter = visitParameter(method.params[0]);
+                        let body = visitBody(method.body);
+                        const name = method.key.name;
+                        field.setter = make('ClassSetter', { name, isStatic, parameter, body });
+                    }
                 } else {
                     throw "Unknown method kind: " + method.kind;
                 }

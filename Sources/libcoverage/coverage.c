@@ -314,35 +314,46 @@ void cov_reset_state(struct cov_context* context) {
     // context->maglev_optimization_bits_previous = 0;
 }
 
+// Preferred normalized states produced by src/fuzzilli/cov.cc.
+#define FEEDBACK_IC_MONOMORPHIC 1u
+#define FEEDBACK_IC_POLYMORPHIC 2u
+
+// Backward-compatible raw InlineCacheState values used by older producers
+// (v8::internal::InlineCacheState in src/common/globals.h).
+#define LEGACY_IC_STATE_MONOMORPHIC 2u
+#define LEGACY_IC_STATE_POLYMORPHIC 4u
+
+static uint32_t cov_feedback_nexus_weighted_score(const struct feedback_nexus_set* nexus_set) {
+    if (!nexus_set || !nexus_set->nexus_data) {
+        return 0;
+    }
+
+    uint32_t mono_count = 0;
+    uint32_t poly_count = 0;
+    uint32_t capped_count = nexus_set->count > MAX_FEEDBACK_NEXUS ? MAX_FEEDBACK_NEXUS : nexus_set->count;
+
+    for (uint32_t i = 0; i < capped_count; i++) {
+        uint32_t state = nexus_set->nexus_data[i].ic_state;
+        if (state == FEEDBACK_IC_MONOMORPHIC || state == LEGACY_IC_STATE_MONOMORPHIC) {
+            mono_count++;
+        } else if (state == FEEDBACK_IC_POLYMORPHIC || state == LEGACY_IC_STATE_POLYMORPHIC) {
+            poly_count++;
+        }
+    }
+
+    // Weight monomorphic feedback higher than polymorphic feedback.
+    return (2u * mono_count) + poly_count;
+}
+
 int cov_evaluate_feedback_nexus(struct cov_context* context) {
     if (!context->current_feedback_nexus || !context->previous_feedback_nexus) {
         return 0;
     }
-    
-    // printf("Current->count: %d\n", context->current_feedback_nexus->count);
-    // printf("Previous->count: %d\n", context->previous_feedback_nexus->count);
 
-    if (context->current_feedback_nexus->count != context->previous_feedback_nexus->count &&
-        context->current_feedback_nexus->count != 0) {
-        return 1; // delta in # of feedback nexus
-    }
-    
-    // check for delta in feedback nexus data
-    for (uint32_t i = 0; i < context->current_feedback_nexus->count; i++) {
-        struct feedback_nexus_data* current = &context->current_feedback_nexus->nexus_data[i];
-        struct feedback_nexus_data* previous = &context->previous_feedback_nexus->nexus_data[i];
-
-        //printf("Current->vector_address: %u\n", current->vector_address);
-        //printf("Previous->vector_address: %u\n", previous->vector_address);
-        //printf("Current->ic_state: %u\n", current->ic_state);
-        //printf("Previous->ic_state: %u\n", previous->ic_state);
-
-        if (current->vector_address != previous->vector_address ||
-            current->ic_state != previous->ic_state) {
-            return 1;
-        }
-    }
-    return 0;
+    // Positive-only signal: interesting when weighted quality improves.
+    uint32_t current_score = cov_feedback_nexus_weighted_score(context->current_feedback_nexus);
+    uint32_t previous_score = cov_feedback_nexus_weighted_score(context->previous_feedback_nexus);
+    return current_score > previous_score ? 1 : 0;
 }
 
 uint32_t cov_get_feedback_nexus_count(struct cov_context* context) {
@@ -377,13 +388,12 @@ void clear_feedback_nexus(struct cov_context* context) {
 
 int cov_evaluate_optimization_bits(struct cov_context* context) {
     if (!context->shmem) return 0;
-    uint8_t delta = 0;
-    // Only check for a delta if current is not 0 and previous is "something"
-    // Otherwise if previous is 0, then there is no delta anyway
-    if (context->turbofan_optimization_bits_current != 0)
-        // Look for positive delta
-        delta = (uint8_t)(context->turbofan_optimization_bits_current > context->turbofan_optimization_bits_previous);
-    return delta;
+
+    // Positive-only signal based on number of active optimization bits.
+    // This avoids treating arbitrary bitmap numeric ordering as progress.
+    uint32_t current_count = (uint32_t)__builtin_popcountll(context->turbofan_optimization_bits_current);
+    uint32_t previous_count = (uint32_t)__builtin_popcountll(context->turbofan_optimization_bits_previous);
+    return current_count > previous_count ? 1 : 0;
 }
 
 void cov_update_optimization_bits(struct cov_context* context) {

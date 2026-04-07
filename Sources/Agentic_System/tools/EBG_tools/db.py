@@ -6,6 +6,7 @@ import re
 import tempfile
 import psycopg2
 import psycopg2.extras
+from pathlib import Path
 
 import tools._shared as shared_tools
 from IkaCore.tools import IkaTools
@@ -29,6 +30,50 @@ from ._shared import (
 
 _AGENTIC_JS_MUTATOR = "AgenticJSSeed"
 _AGENTIC_JS_CONTRIBUTOR = "EBGGeneratedJS"
+
+
+def _ensure_generated_program_queue_table(conn) -> None:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS generated_program_queue (
+            queue_id BIGSERIAL PRIMARY KEY,
+            target_fuzzer_id BIGINT NOT NULL,
+            program_hash VARCHAR(64) NOT NULL,
+            program_base64 TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'agentic',
+            metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (target_fuzzer_id, program_hash)
+        )
+        """
+    )
+    conn.commit()
+
+
+def _build_fuzzilli_compile_env() -> dict | None:
+    env = os.environ.copy()
+    candidates = []
+
+    # Prefer an explicit FUZZILLI_PATH if provided by runtime env.
+    fuzzilli_root = os.getenv("FUZZILLI_PATH", "").strip()
+    if fuzzilli_root:
+        candidates.append(Path(fuzzilli_root) / "Sources" / "Fuzzilli" / "Compiler" / "Parser" / "node_modules")
+
+    # Fallback to this repo layout: <repo>/Sources/Fuzzilli/Compiler/Parser/node_modules
+    repo_root = Path(__file__).resolve().parents[4]
+    candidates.append(repo_root / "Sources" / "Fuzzilli" / "Compiler" / "Parser" / "node_modules")
+
+    for node_modules_path in candidates:
+        if node_modules_path.exists():
+            existing = env.get("NODE_PATH", "").strip()
+            if existing:
+                env["NODE_PATH"] = f"{node_modules_path}:{existing}"
+            else:
+                env["NODE_PATH"] = str(node_modules_path)
+            return env
+
+    return None
 
 
 def _looks_like_javascript_text(decoded: bytes) -> bool:
@@ -69,7 +114,8 @@ def _compile_js_to_fuzzil_bytes(js_program: str) -> tuple[bytes | None, str | No
         with open(js_path, "w", encoding="utf-8") as f:
             f.write(js_program)
 
-        result = shared_tools.run_fuzzilli_tool(["--compile", js_path], timeout=120)
+        compile_env = _build_fuzzilli_compile_env()
+        result = shared_tools.run_fuzzilli_tool(["--compile", js_path], timeout=120, env=compile_env)
         if result.returncode != 0:
             return None, shared_tools.get_output(result)
 
@@ -599,6 +645,7 @@ def db_store_generated_program(js_program: str, fuzzer_id: int) -> str:
             user=POSTGRES_USER,
             password=POSTGRES_PASSWORD
         )
+        _ensure_generated_program_queue_table(conn)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         insert_query = """
             INSERT INTO generated_program_queue (target_fuzzer_id, program_hash, program_base64, source, metadata)

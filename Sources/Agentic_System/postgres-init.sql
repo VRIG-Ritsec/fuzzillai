@@ -35,6 +35,23 @@ CREATE INDEX idx_program_contributors ON program USING GIN(contributors);  -- GI
 CREATE INDEX idx_program_parent ON program(parent_program_hash);
 CREATE INDEX idx_program_fuzzer_created ON program(fuzzer_id, created_at DESC);
 
+-- Generated seed inbox for per-fuzzer pull sync.
+-- Agent-generated JS seeds are compiled to FuzzIL and enqueued here, then
+-- consumed atomically by the target fuzzer via PostgreSQLSync.dequeueGeneratedPrograms.
+CREATE TABLE IF NOT EXISTS generated_program_queue (
+    queue_id BIGSERIAL PRIMARY KEY,
+    target_fuzzer_id INT NOT NULL REFERENCES main(fuzzer_id) ON DELETE CASCADE,
+    program_hash VARCHAR(64) NOT NULL,
+    program_base64 TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'agentic',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (target_fuzzer_id, program_hash)
+);
+
+CREATE INDEX idx_generated_queue_target_created ON generated_program_queue(target_fuzzer_id, created_at ASC);
+CREATE INDEX idx_generated_queue_hash ON generated_program_queue(program_hash);
+
 -- Mutator type lookup table (must be created before mutator_stats references it)
 CREATE TABLE IF NOT EXISTS mutator_type (
     id SMALLINT PRIMARY KEY,

@@ -35,8 +35,24 @@ public class ProgramAspects: CustomStringConvertible {
         return desc
     }
 
+    /// Whether this sample discovered new coverage-backed novelty.
+    public var hasCoverageNovelty: Bool {
+        return false
+    }
+
+    /// The number of heuristic signals this execution triggered.
+    public var heuristicSignalCount: UInt32 {
+        return UInt32((hasFeedbackNexusDelta ? 1 : 0) + (hasOptimizationDelta ? 1 : 0))
+    }
+
     // The total number of aspects
     public var count: UInt32 {
-        return hasFeedbackNexusDelta ? 1 : 0
+        return heuristicSignalCount
+    }
+
+    /// Whether this sample is interesting only because of the custom heuristics,
+    /// without any accompanying coverage-backed novelty.
+    public var isHeuristicOnly: Bool {
+        return !hasCoverageNovelty && heuristicSignalCount > 0
     }
 }

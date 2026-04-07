@@ -779,7 +779,9 @@ public class Fuzzer {
             }
         }
 
-        if !origin.requiresMinimization() {
+        let shouldBypassMinimization = origin == .local && aspects.isHeuristicOnly
+
+        if !origin.requiresMinimization() || shouldBypassMinimization {
             finishProcessing(program)
         } else {
             // Minimization should be performed as part of the fuzzing dispatch group. This way, the next fuzzing iteration

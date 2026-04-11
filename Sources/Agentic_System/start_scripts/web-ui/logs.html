@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Logs &middot; Fuzzilli</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    .log-shell {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 14px;
+      min-height: calc(100vh - 220px);
+    }
+    .log-list {
+      overflow: auto;
+      max-height: calc(100vh - 220px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+    }
+    .log-search {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 10px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .log-search input { width: 100%; }
+    .log-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      display: block;
+    }
+    .log-item:hover { background: var(--accent-soft); }
+    .log-item.active {
+      background: var(--accent-soft);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .log-item .name { font-weight: 600; font-size: 13px; }
+    .log-item .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .log-view {
+      min-height: 480px;
+      max-height: calc(100vh - 220px);
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #050507;
+      padding: 14px;
+    }
+    .log-view-inner {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text);
+    }
+
+    /* IkaCore BoxRenderer.cli_output + logging_utils ANSI mappings */
+    .ika-bold { font-weight: 700; }
+    .ika-init { color: #facc15; }
+    .ika-tool-call { color: #4ade80; }
+    .ika-tool-result { color: #f87171; }
+    .ika-agent-response { color: #60a5fa; }
+    .ika-summarization { color: #e879f9; }
+    .ika-cyan { color: #22d3ee; }
+    .ika-orange256 { color: #fb923c; }
+    .ika-xterm256 { color: #cbd5e1; }
+
+    @media (max-width: 960px) {
+      .log-shell { grid-template-columns: 1fr; }
+      .log-list { max-height: 240px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <h1>AI <span class="accent">Logs</span></h1>
+        <p>IkaCore-style ANSI colors for agent init, tool calls, results, responses, and summarization.</p>
+      </div>
+      <div class="toolbar">
+        <nav class="nav" aria-label="Primary">{{NAV}}</nav>
+        <button type="button" class="btn btn--primary" id="refreshBtn">
+          <span aria-hidden="true">&#8635;</span> Refresh list
+        </button>
+        <label class="toggle">
+          <input type="checkbox" id="autoToggle" checked>
+          Auto refresh
+        </label>
+      </div>
+    </header>
+
+    <div id="messages" aria-live="polite"></div>
+
+    <section class="card">
+      <div class="section-title">
+        <h2>Log files</h2>
+        <div class="toolbar">
+          <select id="logLines" disabled>
+            <option value="200">200 lines (tail)</option>
+            <option value="500" selected>500 lines (tail)</option>
+            <option value="1000">1000 lines (tail)</option>
+            <option value="2000">2000 lines (tail)</option>
+            <option value="0">Entire file</option>
+          </select>
+          <button type="button" id="reloadContent" class="btn">Reload content</button>
+        </div>
+      </div>
+      <div class="log-shell">
+        <div class="log-list">
+          <div class="log-search">
+            <input type="search" id="logFilter" placeholder="Filter log files…">
+          </div>
+          <div id="logItems"></div>
+        </div>
+        <div class="log-view">
+          <pre class="log-view-inner" id="logContent">Choose a log from the list. Content loads only after you select one.</pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = { auto: true, selectedLog: null, timer: null, logs: [] };
+
+    const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    function escapeHtml(v) {
+      return String(v ?? "").replace(/[&<>"']/g, ch => ESC_MAP[ch]);
+    }
+
+    function processSgr(seq, push, closeAll) {
+      if (seq === "") { closeAll(); return; }
+      const rawParts = seq.split(";");
+      const nums = [];
+      for (const p of rawParts) {
+        if (p === "") nums.push(0);
+        else {
+          const v = parseInt(p, 10);
+          if (!Number.isNaN(v)) nums.push(v);
+        }
+      }
+      let i = 0;
+      while (i < nums.length) {
+        const n = nums[i];
+        if (n === 0) { closeAll(); i++; }
+        else if (n === 1) { push("ika-bold"); i++; }
+        else if (n === 38 && nums[i + 1] === 5 && i + 2 < nums.length) {
+          const c256 = nums[i + 2];
+          if (c256 === 208) push("ika-orange256");
+          else push("ika-xterm256");
+          i += 3;
+        } else if (n === 22 || n === 39 || n === 49) { i++; }
+        else if (n === 93 || n === 33) { push("ika-init"); i++; }
+        else if (n === 92 || n === 32) { push("ika-tool-call"); i++; }
+        else if (n === 91 || n === 31) { push("ika-tool-result"); i++; }
+        else if (n === 94 || n === 34) { push("ika-agent-response"); i++; }
+        else if (n === 95 || n === 35) { push("ika-summarization"); i++; }
+        else if (n === 96) { push("ika-cyan"); i++; }
+        else { i++; }
+      }
+    }
+
+    function ansiToHtml(source) {
+      if (!source) return "";
+      const stack = [];
+      let out = "";
+      const closeAll = () => { while (stack.length) { out += "</span>"; stack.pop(); } };
+      const push = (cls) => { out += `<span class="${cls}">`; stack.push(cls); };
+      let i = 0;
+      while (i < source.length) {
+        const c0 = source.charCodeAt(i);
+        if (c0 === 0x1b && source[i + 1] === "[") {
+          const end = source.indexOf("m", i + 2);
+          if (end === -1) { out += escapeHtml(source[i]); i++; continue; }
+          const seq = source.slice(i + 2, end);
+          processSgr(seq, push, closeAll);
+          i = end + 1;
+          continue;
+        }
+        let j = i;
+        while (j < source.length) {
+          const c = source.charCodeAt(j);
+          if (c === 0x1b && source[j + 1] === "[") break;
+          j++;
+        }
+        out += escapeHtml(source.slice(i, j));
+        i = j;
+      }
+      closeAll();
+      return out;
+    }
+
+    async function fetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+      return data;
+    }
+
+    function showMessage(message, isError = false) {
+      const box = document.getElementById("messages");
+      box.innerHTML = `
+        <div class="alert${isError ? " alert--error" : ""}">
+          <span class="alert__icon">${isError ? "!" : "i"}</span>
+          <div class="alert__body">
+            <div class="alert__title">${isError ? "Error" : "Status"}</div>
+            <div>${escapeHtml(message)}</div>
+          </div>
+          <button type="button" class="alert__close" aria-label="Dismiss">&times;</button>
+        </div>`;
+      box.querySelector(".alert__close").addEventListener("click", hideMessage);
+    }
+
+    function hideMessage() {
+      document.getElementById("messages").innerHTML = "";
+    }
+
+    function updateLogListSelection() {
+      document.querySelectorAll("#logItems [data-log-id]").forEach(btn => {
+        const on = state.selectedLog && btn.dataset.logId === state.selectedLog;
+        btn.classList.toggle("active", on);
+      });
+    }
+
+    function renderLogItems(logs) {
+      const container = document.getElementById("logItems");
+      container.innerHTML = logs.map(item => `
+        <button type="button" class="log-item" data-log-id="${item.id}">
+          <div class="name">${escapeHtml(item.label)}</div>
+          <div class="meta">${escapeHtml(item.modified_at)} &middot; ${item.size} bytes</div>
+        </button>`).join("") || '<div class="empty">No logs match.</div>';
+      container.querySelectorAll("[data-log-id]").forEach(btn => {
+        btn.addEventListener("click", () => loadLogContent(btn.dataset.logId));
+      });
+      updateLogListSelection();
+    }
+
+    function applyFilter() {
+      const term = document.getElementById("logFilter").value.trim().toLowerCase();
+      if (!term) { renderLogItems(state.logs); return; }
+      const filtered = state.logs.filter(l => l.label.toLowerCase().includes(term));
+      renderLogItems(filtered);
+    }
+
+    async function loadLogList() {
+      const data = await fetchJSON("/api/logs");
+      state.logs = data.logs || [];
+      applyFilter();
+      return state.logs;
+    }
+
+    async function loadLogContent(logId) {
+      state.selectedLog = logId;
+      const el = document.getElementById("logContent");
+      const linesSel = document.getElementById("logLines");
+      linesSel.disabled = false;
+      el.innerHTML = '<span class="muted"><span class="spinner"></span> Loading…</span>';
+      const lines = linesSel.value;
+      const data = await fetchJSON(`/api/logs/content?id=${encodeURIComponent(logId)}&lines=${lines}`);
+      el.innerHTML = ansiToHtml(data.content || "");
+      updateLogListSelection();
+    }
+
+    function readIdFromQuery() {
+      return new URLSearchParams(window.location.search).get("id") || null;
+    }
+
+    async function init() {
+      try {
+        hideMessage();
+        const logs = await loadLogList();
+        const fromUrl = readIdFromQuery();
+        const pick = fromUrl && logs.some(l => l.id === fromUrl) ? fromUrl : null;
+        if (pick) {
+          await loadLogContent(pick);
+        } else {
+          state.selectedLog = null;
+          document.getElementById("logLines").disabled = true;
+          document.getElementById("logContent").textContent =
+            "Choose a log from the list. Content loads only after you select one.";
+        }
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", async () => {
+      try { hideMessage(); await loadLogList(); }
+      catch (err) { showMessage(err.message, true); }
+    });
+    document.getElementById("reloadContent").addEventListener("click", () => {
+      if (state.selectedLog) loadLogContent(state.selectedLog);
+    });
+    document.getElementById("logLines").addEventListener("change", () => {
+      if (state.selectedLog) loadLogContent(state.selectedLog);
+    });
+    document.getElementById("autoToggle").addEventListener("change", (e) => {
+      state.auto = e.target.checked;
+    });
+    document.getElementById("logFilter").addEventListener("input", applyFilter);
+
+    init();
+    state.timer = setInterval(() => {
+      if (!state.auto) return;
+      if (state.selectedLog) loadLogContent(state.selectedLog).catch(() => {});
+    }, 12000);
+  </script>
+</body>
+</html>

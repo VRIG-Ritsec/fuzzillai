@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corpus &middot; Fuzzilli</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .filters label { color: var(--muted); font-size: 12px; }
+    .filters input { width: 120px; }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+    }
+    .pager .page-info { color: var(--muted); font-size: 12px; min-width: 140px; text-align: right; }
+
+    .mono-cell { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      max-height: 160px;
+      overflow: auto;
+      white-space: pre-wrap;
+      padding: 10px 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    #jsView {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      max-height: min(70vh, 900px);
+      overflow: auto;
+      background: #050507;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    /* Syntax highlight colors for /assets/highlight.js */
+    .tok-keyword  { color: #fb923c; font-weight: 600; }
+    .tok-literal  { color: #fbbf24; }
+    .tok-builtin  { color: #facc15; }
+    .tok-function { color: #f59e0b; }
+    .tok-string   { color: #a3e635; }
+    .tok-regex    { color: #f472b6; }
+    .tok-number   { color: #38bdf8; }
+    .tok-comment  { color: #64748b; font-style: italic; }
+    .tok-punct    { color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <h1>Corpus <span class="accent">Programs</span></h1>
+        <p>Programs from the PostgreSQL <code>program</code> table (Fuzzilli corpus), lifted to JavaScript.</p>
+      </div>
+      <div class="toolbar">
+        <nav class="nav" aria-label="Primary">{{NAV}}</nav>
+        <button type="button" class="btn btn--primary" id="reloadBtn">
+          <span aria-hidden="true">&#8635;</span> Reload list
+        </button>
+      </div>
+    </header>
+
+    <div id="messages" aria-live="polite"></div>
+
+    <section class="card">
+      <div class="filters">
+        <label for="fuzzerFilter">Fuzzer</label>
+        <input id="fuzzerFilter" type="text" inputmode="numeric" placeholder="e.g. 4" style="width:100px">
+        <label for="limitInput">Per page</label>
+        <select id="limitInput">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+        <button type="button" id="applyBtn" class="btn">Apply</button>
+        <div class="pager">
+          <button type="button" id="prevBtn" class="btn">&larr; Prev</button>
+          <span class="page-info" id="pageInfo">–</span>
+          <button type="button" id="nextBtn" class="btn">Next &rarr;</button>
+        </div>
+      </div>
+      <div style="overflow:auto; max-height:360px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Program hash</th>
+              <th>Fuzzer</th>
+              <th>Inserted</th>
+              <th>Created</th>
+              <th>Parent hash</th>
+            </tr>
+          </thead>
+          <tbody id="progBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">
+        <h2>JavaScript</h2>
+        <span class="muted">Lifted with syntax highlighting</span>
+      </div>
+      <div id="detailMeta" class="meta">Select a row to load the lifted program.</div>
+      <pre id="jsView"></pre>
+    </section>
+  </div>
+
+  <script src="/assets/highlight.js"></script>
+  <script>
+    const state = { selectedHash: null, offset: 0, lastCount: 0 };
+
+    const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    function escapeHtml(v) {
+      return String(v ?? "").replace(/[&<>"']/g, ch => ESC_MAP[ch]);
+    }
+
+    async function fetchJSON(url) {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+      return data;
+    }
+
+    function showMessage(message, isError = false) {
+      const box = document.getElementById("messages");
+      box.innerHTML = `
+        <div class="alert${isError ? " alert--error" : ""}">
+          <span class="alert__icon">${isError ? "!" : "i"}</span>
+          <div class="alert__body">
+            <div class="alert__title">${isError ? "Error" : "Status"}</div>
+            <div>${escapeHtml(message)}</div>
+          </div>
+          <button type="button" class="alert__close" aria-label="Dismiss">&times;</button>
+        </div>`;
+      box.querySelector(".alert__close").addEventListener("click", hideMessage);
+    }
+
+    function hideMessage() {
+      document.getElementById("messages").innerHTML = "";
+    }
+
+    function currentLimit() {
+      return Math.max(1, parseInt(document.getElementById("limitInput").value, 10) || 50);
+    }
+
+    function buildListUrl() {
+      const fuzz = document.getElementById("fuzzerFilter").value.trim();
+      const q = new URLSearchParams();
+      q.set("limit", String(currentLimit()));
+      q.set("offset", String(state.offset));
+      if (fuzz) q.set("fuzzer_id", fuzz);
+      return `/api/corpus-programs?${q.toString()}`;
+    }
+
+    function updateRowHighlight() {
+      document.querySelectorAll("#progBody tr[data-hash]").forEach(row => {
+        row.classList.toggle("active", state.selectedHash && row.dataset.hash === state.selectedHash);
+      });
+    }
+
+    function updatePager() {
+      const limit = currentLimit();
+      const start = state.lastCount === 0 ? 0 : state.offset + 1;
+      const end = state.offset + state.lastCount;
+      document.getElementById("pageInfo").textContent = state.lastCount === 0
+        ? "No results"
+        : `showing ${start}\u2013${end}`;
+      document.getElementById("prevBtn").disabled = state.offset <= 0;
+      document.getElementById("nextBtn").disabled = state.lastCount < limit;
+    }
+
+    async function loadList() {
+      const data = await fetchJSON(buildListUrl());
+      const rows = data.programs || [];
+      state.lastCount = rows.length;
+      const body = document.getElementById("progBody");
+      body.innerHTML = rows.map(p => `
+        <tr class="clickable" data-hash="${p.program_hash}">
+          <td class="mono-cell">${escapeHtml(p.program_hash)}</td>
+          <td>${p.fuzzer_id}</td>
+          <td class="muted">${escapeHtml(p.inserted_at)}</td>
+          <td class="muted">${escapeHtml(p.created_at)}</td>
+          <td class="mono-cell">${p.parent_program_hash ? escapeHtml(p.parent_program_hash) : '<span class="muted">—</span>'}</td>
+        </tr>`).join("") || '<tr><td colspan="5"><div class="empty">No programs in corpus.</div></td></tr>';
+      body.querySelectorAll("tr[data-hash]").forEach(row => {
+        row.addEventListener("click", () => loadDetail(row.dataset.hash));
+      });
+      updateRowHighlight();
+      updatePager();
+      return rows;
+    }
+
+    async function loadDetail(programHash) {
+      state.selectedHash = programHash;
+      const view = document.getElementById("jsView");
+      const meta = document.getElementById("detailMeta");
+      view.innerHTML = '<span class="muted"><span class="spinner"></span> Loading…</span>';
+      meta.textContent = `hash=${programHash} (loading…)`;
+      const data = await fetchJSON(`/api/corpus-programs/${encodeURIComponent(programHash)}`);
+      const sm = data.source_mutators != null ? JSON.stringify(data.source_mutators) : "";
+      const ct = data.contributors != null ? JSON.stringify(data.contributors) : "";
+      meta.textContent = [
+        `hash=${data.program_hash}`,
+        `fuzzer_id=${data.fuzzer_id}`,
+        `inserted_at=${data.inserted_at}`,
+        `created_at=${data.created_at}`,
+        `parent_program_hash=${data.parent_program_hash || ""}`,
+        "",
+        `source_mutators=${sm}`,
+        `contributors=${ct}`,
+      ].join("\n");
+      const code = data.javascript_code || "";
+      view.innerHTML = window.HL ? window.HL.highlight(code) : escapeHtml(code);
+      updateRowHighlight();
+    }
+
+    function readHashFromQuery() {
+      const q = new URLSearchParams(window.location.search).get("hash");
+      return q && /^[a-fA-F0-9]{64}$/.test(q) ? q : null;
+    }
+
+    async function refreshList() {
+      try {
+        hideMessage();
+        await loadList();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    async function init() {
+      try {
+        hideMessage();
+        state.selectedHash = null;
+        state.offset = 0;
+        document.getElementById("jsView").textContent = "";
+        document.getElementById("detailMeta").textContent = "Select a row to load the lifted program.";
+        await loadList();
+        const fromUrl = readHashFromQuery();
+        if (fromUrl) await loadDetail(fromUrl);
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    document.getElementById("reloadBtn").addEventListener("click", init);
+    document.getElementById("applyBtn").addEventListener("click", () => {
+      state.offset = 0;
+      refreshList();
+    });
+    document.getElementById("prevBtn").addEventListener("click", () => {
+      state.offset = Math.max(0, state.offset - currentLimit());
+      refreshList();
+    });
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      state.offset += currentLimit();
+      refreshList();
+    });
+    document.getElementById("limitInput").addEventListener("change", () => {
+      state.offset = 0;
+      refreshList();
+    });
+    document.getElementById("fuzzerFilter").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        state.offset = 0;
+        refreshList();
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

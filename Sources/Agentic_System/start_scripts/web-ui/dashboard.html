@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fuzzilli Control Panel</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    /* Dashboard-specific layout on top of app.css */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+    .card.summary-card { grid-column: span 12; padding: 16px; }
+    .fuzzers { grid-column: span 7; }
+    .detail  { grid-column: span 5; }
+    .triggers { grid-column: span 12; }
+    .queue    { grid-column: span 12; }
+
+    .triggers__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .trigger-form {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+    }
+    .trigger-form strong { font-size: 13px; color: var(--muted-strong); letter-spacing: 0.02em; }
+    .trigger-form__row { display: flex; gap: 8px; }
+    .trigger-form__row input { flex: 1 1 auto; }
+
+    .stats-bar { margin-top: 12px; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px; }
+    .stats-bar span strong { color: var(--text); font-weight: 600; }
+
+    @media (max-width: 1180px) {
+      .fuzzers, .detail, .triggers, .queue { grid-column: span 12; }
+      .triggers__grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <h1>Fuzzilli <span class="accent">Control Panel</span></h1>
+        <p>Forward server status, fuzzer telemetry, generated queue, AI logs, and trigger controls.</p>
+      </div>
+      <div class="toolbar">
+        <nav class="nav" aria-label="Primary">{{NAV}}</nav>
+        <button type="button" class="btn btn--primary" id="refreshBtn">
+          <span class="refresh-icon" aria-hidden="true">&#8635;</span> Refresh
+        </button>
+        <label class="toggle">
+          <input type="checkbox" id="autoToggle" checked>
+          Auto refresh
+        </label>
+      </div>
+    </header>
+
+    <div id="messages" aria-live="polite"></div>
+
+    <div class="grid">
+      <section class="card summary-card">
+        <div class="section-title">
+          <h2>Overview</h2>
+          <span class="muted" id="overviewMeta"></span>
+        </div>
+        <div class="summary" id="summaryCards"></div>
+      </section>
+
+      <section class="card fuzzers">
+        <div class="section-title">
+          <h2>Fuzzers</h2>
+          <span class="muted">Click a row for detail</span>
+        </div>
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Status</th>
+                <th>Coverage</th>
+                <th>Execs</th>
+                <th>Crashes</th>
+                <th>Queued</th>
+                <th>Last activity</th>
+              </tr>
+            </thead>
+            <tbody id="fuzzersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card detail">
+        <div class="section-title">
+          <h2 id="detailTitle">Fuzzer detail</h2>
+          <span id="detailMeta" class="muted"></span>
+        </div>
+        <div class="chart-wrap">
+          <canvas class="chart" id="coverageChart"></canvas>
+        </div>
+        <div id="chartMeta" class="muted" style="margin-bottom:12px;">Coverage chart will load with the selected fuzzer.</div>
+        <div id="detailStats" class="muted" style="margin-bottom:12px;">Select a fuzzer to load details.</div>
+        <div style="overflow:auto; max-height:420px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Outcome</th>
+                <th>Coverage</th>
+                <th>New edges</th>
+                <th>New coverage</th>
+                <th>Program</th>
+              </tr>
+            </thead>
+            <tbody id="detailExecs"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card triggers">
+        <div class="section-title">
+          <h2>Manual triggers</h2>
+          <span class="muted">Dispatch plateau or crash agents on demand</span>
+        </div>
+        <div class="triggers__grid">
+          <form class="trigger-form" id="plateauForm">
+            <strong>Plateau agent</strong>
+            <div class="trigger-form__row">
+              <input name="fuzzer_id" placeholder="Fuzzer ID, e.g. 3" required>
+              <button type="submit" class="btn btn--primary">Dispatch</button>
+            </div>
+          </form>
+          <form class="trigger-form" id="crashForm">
+            <strong>Crash agent</strong>
+            <div class="trigger-form__row">
+              <input name="fuzzer_id" placeholder="Fuzzer ID" required style="max-width:140px">
+              <input name="program_hash" placeholder="Crash program hash" required>
+              <button type="submit" class="btn btn--warn">Dispatch</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="card queue">
+        <div class="section-title">
+          <h2>Generated queue &amp; recent crashes</h2>
+          <span class="muted">Newest items first</span>
+        </div>
+        <div style="overflow:auto; max-height:520px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Fuzzer</th>
+                <th>Program</th>
+                <th>Created</th>
+                <th>Meta</th>
+              </tr>
+            </thead>
+            <tbody id="queueBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="/assets/chart.umd.js"></script>
+  <script>
+    const state = { auto: true, selectedFuzzer: null, timer: null };
+    let coverageChart = null;
+
+    const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    function escapeHtml(v) {
+      return String(v ?? "").replace(/[&<>"']/g, ch => ESC_MAP[ch]);
+    }
+
+    async function fetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+      return data;
+    }
+
+    function showMessage(message, isError = false) {
+      const box = document.getElementById("messages");
+      box.innerHTML = `
+        <div class="alert${isError ? " alert--error" : ""}">
+          <span class="alert__icon">${isError ? "!" : "i"}</span>
+          <div class="alert__body">
+            <div class="alert__title">${isError ? "Error" : "Status"}</div>
+            <div>${escapeHtml(message)}</div>
+          </div>
+          <button type="button" class="alert__close" aria-label="Dismiss">&times;</button>
+        </div>`;
+      box.querySelector(".alert__close").addEventListener("click", hideMessage);
+    }
+
+    function hideMessage() {
+      document.getElementById("messages").innerHTML = "";
+    }
+
+    function renderSummary(overview) {
+      const s = overview.summary || {};
+      const ms = overview.monitor_status || {};
+      const cards = [
+        ["Total fuzzers", s.total_fuzzers ?? 0],
+        ["Active fuzzers", s.active_fuzzers ?? 0],
+        ["Queued seeds", s.queued_programs ?? 0],
+        ["Queued targets", s.queued_fuzzers ?? 0],
+        ["Crashes 24h", s.crashes_last_24h ?? 0],
+        ["New edges 24h", s.new_edges_last_24h ?? 0],
+      ];
+      document.getElementById("summaryCards").innerHTML = cards
+        .map(([k, v]) => `<div class="stat"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div></div>`)
+        .join("");
+      const autoAgents = ms.auto_dispatch_agents === false ? "off (manual only)" : "on";
+      document.getElementById("overviewMeta").innerHTML = `
+        Monitor: <strong style="color:var(--text)">${ms.running ? "Running" : "Stopped"}</strong>
+        &middot; Auto agents: ${escapeHtml(autoAgents)}
+        &middot; Last poll: ${escapeHtml(ms.last_poll || "never")}
+        &middot; Latest exec: ${escapeHtml(s.latest_execution_at || "n/a")}`;
+    }
+
+    function renderFuzzers(overview) {
+      const rows = (overview.fuzzers || []).map(f => `
+        <tr class="clickable" data-fuzzer-id="${f.fuzzer_id}">
+          <td><strong>${f.fuzzer_id}</strong></td>
+          <td><span class="pill">${escapeHtml(f.status)}</span></td>
+          <td>${Number(f.max_coverage || 0).toFixed(2)}</td>
+          <td>${f.total_executions || 0}</td>
+          <td>${f.total_crashes || 0}</td>
+          <td>${f.queued_programs || 0}</td>
+          <td class="muted">${escapeHtml(f.last_activity || "n/a")}</td>
+        </tr>`).join("");
+      const body = document.getElementById("fuzzersBody");
+      body.innerHTML = rows || '<tr><td colspan="7"><div class="empty">No fuzzers available.</div></td></tr>';
+      body.querySelectorAll("tr[data-fuzzer-id]").forEach(row => {
+        row.addEventListener("click", () => loadFuzzer(row.dataset.fuzzerId));
+      });
+    }
+
+    function renderQueue(overview) {
+      const crashRows = (overview.recent_crashes || []).map(item => `
+        <tr>
+          <td><span class="pill pill--danger">Crash</span></td>
+          <td>${item.fuzzer_id}</td>
+          <td class="mono">${escapeHtml(item.program_hash)}</td>
+          <td class="muted">${escapeHtml(item.created_at)}</td>
+          <td class="muted">coverage=${item.coverage_total ?? "n/a"} edges=${item.edges_found ?? "n/a"}</td>
+        </tr>`);
+      const queueRows = (overview.generated_queue || []).map(item => `
+        <tr>
+          <td><span class="pill pill--muted">Queue</span></td>
+          <td>${item.target_fuzzer_id}</td>
+          <td class="mono">${escapeHtml(item.program_hash)}</td>
+          <td class="muted">${escapeHtml(item.created_at)}</td>
+          <td><pre>${escapeHtml(JSON.stringify(item.metadata || {}, null, 2))}</pre></td>
+        </tr>`);
+      const all = crashRows.concat(queueRows).join("");
+      document.getElementById("queueBody").innerHTML =
+        all || '<tr><td colspan="5"><div class="empty">No recent crashes or queued programs.</div></td></tr>';
+    }
+
+    function toCoverageSeries(data) {
+      const recentExecutions = (data.recent_executions || [])
+        .map(item => ({ label: item.created_at || "", value: Number(item.coverage_total) }))
+        .filter(item => Number.isFinite(item.value))
+        .reverse()
+        .slice(-40);
+
+      if (recentExecutions.length >= 2) {
+        return { label: `Recent execution coverage (${recentExecutions.length} samples)`, points: recentExecutions };
+      }
+
+      const progression = (data.coverage || [])
+        .map(item => ({ label: item.time_bucket || "", value: Number(item.max_coverage) }))
+        .filter(item => Number.isFinite(item.value));
+      return { label: `Coverage progression (${progression.length} buckets)`, points: progression };
+    }
+
+    function renderCoverageChart(data) {
+      const canvas = document.getElementById("coverageChart");
+      const chartMeta = document.getElementById("chartMeta");
+      const series = toCoverageSeries(data);
+      const points = series.points;
+      if (coverageChart) { coverageChart.destroy(); coverageChart = null; }
+      if (!points.length) {
+        chartMeta.textContent = "No numeric coverage data available.";
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+
+      const vals = points.map(p => p.value);
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const last = vals[vals.length - 1];
+      chartMeta.textContent = `${series.label}. Range ${min.toFixed(2)} to ${max.toFixed(2)}. Latest ${last.toFixed(2)}.`;
+      const ctx = canvas.getContext("2d");
+      coverageChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: points.map(p => p.label),
+          datasets: [{
+            label: "Coverage",
+            data: vals,
+            borderColor: "#fb923c",
+            backgroundColor: "rgba(251, 146, 60, 0.18)",
+            pointBackgroundColor: "#f5f5f5",
+            pointBorderColor: "#fb923c",
+            pointRadius: vals.length > 20 ? 1.5 : 2.5,
+            pointHoverRadius: 4,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.22,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title(items) { return items[0]?.label || ""; },
+                label(item) { return `Coverage: ${Number(item.raw).toFixed(2)}`; },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: "#9ca3af",
+                maxTicksLimit: 6,
+                callback(value) {
+                  const label = this.getLabelForValue(value);
+                  if (!label) return "";
+                  if (series.label.startsWith("Recent execution")) return String(label).slice(11, 16);
+                  return String(label).slice(5, 16);
+                },
+              },
+              grid: { color: "rgba(148, 163, 184, 0.08)" },
+            },
+            y: {
+              suggestedMin: Math.max(0, min - 0.1),
+              suggestedMax: max + 0.1,
+              ticks: { color: "#9ca3af", callback(value) { return Number(value).toFixed(2); } },
+              grid: { color: "rgba(148, 163, 184, 0.1)" },
+            },
+          },
+        },
+      });
+    }
+
+    function renderFuzzerDetail(data, fuzzerId) {
+      const d = data.details || {};
+      state.selectedFuzzer = fuzzerId;
+      document.getElementById("detailTitle").textContent = `Fuzzer ${fuzzerId}`;
+      document.getElementById("detailMeta").textContent = `status=${d.status || "unknown"} queued=${d.queued_programs || 0}`;
+      document.getElementById("detailStats").innerHTML = `started=${escapeHtml(d.fuzzer_started || "n/a")} | last activity=${escapeHtml(d.last_activity || "n/a")} | coverage=${Number(d.max_coverage || 0).toFixed(2)} | execs=${d.total_executions || 0} | crashes=${d.total_crashes || 0}`;
+      renderCoverageChart(data);
+      document.getElementById("detailExecs").innerHTML = (data.recent_executions || []).map(x => `
+        <tr>
+          <td class="muted">${escapeHtml(x.created_at)}</td>
+          <td>${escapeHtml(x.outcome)}</td>
+          <td>${x.coverage_total ?? "n/a"}</td>
+          <td>${x.edges_found ?? "n/a"}</td>
+          <td>${x.is_new_edge ? "yes" : "no"}</td>
+          <td class="mono">${escapeHtml(x.program_hash)}</td>
+        </tr>`).join("") || '<tr><td colspan="6"><div class="empty">No execution data.</div></td></tr>';
+    }
+
+    async function loadOverview() {
+      const overview = await fetchJSON("/api/overview");
+      if (overview.error) throw new Error(overview.error);
+      renderSummary(overview);
+      renderFuzzers(overview);
+      renderQueue(overview);
+      if (!state.selectedFuzzer && overview.fuzzers && overview.fuzzers.length) {
+        loadFuzzer(overview.fuzzers[0].fuzzer_id);
+      }
+    }
+
+    async function loadFuzzer(fuzzerId) {
+      const data = await fetchJSON(`/api/fuzzer/${fuzzerId}`);
+      renderFuzzerDetail(data, fuzzerId);
+    }
+
+    async function triggerAction(url, payload) {
+      const data = await fetchJSON(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      showMessage(data.status || "Action dispatched.");
+      await refreshAll();
+    }
+
+    async function refreshAll() {
+      const btn = document.getElementById("refreshBtn");
+      btn.disabled = true;
+      btn.classList.add("is-loading");
+      try {
+        hideMessage();
+        await loadOverview();
+      } catch (err) {
+        showMessage(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove("is-loading");
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", refreshAll);
+    document.getElementById("autoToggle").addEventListener("change", (e) => {
+      state.auto = e.target.checked;
+    });
+    document.getElementById("plateauForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      await triggerAction("/trigger/plateau", { fuzzer_id: Number(form.get("fuzzer_id")) });
+    });
+    document.getElementById("crashForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      await triggerAction("/trigger/crash", {
+        fuzzer_id: Number(form.get("fuzzer_id")),
+        program_hash: String(form.get("program_hash")),
+      });
+    });
+
+    refreshAll();
+    state.timer = setInterval(() => { if (state.auto) refreshAll(); }, 15000);
+  </script>
+</body>
+</html>

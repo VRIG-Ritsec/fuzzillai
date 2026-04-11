@@ -16,7 +16,7 @@ import Foundation
 
 let Seconds = 1.0
 let Minutes = 60.0 * Seconds
-let Hours   = 60.0 * Minutes
+let Hours = 60.0 * Minutes
 
 /// API to schedule tasks to run after a specified interval and possibly repeatedly on the DispatchQueue of the associated fuzzer instance.
 public class Timers {
@@ -47,7 +47,9 @@ public class Timers {
     ///   - interval: The interval (in seconds) between two executions of the task.
     ///   - repetitions: The total number of executions of the task.
     ///   - task: The task to execute.
-    public func scheduleTask(every interval: TimeInterval, repeat repetitions: Int, _ task: @escaping () -> Void) {
+    public func scheduleTask(
+        every interval: TimeInterval, repeat repetitions: Int, _ task: @escaping () -> Void
+    ) {
         guard repetitions > 0 else {
             return
         }

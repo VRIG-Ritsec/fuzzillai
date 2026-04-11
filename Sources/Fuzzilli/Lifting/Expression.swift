@@ -84,9 +84,10 @@ public struct Expression: CustomStringConvertible {
     }
 
     func extended(by part: String) -> Expression {
-        return Expression(type: type,
-                          text: text + part,
-                          numSubexpressions: numSubexpressions)
+        return Expression(
+            type: type,
+            text: text + part,
+            numSubexpressions: numSubexpressions)
     }
 
     func extended(by part: Expression) -> Expression {
@@ -96,20 +97,21 @@ public struct Expression: CustomStringConvertible {
         } else {
             newText = text + part.text
         }
-        return Expression(type: type,
-                          text: newText,
-                          numSubexpressions: numSubexpressions + 1)
+        return Expression(
+            type: type,
+            text: newText,
+            numSubexpressions: numSubexpressions + 1)
     }
 
-    static func +(lhs: Expression, rhs: Expression) -> Expression {
+    static func + (lhs: Expression, rhs: Expression) -> Expression {
         return lhs.extended(by: rhs)
     }
 
-    static func +(lhs: Expression, rhs: String) -> Expression {
+    static func + (lhs: Expression, rhs: String) -> Expression {
         return lhs.extended(by: rhs)
     }
 
-    static func +(lhs: Expression, rhs: Int64) -> Expression {
+    static func + (lhs: Expression, rhs: Int64) -> Expression {
         return lhs.extended(by: String(rhs))
     }
 }

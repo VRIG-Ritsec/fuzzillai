@@ -153,6 +153,8 @@ public struct Compiler_Protobuf_AST: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var leadingComments: String = String()
+
   public var statements: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -201,17 +203,17 @@ public struct Compiler_Protobuf_VariableDeclarator: @unchecked Sendable {
   // methods supported on all messages.
 
   public var name: String {
-    get {return _storage._name}
+    get {_storage._name}
     set {_uniqueStorage()._name = newValue}
   }
 
   /// The value is optional
   public var value: Compiler_Protobuf_Expression {
-    get {return _storage._value ?? Compiler_Protobuf_Expression()}
+    get {_storage._value ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._value = newValue}
   }
   /// Returns true if `value` has been explicitly set.
-  public var hasValue: Bool {return _storage._value != nil}
+  public var hasValue: Bool {_storage._value != nil}
   /// Clears the value of `value`. Subsequent reads from it will return its default value.
   public mutating func clearValue() {_uniqueStorage()._value = nil}
 
@@ -250,6 +252,20 @@ public struct Compiler_Protobuf_DisposableVariableDeclaration: Sendable {
   public init() {}
 }
 
+public struct Compiler_Protobuf_Parameters: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var parameters: [Compiler_Protobuf_Parameter] = []
+
+  public var hasRestElement_p: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public struct Compiler_Protobuf_FunctionDeclaration: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -259,13 +275,22 @@ public struct Compiler_Protobuf_FunctionDeclaration: Sendable {
 
   public var type: Compiler_Protobuf_FunctionType = .plain
 
-  public var parameters: [Compiler_Protobuf_Parameter] = []
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_parameters ?? Compiler_Protobuf_Parameters()}
+    set {_parameters = newValue}
+  }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {self._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {self._parameters = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _parameters: Compiler_Protobuf_Parameters? = nil
 }
 
 public struct Compiler_Protobuf_PropertyKey: Sendable {
@@ -323,11 +348,11 @@ public struct Compiler_Protobuf_ClassProperty: Sendable {
   // methods supported on all messages.
 
   public var key: Compiler_Protobuf_PropertyKey {
-    get {return _key ?? Compiler_Protobuf_PropertyKey()}
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
     set {_key = newValue}
   }
   /// Returns true if `key` has been explicitly set.
-  public var hasKey: Bool {return self._key != nil}
+  public var hasKey: Bool {self._key != nil}
   /// Clears the value of `key`. Subsequent reads from it will return its default value.
   public mutating func clearKey() {self._key = nil}
 
@@ -335,11 +360,11 @@ public struct Compiler_Protobuf_ClassProperty: Sendable {
 
   /// The value is optional
   public var value: Compiler_Protobuf_Expression {
-    get {return _value ?? Compiler_Protobuf_Expression()}
+    get {_value ?? Compiler_Protobuf_Expression()}
     set {_value = newValue}
   }
   /// Returns true if `value` has been explicitly set.
-  public var hasValue: Bool {return self._value != nil}
+  public var hasValue: Bool {self._value != nil}
   /// Clears the value of `value`. Subsequent reads from it will return its default value.
   public mutating func clearValue() {self._value = nil}
 
@@ -356,13 +381,22 @@ public struct Compiler_Protobuf_ClassConstructor: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var parameters: [Compiler_Protobuf_Parameter] = []
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_parameters ?? Compiler_Protobuf_Parameters()}
+    set {_parameters = newValue}
+  }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {self._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {self._parameters = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _parameters: Compiler_Protobuf_Parameters? = nil
 }
 
 public struct Compiler_Protobuf_ClassMethod: Sendable {
@@ -371,17 +405,50 @@ public struct Compiler_Protobuf_ClassMethod: Sendable {
   // methods supported on all messages.
 
   public var key: Compiler_Protobuf_PropertyKey {
-    get {return _key ?? Compiler_Protobuf_PropertyKey()}
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
     set {_key = newValue}
   }
   /// Returns true if `key` has been explicitly set.
-  public var hasKey: Bool {return self._key != nil}
+  public var hasKey: Bool {self._key != nil}
   /// Clears the value of `key`. Subsequent reads from it will return its default value.
   public mutating func clearKey() {self._key = nil}
 
   public var isStatic: Bool = false
 
-  public var parameters: [Compiler_Protobuf_Parameter] = []
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_parameters ?? Compiler_Protobuf_Parameters()}
+    set {_parameters = newValue}
+  }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {self._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {self._parameters = nil}
+
+  public var body: [Compiler_Protobuf_Statement] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
+  fileprivate var _parameters: Compiler_Protobuf_Parameters? = nil
+}
+
+public struct Compiler_Protobuf_ClassGetter: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
+  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
+
+  public var isStatic: Bool = false
 
   public var body: [Compiler_Protobuf_Statement] = []
 
@@ -392,37 +459,28 @@ public struct Compiler_Protobuf_ClassMethod: Sendable {
   fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
 }
 
-public struct Compiler_Protobuf_ClassGetter: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var name: String = String()
-
-  public var isStatic: Bool = false
-
-  public var body: [Compiler_Protobuf_Statement] = []
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
 public struct Compiler_Protobuf_ClassSetter: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var name: String = String()
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
+  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
 
   public var isStatic: Bool = false
 
   public var parameter: Compiler_Protobuf_Parameter {
-    get {return _parameter ?? Compiler_Protobuf_Parameter()}
+    get {_parameter ?? Compiler_Protobuf_Parameter()}
     set {_parameter = newValue}
   }
   /// Returns true if `parameter` has been explicitly set.
-  public var hasParameter: Bool {return self._parameter != nil}
+  public var hasParameter: Bool {self._parameter != nil}
   /// Clears the value of `parameter`. Subsequent reads from it will return its default value.
   public mutating func clearParameter() {self._parameter = nil}
 
@@ -432,6 +490,7 @@ public struct Compiler_Protobuf_ClassSetter: Sendable {
 
   public init() {}
 
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
   fileprivate var _parameter: Compiler_Protobuf_Parameter? = nil
 }
 
@@ -523,22 +582,22 @@ public struct Compiler_Protobuf_ClassDeclaration: @unchecked Sendable {
   // methods supported on all messages.
 
   public var name: String {
-    get {return _storage._name}
+    get {_storage._name}
     set {_uniqueStorage()._name = newValue}
   }
 
   /// The superclass is optional
   public var superClass: Compiler_Protobuf_Expression {
-    get {return _storage._superClass ?? Compiler_Protobuf_Expression()}
+    get {_storage._superClass ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._superClass = newValue}
   }
   /// Returns true if `superClass` has been explicitly set.
-  public var hasSuperClass: Bool {return _storage._superClass != nil}
+  public var hasSuperClass: Bool {_storage._superClass != nil}
   /// Clears the value of `superClass`. Subsequent reads from it will return its default value.
   public mutating func clearSuperClass() {_uniqueStorage()._superClass = nil}
 
   public var fields: [Compiler_Protobuf_ClassField] {
-    get {return _storage._fields}
+    get {_storage._fields}
     set {_uniqueStorage()._fields = newValue}
   }
 
@@ -556,22 +615,22 @@ public struct Compiler_Protobuf_ClassExpression: @unchecked Sendable {
 
   /// The name is optional
   public var name: String {
-    get {return _storage._name}
+    get {_storage._name}
     set {_uniqueStorage()._name = newValue}
   }
 
   /// The superclass is optional
   public var superClass: Compiler_Protobuf_Expression {
-    get {return _storage._superClass ?? Compiler_Protobuf_Expression()}
+    get {_storage._superClass ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._superClass = newValue}
   }
   /// Returns true if `superClass` has been explicitly set.
-  public var hasSuperClass: Bool {return _storage._superClass != nil}
+  public var hasSuperClass: Bool {_storage._superClass != nil}
   /// Clears the value of `superClass`. Subsequent reads from it will return its default value.
   public mutating func clearSuperClass() {_uniqueStorage()._superClass = nil}
 
   public var fields: [Compiler_Protobuf_ClassField] {
-    get {return _storage._fields}
+    get {_storage._fields}
     set {_uniqueStorage()._fields = newValue}
   }
 
@@ -589,11 +648,11 @@ public struct Compiler_Protobuf_ReturnStatement: @unchecked Sendable {
 
   /// The argument is optional
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -622,11 +681,11 @@ public struct Compiler_Protobuf_ExpressionStatement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var expression: Compiler_Protobuf_Expression {
-    get {return _storage._expression ?? Compiler_Protobuf_Expression()}
+    get {_storage._expression ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._expression = newValue}
   }
   /// Returns true if `expression` has been explicitly set.
-  public var hasExpression: Bool {return _storage._expression != nil}
+  public var hasExpression: Bool {_storage._expression != nil}
   /// Clears the value of `expression`. Subsequent reads from it will return its default value.
   public mutating func clearExpression() {_uniqueStorage()._expression = nil}
 
@@ -643,30 +702,30 @@ public struct Compiler_Protobuf_IfStatement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var test: Compiler_Protobuf_Expression {
-    get {return _storage._test ?? Compiler_Protobuf_Expression()}
+    get {_storage._test ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._test = newValue}
   }
   /// Returns true if `test` has been explicitly set.
-  public var hasTest: Bool {return _storage._test != nil}
+  public var hasTest: Bool {_storage._test != nil}
   /// Clears the value of `test`. Subsequent reads from it will return its default value.
   public mutating func clearTest() {_uniqueStorage()._test = nil}
 
   public var ifBody: Compiler_Protobuf_Statement {
-    get {return _storage._ifBody ?? Compiler_Protobuf_Statement()}
+    get {_storage._ifBody ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._ifBody = newValue}
   }
   /// Returns true if `ifBody` has been explicitly set.
-  public var hasIfBody: Bool {return _storage._ifBody != nil}
+  public var hasIfBody: Bool {_storage._ifBody != nil}
   /// Clears the value of `ifBody`. Subsequent reads from it will return its default value.
   public mutating func clearIfBody() {_uniqueStorage()._ifBody = nil}
 
   /// The else body is optional
   public var elseBody: Compiler_Protobuf_Statement {
-    get {return _storage._elseBody ?? Compiler_Protobuf_Statement()}
+    get {_storage._elseBody ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._elseBody = newValue}
   }
   /// Returns true if `elseBody` has been explicitly set.
-  public var hasElseBody: Bool {return _storage._elseBody != nil}
+  public var hasElseBody: Bool {_storage._elseBody != nil}
   /// Clears the value of `elseBody`. Subsequent reads from it will return its default value.
   public mutating func clearElseBody() {_uniqueStorage()._elseBody = nil}
 
@@ -683,20 +742,20 @@ public struct Compiler_Protobuf_WhileLoop: @unchecked Sendable {
   // methods supported on all messages.
 
   public var test: Compiler_Protobuf_Expression {
-    get {return _storage._test ?? Compiler_Protobuf_Expression()}
+    get {_storage._test ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._test = newValue}
   }
   /// Returns true if `test` has been explicitly set.
-  public var hasTest: Bool {return _storage._test != nil}
+  public var hasTest: Bool {_storage._test != nil}
   /// Clears the value of `test`. Subsequent reads from it will return its default value.
   public mutating func clearTest() {_uniqueStorage()._test = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -713,20 +772,20 @@ public struct Compiler_Protobuf_DoWhileLoop: @unchecked Sendable {
   // methods supported on all messages.
 
   public var test: Compiler_Protobuf_Expression {
-    get {return _storage._test ?? Compiler_Protobuf_Expression()}
+    get {_storage._test ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._test = newValue}
   }
   /// Returns true if `test` has been explicitly set.
-  public var hasTest: Bool {return _storage._test != nil}
+  public var hasTest: Bool {_storage._test != nil}
   /// Clears the value of `test`. Subsequent reads from it will return its default value.
   public mutating func clearTest() {_uniqueStorage()._test = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -766,30 +825,30 @@ public struct Compiler_Protobuf_ForLoop: @unchecked Sendable {
 
   /// This field is optional
   public var condition: Compiler_Protobuf_Expression {
-    get {return _storage._condition ?? Compiler_Protobuf_Expression()}
+    get {_storage._condition ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._condition = newValue}
   }
   /// Returns true if `condition` has been explicitly set.
-  public var hasCondition: Bool {return _storage._condition != nil}
+  public var hasCondition: Bool {_storage._condition != nil}
   /// Clears the value of `condition`. Subsequent reads from it will return its default value.
   public mutating func clearCondition() {_uniqueStorage()._condition = nil}
 
   /// This field is optional
   public var afterthought: Compiler_Protobuf_Expression {
-    get {return _storage._afterthought ?? Compiler_Protobuf_Expression()}
+    get {_storage._afterthought ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._afterthought = newValue}
   }
   /// Returns true if `afterthought` has been explicitly set.
-  public var hasAfterthought: Bool {return _storage._afterthought != nil}
+  public var hasAfterthought: Bool {_storage._afterthought != nil}
   /// Clears the value of `afterthought`. Subsequent reads from it will return its default value.
   public mutating func clearAfterthought() {_uniqueStorage()._afterthought = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -813,29 +872,29 @@ public struct Compiler_Protobuf_ForInLoop: @unchecked Sendable {
   // methods supported on all messages.
 
   public var left: Compiler_Protobuf_VariableDeclarator {
-    get {return _storage._left ?? Compiler_Protobuf_VariableDeclarator()}
+    get {_storage._left ?? Compiler_Protobuf_VariableDeclarator()}
     set {_uniqueStorage()._left = newValue}
   }
   /// Returns true if `left` has been explicitly set.
-  public var hasLeft: Bool {return _storage._left != nil}
+  public var hasLeft: Bool {_storage._left != nil}
   /// Clears the value of `left`. Subsequent reads from it will return its default value.
   public mutating func clearLeft() {_uniqueStorage()._left = nil}
 
   public var right: Compiler_Protobuf_Expression {
-    get {return _storage._right ?? Compiler_Protobuf_Expression()}
+    get {_storage._right ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._right = newValue}
   }
   /// Returns true if `right` has been explicitly set.
-  public var hasRight: Bool {return _storage._right != nil}
+  public var hasRight: Bool {_storage._right != nil}
   /// Clears the value of `right`. Subsequent reads from it will return its default value.
   public mutating func clearRight() {_uniqueStorage()._right = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -852,29 +911,29 @@ public struct Compiler_Protobuf_ForOfLoop: @unchecked Sendable {
   // methods supported on all messages.
 
   public var left: Compiler_Protobuf_VariableDeclarator {
-    get {return _storage._left ?? Compiler_Protobuf_VariableDeclarator()}
+    get {_storage._left ?? Compiler_Protobuf_VariableDeclarator()}
     set {_uniqueStorage()._left = newValue}
   }
   /// Returns true if `left` has been explicitly set.
-  public var hasLeft: Bool {return _storage._left != nil}
+  public var hasLeft: Bool {_storage._left != nil}
   /// Clears the value of `left`. Subsequent reads from it will return its default value.
   public mutating func clearLeft() {_uniqueStorage()._left = nil}
 
   public var right: Compiler_Protobuf_Expression {
-    get {return _storage._right ?? Compiler_Protobuf_Expression()}
+    get {_storage._right ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._right = newValue}
   }
   /// Returns true if `right` has been explicitly set.
-  public var hasRight: Bool {return _storage._right != nil}
+  public var hasRight: Bool {_storage._right != nil}
   /// Clears the value of `right`. Subsequent reads from it will return its default value.
   public mutating func clearRight() {_uniqueStorage()._right = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -912,11 +971,11 @@ public struct Compiler_Protobuf_CatchClause: Sendable {
 
   /// The parameter is optional
   public var parameter: Compiler_Protobuf_Parameter {
-    get {return _parameter ?? Compiler_Protobuf_Parameter()}
+    get {_parameter ?? Compiler_Protobuf_Parameter()}
     set {_parameter = newValue}
   }
   /// Returns true if `parameter` has been explicitly set.
-  public var hasParameter: Bool {return self._parameter != nil}
+  public var hasParameter: Bool {self._parameter != nil}
   /// Clears the value of `parameter`. Subsequent reads from it will return its default value.
   public mutating func clearParameter() {self._parameter = nil}
 
@@ -950,21 +1009,21 @@ public struct Compiler_Protobuf_TryStatement: Sendable {
 
   /// The catch clause is optional
   public var `catch`: Compiler_Protobuf_CatchClause {
-    get {return _catch ?? Compiler_Protobuf_CatchClause()}
+    get {_catch ?? Compiler_Protobuf_CatchClause()}
     set {_catch = newValue}
   }
   /// Returns true if ``catch`` has been explicitly set.
-  public var hasCatch: Bool {return self._catch != nil}
+  public var hasCatch: Bool {self._catch != nil}
   /// Clears the value of ``catch``. Subsequent reads from it will return its default value.
   public mutating func clearCatch() {self._catch = nil}
 
   /// The finally clause is optional
   public var finally: Compiler_Protobuf_FinallyClause {
-    get {return _finally ?? Compiler_Protobuf_FinallyClause()}
+    get {_finally ?? Compiler_Protobuf_FinallyClause()}
     set {_finally = newValue}
   }
   /// Returns true if `finally` has been explicitly set.
-  public var hasFinally: Bool {return self._finally != nil}
+  public var hasFinally: Bool {self._finally != nil}
   /// Clears the value of `finally`. Subsequent reads from it will return its default value.
   public mutating func clearFinally() {self._finally = nil}
 
@@ -982,11 +1041,11 @@ public struct Compiler_Protobuf_ThrowStatement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -1003,20 +1062,20 @@ public struct Compiler_Protobuf_WithStatement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var object: Compiler_Protobuf_Expression {
-    get {return _storage._object ?? Compiler_Protobuf_Expression()}
+    get {_storage._object ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._object = newValue}
   }
   /// Returns true if `object` has been explicitly set.
-  public var hasObject: Bool {return _storage._object != nil}
+  public var hasObject: Bool {_storage._object != nil}
   /// Clears the value of `object`. Subsequent reads from it will return its default value.
   public mutating func clearObject() {_uniqueStorage()._object = nil}
 
   public var body: Compiler_Protobuf_Statement {
-    get {return _storage._body ?? Compiler_Protobuf_Statement()}
+    get {_storage._body ?? Compiler_Protobuf_Statement()}
     set {_uniqueStorage()._body = newValue}
   }
   /// Returns true if `body` has been explicitly set.
-  public var hasBody: Bool {return _storage._body != nil}
+  public var hasBody: Bool {_storage._body != nil}
   /// Clears the value of `body`. Subsequent reads from it will return its default value.
   public mutating func clearBody() {_uniqueStorage()._body = nil}
 
@@ -1033,16 +1092,16 @@ public struct Compiler_Protobuf_SwitchStatement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var discriminant: Compiler_Protobuf_Expression {
-    get {return _storage._discriminant ?? Compiler_Protobuf_Expression()}
+    get {_storage._discriminant ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._discriminant = newValue}
   }
   /// Returns true if `discriminant` has been explicitly set.
-  public var hasDiscriminant: Bool {return _storage._discriminant != nil}
+  public var hasDiscriminant: Bool {_storage._discriminant != nil}
   /// Clears the value of `discriminant`. Subsequent reads from it will return its default value.
   public mutating func clearDiscriminant() {_uniqueStorage()._discriminant = nil}
 
   public var cases: [Compiler_Protobuf_SwitchCase] {
-    get {return _storage._cases}
+    get {_storage._cases}
     set {_uniqueStorage()._cases = newValue}
   }
 
@@ -1059,11 +1118,11 @@ public struct Compiler_Protobuf_SwitchCase: Sendable {
   // methods supported on all messages.
 
   public var test: Compiler_Protobuf_Expression {
-    get {return _test ?? Compiler_Protobuf_Expression()}
+    get {_test ?? Compiler_Protobuf_Expression()}
     set {_test = newValue}
   }
   /// Returns true if `test` has been explicitly set.
-  public var hasTest: Bool {return self._test != nil}
+  public var hasTest: Bool {self._test != nil}
   /// Clears the value of `test`. Subsequent reads from it will return its default value.
   public mutating func clearTest() {self._test = nil}
 
@@ -1400,25 +1459,25 @@ public struct Compiler_Protobuf_AssignmentExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var `operator`: String {
-    get {return _storage._operator}
+    get {_storage._operator}
     set {_uniqueStorage()._operator = newValue}
   }
 
   public var lhs: Compiler_Protobuf_Expression {
-    get {return _storage._lhs ?? Compiler_Protobuf_Expression()}
+    get {_storage._lhs ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._lhs = newValue}
   }
   /// Returns true if `lhs` has been explicitly set.
-  public var hasLhs: Bool {return _storage._lhs != nil}
+  public var hasLhs: Bool {_storage._lhs != nil}
   /// Clears the value of `lhs`. Subsequent reads from it will return its default value.
   public mutating func clearLhs() {_uniqueStorage()._lhs = nil}
 
   public var rhs: Compiler_Protobuf_Expression {
-    get {return _storage._rhs ?? Compiler_Protobuf_Expression()}
+    get {_storage._rhs ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._rhs = newValue}
   }
   /// Returns true if `rhs` has been explicitly set.
-  public var hasRhs: Bool {return _storage._rhs != nil}
+  public var hasRhs: Bool {_storage._rhs != nil}
   /// Clears the value of `rhs`. Subsequent reads from it will return its default value.
   public mutating func clearRhs() {_uniqueStorage()._rhs = nil}
 
@@ -1434,58 +1493,29 @@ public struct Compiler_Protobuf_ObjectProperty: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var key: Compiler_Protobuf_ObjectProperty.OneOf_Key? = nil
-
-  /// A "regular" property.
-  public var name: String {
-    get {
-      if case .name(let v)? = key {return v}
-      return String()
-    }
-    set {key = .name(newValue)}
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
   }
-
-  /// An element.
-  public var index: Int64 {
-    get {
-      if case .index(let v)? = key {return v}
-      return 0
-    }
-    set {key = .index(newValue)}
-  }
-
-  /// A computed property.
-  public var expression: Compiler_Protobuf_Expression {
-    get {
-      if case .expression(let v)? = key {return v}
-      return Compiler_Protobuf_Expression()
-    }
-    set {key = .expression(newValue)}
-  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
 
   public var value: Compiler_Protobuf_Expression {
-    get {return _value ?? Compiler_Protobuf_Expression()}
+    get {_value ?? Compiler_Protobuf_Expression()}
     set {_value = newValue}
   }
   /// Returns true if `value` has been explicitly set.
-  public var hasValue: Bool {return self._value != nil}
+  public var hasValue: Bool {self._value != nil}
   /// Clears the value of `value`. Subsequent reads from it will return its default value.
   public mutating func clearValue() {self._value = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Key: Equatable, Sendable {
-    /// A "regular" property.
-    case name(String)
-    /// An element.
-    case index(Int64)
-    /// A computed property.
-    case expression(Compiler_Protobuf_Expression)
-
-  }
-
   public init() {}
 
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
   fileprivate var _value: Compiler_Protobuf_Expression? = nil
 }
 
@@ -1494,39 +1524,34 @@ public struct Compiler_Protobuf_ObjectMethod: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var key: Compiler_Protobuf_ObjectMethod.OneOf_Key? = nil
-
-  public var name: String {
-    get {
-      if case .name(let v)? = key {return v}
-      return String()
-    }
-    set {key = .name(newValue)}
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
   }
-
-  public var expression: Compiler_Protobuf_Expression {
-    get {
-      if case .expression(let v)? = key {return v}
-      return Compiler_Protobuf_Expression()
-    }
-    set {key = .expression(newValue)}
-  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
 
   public var type: Compiler_Protobuf_FunctionType = .plain
 
-  public var parameters: [Compiler_Protobuf_Parameter] = []
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_parameters ?? Compiler_Protobuf_Parameters()}
+    set {_parameters = newValue}
+  }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {self._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {self._parameters = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Key: Equatable, Sendable {
-    case name(String)
-    case expression(Compiler_Protobuf_Expression)
-
-  }
-
   public init() {}
+
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
+  fileprivate var _parameters: Compiler_Protobuf_Parameters? = nil
 }
 
 public struct Compiler_Protobuf_ObjectGetter: Sendable {
@@ -1534,35 +1559,22 @@ public struct Compiler_Protobuf_ObjectGetter: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var key: Compiler_Protobuf_ObjectGetter.OneOf_Key? = nil
-
-  public var name: String {
-    get {
-      if case .name(let v)? = key {return v}
-      return String()
-    }
-    set {key = .name(newValue)}
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
   }
-
-  public var expression: Compiler_Protobuf_Expression {
-    get {
-      if case .expression(let v)? = key {return v}
-      return Compiler_Protobuf_Expression()
-    }
-    set {key = .expression(newValue)}
-  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Key: Equatable, Sendable {
-    case name(String)
-    case expression(Compiler_Protobuf_Expression)
-
-  }
-
   public init() {}
+
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
 }
 
 public struct Compiler_Protobuf_ObjectSetter: Sendable {
@@ -1570,30 +1582,21 @@ public struct Compiler_Protobuf_ObjectSetter: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var key: Compiler_Protobuf_ObjectSetter.OneOf_Key? = nil
-
-  public var name: String {
-    get {
-      if case .name(let v)? = key {return v}
-      return String()
-    }
-    set {key = .name(newValue)}
+  public var key: Compiler_Protobuf_PropertyKey {
+    get {_key ?? Compiler_Protobuf_PropertyKey()}
+    set {_key = newValue}
   }
-
-  public var expression: Compiler_Protobuf_Expression {
-    get {
-      if case .expression(let v)? = key {return v}
-      return Compiler_Protobuf_Expression()
-    }
-    set {key = .expression(newValue)}
-  }
+  /// Returns true if `key` has been explicitly set.
+  public var hasKey: Bool {self._key != nil}
+  /// Clears the value of `key`. Subsequent reads from it will return its default value.
+  public mutating func clearKey() {self._key = nil}
 
   public var parameter: Compiler_Protobuf_Parameter {
-    get {return _parameter ?? Compiler_Protobuf_Parameter()}
+    get {_parameter ?? Compiler_Protobuf_Parameter()}
     set {_parameter = newValue}
   }
   /// Returns true if `parameter` has been explicitly set.
-  public var hasParameter: Bool {return self._parameter != nil}
+  public var hasParameter: Bool {self._parameter != nil}
   /// Clears the value of `parameter`. Subsequent reads from it will return its default value.
   public mutating func clearParameter() {self._parameter = nil}
 
@@ -1601,14 +1604,9 @@ public struct Compiler_Protobuf_ObjectSetter: Sendable {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public enum OneOf_Key: Equatable, Sendable {
-    case name(String)
-    case expression(Compiler_Protobuf_Expression)
-
-  }
-
   public init() {}
 
+  fileprivate var _key: Compiler_Protobuf_PropertyKey? = nil
   fileprivate var _parameter: Compiler_Protobuf_Parameter? = nil
 }
 
@@ -1699,13 +1697,22 @@ public struct Compiler_Protobuf_FunctionExpression: Sendable {
 
   public var type: Compiler_Protobuf_FunctionType = .plain
 
-  public var parameters: [Compiler_Protobuf_Parameter] = []
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_parameters ?? Compiler_Protobuf_Parameters()}
+    set {_parameters = newValue}
+  }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {self._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {self._parameters = nil}
 
   public var body: [Compiler_Protobuf_Statement] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _parameters: Compiler_Protobuf_Parameters? = nil
 }
 
 public struct Compiler_Protobuf_ArrowFunctionExpression: @unchecked Sendable {
@@ -1714,14 +1721,18 @@ public struct Compiler_Protobuf_ArrowFunctionExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var type: Compiler_Protobuf_FunctionType {
-    get {return _storage._type}
+    get {_storage._type}
     set {_uniqueStorage()._type = newValue}
   }
 
-  public var parameters: [Compiler_Protobuf_Parameter] {
-    get {return _storage._parameters}
+  public var parameters: Compiler_Protobuf_Parameters {
+    get {_storage._parameters ?? Compiler_Protobuf_Parameters()}
     set {_uniqueStorage()._parameters = newValue}
   }
+  /// Returns true if `parameters` has been explicitly set.
+  public var hasParameters: Bool {_storage._parameters != nil}
+  /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
+  public mutating func clearParameters() {_uniqueStorage()._parameters = nil}
 
   /// The body can either be an expression or a block statement.
   public var body: OneOf_Body? {
@@ -1765,21 +1776,21 @@ public struct Compiler_Protobuf_CallExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var callee: Compiler_Protobuf_Expression {
-    get {return _storage._callee ?? Compiler_Protobuf_Expression()}
+    get {_storage._callee ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._callee = newValue}
   }
   /// Returns true if `callee` has been explicitly set.
-  public var hasCallee: Bool {return _storage._callee != nil}
+  public var hasCallee: Bool {_storage._callee != nil}
   /// Clears the value of `callee`. Subsequent reads from it will return its default value.
   public mutating func clearCallee() {_uniqueStorage()._callee = nil}
 
   public var arguments: [Compiler_Protobuf_Expression] {
-    get {return _storage._arguments}
+    get {_storage._arguments}
     set {_uniqueStorage()._arguments = newValue}
   }
 
   public var isOptional: Bool {
-    get {return _storage._isOptional}
+    get {_storage._isOptional}
     set {_uniqueStorage()._isOptional = newValue}
   }
 
@@ -1796,16 +1807,16 @@ public struct Compiler_Protobuf_NewExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var callee: Compiler_Protobuf_Expression {
-    get {return _storage._callee ?? Compiler_Protobuf_Expression()}
+    get {_storage._callee ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._callee = newValue}
   }
   /// Returns true if `callee` has been explicitly set.
-  public var hasCallee: Bool {return _storage._callee != nil}
+  public var hasCallee: Bool {_storage._callee != nil}
   /// Clears the value of `callee`. Subsequent reads from it will return its default value.
   public mutating func clearCallee() {_uniqueStorage()._callee = nil}
 
   public var arguments: [Compiler_Protobuf_Expression] {
-    get {return _storage._arguments}
+    get {_storage._arguments}
     set {_uniqueStorage()._arguments = newValue}
   }
 
@@ -1822,11 +1833,11 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var object: Compiler_Protobuf_Expression {
-    get {return _storage._object ?? Compiler_Protobuf_Expression()}
+    get {_storage._object ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._object = newValue}
   }
   /// Returns true if `object` has been explicitly set.
-  public var hasObject: Bool {return _storage._object != nil}
+  public var hasObject: Bool {_storage._object != nil}
   /// Clears the value of `object`. Subsequent reads from it will return its default value.
   public mutating func clearObject() {_uniqueStorage()._object = nil}
 
@@ -1854,7 +1865,7 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
   }
 
   public var isOptional: Bool {
-    get {return _storage._isOptional}
+    get {_storage._isOptional}
     set {_uniqueStorage()._isOptional = newValue}
   }
 
@@ -1879,16 +1890,16 @@ public struct Compiler_Protobuf_UnaryExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var `operator`: String {
-    get {return _storage._operator}
+    get {_storage._operator}
     set {_uniqueStorage()._operator = newValue}
   }
 
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -1905,25 +1916,25 @@ public struct Compiler_Protobuf_BinaryExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var `operator`: String {
-    get {return _storage._operator}
+    get {_storage._operator}
     set {_uniqueStorage()._operator = newValue}
   }
 
   public var lhs: Compiler_Protobuf_Expression {
-    get {return _storage._lhs ?? Compiler_Protobuf_Expression()}
+    get {_storage._lhs ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._lhs = newValue}
   }
   /// Returns true if `lhs` has been explicitly set.
-  public var hasLhs: Bool {return _storage._lhs != nil}
+  public var hasLhs: Bool {_storage._lhs != nil}
   /// Clears the value of `lhs`. Subsequent reads from it will return its default value.
   public mutating func clearLhs() {_uniqueStorage()._lhs = nil}
 
   public var rhs: Compiler_Protobuf_Expression {
-    get {return _storage._rhs ?? Compiler_Protobuf_Expression()}
+    get {_storage._rhs ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._rhs = newValue}
   }
   /// Returns true if `rhs` has been explicitly set.
-  public var hasRhs: Bool {return _storage._rhs != nil}
+  public var hasRhs: Bool {_storage._rhs != nil}
   /// Clears the value of `rhs`. Subsequent reads from it will return its default value.
   public mutating func clearRhs() {_uniqueStorage()._rhs = nil}
 
@@ -1940,21 +1951,21 @@ public struct Compiler_Protobuf_UpdateExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var `operator`: String {
-    get {return _storage._operator}
+    get {_storage._operator}
     set {_uniqueStorage()._operator = newValue}
   }
 
   public var isPrefix: Bool {
-    get {return _storage._isPrefix}
+    get {_storage._isPrefix}
     set {_uniqueStorage()._isPrefix = newValue}
   }
 
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -1972,11 +1983,11 @@ public struct Compiler_Protobuf_YieldExpression: @unchecked Sendable {
 
   /// The argument is optional
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -1993,11 +2004,11 @@ public struct Compiler_Protobuf_SpreadElement: @unchecked Sendable {
   // methods supported on all messages.
 
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -2039,31 +2050,31 @@ public struct Compiler_Protobuf_TernaryExpression: @unchecked Sendable {
 
   /// The test condition of the ternary expression.
   public var condition: Compiler_Protobuf_Expression {
-    get {return _storage._condition ?? Compiler_Protobuf_Expression()}
+    get {_storage._condition ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._condition = newValue}
   }
   /// Returns true if `condition` has been explicitly set.
-  public var hasCondition: Bool {return _storage._condition != nil}
+  public var hasCondition: Bool {_storage._condition != nil}
   /// Clears the value of `condition`. Subsequent reads from it will return its default value.
   public mutating func clearCondition() {_uniqueStorage()._condition = nil}
 
   /// The expression executed if the test is true.
   public var consequent: Compiler_Protobuf_Expression {
-    get {return _storage._consequent ?? Compiler_Protobuf_Expression()}
+    get {_storage._consequent ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._consequent = newValue}
   }
   /// Returns true if `consequent` has been explicitly set.
-  public var hasConsequent: Bool {return _storage._consequent != nil}
+  public var hasConsequent: Bool {_storage._consequent != nil}
   /// Clears the value of `consequent`. Subsequent reads from it will return its default value.
   public mutating func clearConsequent() {_uniqueStorage()._consequent = nil}
 
   /// The expression executed if the test is false.
   public var alternate: Compiler_Protobuf_Expression {
-    get {return _storage._alternate ?? Compiler_Protobuf_Expression()}
+    get {_storage._alternate ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._alternate = newValue}
   }
   /// Returns true if `alternate` has been explicitly set.
-  public var hasAlternate: Bool {return _storage._alternate != nil}
+  public var hasAlternate: Bool {_storage._alternate != nil}
   /// Clears the value of `alternate`. Subsequent reads from it will return its default value.
   public mutating func clearAlternate() {_uniqueStorage()._alternate = nil}
 
@@ -2080,11 +2091,11 @@ public struct Compiler_Protobuf_AwaitExpression: @unchecked Sendable {
   // methods supported on all messages.
 
   public var argument: Compiler_Protobuf_Expression {
-    get {return _storage._argument ?? Compiler_Protobuf_Expression()}
+    get {_storage._argument ?? Compiler_Protobuf_Expression()}
     set {_uniqueStorage()._argument = newValue}
   }
   /// Returns true if `argument` has been explicitly set.
-  public var hasArgument: Bool {return _storage._argument != nil}
+  public var hasArgument: Bool {_storage._argument != nil}
   /// Clears the value of `argument`. Subsequent reads from it will return its default value.
   public mutating func clearArgument() {_uniqueStorage()._argument = nil}
 
@@ -2123,7 +2134,7 @@ public struct Compiler_Protobuf_SuperMemberExpression: @unchecked Sendable {
   }
 
   public var isOptional: Bool {
-    get {return _storage._isOptional}
+    get {_storage._isOptional}
     set {_uniqueStorage()._isOptional = newValue}
   }
 
@@ -2455,7 +2466,7 @@ extension Compiler_Protobuf_FunctionType: SwiftProtobuf._ProtoNameProviding {
 
 extension Compiler_Protobuf_AST: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AST"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}statements\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}leadingComments\0\u{1}statements\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2463,20 +2474,25 @@ extension Compiler_Protobuf_AST: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.statements) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.leadingComments) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.statements) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.leadingComments.isEmpty {
+      try visitor.visitSingularStringField(value: self.leadingComments, fieldNumber: 1)
+    }
     if !self.statements.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.statements, fieldNumber: 1)
+      try visitor.visitRepeatedMessageField(value: self.statements, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Compiler_Protobuf_AST, rhs: Compiler_Protobuf_AST) -> Bool {
+    if lhs.leadingComments != rhs.leadingComments {return false}
     if lhs.statements != rhs.statements {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2709,6 +2725,41 @@ extension Compiler_Protobuf_DisposableVariableDeclaration: SwiftProtobuf.Message
   }
 }
 
+extension Compiler_Protobuf_Parameters: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Parameters"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{1}hasRestElement\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.hasRestElement_p) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.parameters.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 1)
+    }
+    if self.hasRestElement_p != false {
+      try visitor.visitSingularBoolField(value: self.hasRestElement_p, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Compiler_Protobuf_Parameters, rhs: Compiler_Protobuf_Parameters) -> Bool {
+    if lhs.parameters != rhs.parameters {return false}
+    if lhs.hasRestElement_p != rhs.hasRestElement_p {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".FunctionDeclaration"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}type\0\u{1}parameters\0\u{1}body\0")
@@ -2721,7 +2772,7 @@ extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftPro
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
       }
@@ -2729,15 +2780,19 @@ extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftPro
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
     if self.type != .plain {
       try visitor.visitSingularEnumField(value: self.type, fieldNumber: 2)
     }
-    if !self.parameters.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 3)
-    }
+    try { if let v = self._parameters {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 4)
     }
@@ -2747,7 +2802,7 @@ extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftPro
   public static func ==(lhs: Compiler_Protobuf_FunctionDeclaration, rhs: Compiler_Protobuf_FunctionDeclaration) -> Bool {
     if lhs.name != rhs.name {return false}
     if lhs.type != rhs.type {return false}
-    if lhs.parameters != rhs.parameters {return false}
+    if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2882,7 +2937,7 @@ extension Compiler_Protobuf_ClassConstructor: SwiftProtobuf.Message, SwiftProtob
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
       }
@@ -2890,9 +2945,13 @@ extension Compiler_Protobuf_ClassConstructor: SwiftProtobuf.Message, SwiftProtob
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.parameters.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 1)
-    }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._parameters {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 2)
     }
@@ -2900,7 +2959,7 @@ extension Compiler_Protobuf_ClassConstructor: SwiftProtobuf.Message, SwiftProtob
   }
 
   public static func ==(lhs: Compiler_Protobuf_ClassConstructor, rhs: Compiler_Protobuf_ClassConstructor) -> Bool {
-    if lhs.parameters != rhs.parameters {return false}
+    if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2919,7 +2978,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
       }
@@ -2937,9 +2996,9 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
     }
-    if !self.parameters.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 3)
-    }
+    try { if let v = self._parameters {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 4)
     }
@@ -2949,7 +3008,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
   public static func ==(lhs: Compiler_Protobuf_ClassMethod, rhs: Compiler_Protobuf_ClassMethod) -> Bool {
     if lhs._key != rhs._key {return false}
     if lhs.isStatic != rhs.isStatic {return false}
-    if lhs.parameters != rhs.parameters {return false}
+    if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2958,7 +3017,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Compiler_Protobuf_ClassGetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ClassGetter"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}isStatic\0\u{1}body\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}body\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2966,7 +3025,7 @@ extension Compiler_Protobuf_ClassGetter: SwiftProtobuf.Message, SwiftProtobuf._M
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
@@ -2975,9 +3034,13 @@ extension Compiler_Protobuf_ClassGetter: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
-    }
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
     }
@@ -2988,7 +3051,7 @@ extension Compiler_Protobuf_ClassGetter: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 
   public static func ==(lhs: Compiler_Protobuf_ClassGetter, rhs: Compiler_Protobuf_ClassGetter) -> Bool {
-    if lhs.name != rhs.name {return false}
+    if lhs._key != rhs._key {return false}
     if lhs.isStatic != rhs.isStatic {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -2998,7 +3061,7 @@ extension Compiler_Protobuf_ClassGetter: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Compiler_Protobuf_ClassSetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ClassSetter"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}isStatic\0\u{1}parameter\0\u{1}body\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}parameter\0\u{1}body\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3006,7 +3069,7 @@ extension Compiler_Protobuf_ClassSetter: SwiftProtobuf.Message, SwiftProtobuf._M
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._parameter) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
@@ -3020,9 +3083,9 @@ extension Compiler_Protobuf_ClassSetter: SwiftProtobuf.Message, SwiftProtobuf._M
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.name.isEmpty {
-      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
-    }
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
     }
@@ -3036,7 +3099,7 @@ extension Compiler_Protobuf_ClassSetter: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 
   public static func ==(lhs: Compiler_Protobuf_ClassSetter, rhs: Compiler_Protobuf_ClassSetter) -> Bool {
-    if lhs.name != rhs.name {return false}
+    if lhs._key != rhs._key {return false}
     if lhs.isStatic != rhs.isStatic {return false}
     if lhs._parameter != rhs._parameter {return false}
     if lhs.body != rhs.body {return false}
@@ -5262,7 +5325,7 @@ extension Compiler_Protobuf_AssignmentExpression: SwiftProtobuf.Message, SwiftPr
 
 extension Compiler_Protobuf_ObjectProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ObjectProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}index\0\u{1}expression\0\u{1}value\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}value\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5270,36 +5333,8 @@ extension Compiler_Protobuf_ObjectProperty: SwiftProtobuf.Message, SwiftProtobuf
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try {
-        var v: String?
-        try decoder.decodeSingularStringField(value: &v)
-        if let v = v {
-          if self.key != nil {try decoder.handleConflictingOneOf()}
-          self.key = .name(v)
-        }
-      }()
-      case 2: try {
-        var v: Int64?
-        try decoder.decodeSingularInt64Field(value: &v)
-        if let v = v {
-          if self.key != nil {try decoder.handleConflictingOneOf()}
-          self.key = .index(v)
-        }
-      }()
-      case 3: try {
-        var v: Compiler_Protobuf_Expression?
-        var hadOneofValue = false
-        if let current = self.key {
-          hadOneofValue = true
-          if case .expression(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.key = .expression(v)
-        }
-      }()
-      case 4: try { try decoder.decodeSingularMessageField(value: &self._value) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._value) }()
       default: break
       }
     }
@@ -5310,29 +5345,17 @@ extension Compiler_Protobuf_ObjectProperty: SwiftProtobuf.Message, SwiftProtobuf
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    switch self.key {
-    case .name?: try {
-      guard case .name(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    }()
-    case .index?: try {
-      guard case .index(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
-    }()
-    case .expression?: try {
-      guard case .expression(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    }()
-    case nil: break
-    }
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
     try { if let v = self._value {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
     } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Compiler_Protobuf_ObjectProperty, rhs: Compiler_Protobuf_ObjectProperty) -> Bool {
-    if lhs.key != rhs.key {return false}
+    if lhs._key != rhs._key {return false}
     if lhs._value != rhs._value {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -5341,7 +5364,7 @@ extension Compiler_Protobuf_ObjectProperty: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Compiler_Protobuf_ObjectMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ObjectMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}expression\0\u{1}type\0\u{1}parameters\0\u{1}body\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}type\0\u{1}parameters\0\u{1}body\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5349,172 +5372,9 @@ extension Compiler_Protobuf_ObjectMethod: SwiftProtobuf.Message, SwiftProtobuf._
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try {
-        var v: String?
-        try decoder.decodeSingularStringField(value: &v)
-        if let v = v {
-          if self.key != nil {try decoder.handleConflictingOneOf()}
-          self.key = .name(v)
-        }
-      }()
-      case 2: try {
-        var v: Compiler_Protobuf_Expression?
-        var hadOneofValue = false
-        if let current = self.key {
-          hadOneofValue = true
-          if case .expression(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.key = .expression(v)
-        }
-      }()
-      case 3: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
-      case 5: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    switch self.key {
-    case .name?: try {
-      guard case .name(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    }()
-    case .expression?: try {
-      guard case .expression(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
-    case nil: break
-    }
-    if self.type != .plain {
-      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 3)
-    }
-    if !self.parameters.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 4)
-    }
-    if !self.body.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 5)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Compiler_Protobuf_ObjectMethod, rhs: Compiler_Protobuf_ObjectMethod) -> Bool {
-    if lhs.key != rhs.key {return false}
-    if lhs.type != rhs.type {return false}
-    if lhs.parameters != rhs.parameters {return false}
-    if lhs.body != rhs.body {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Compiler_Protobuf_ObjectGetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".ObjectGetter"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}expression\0\u{1}body\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try {
-        var v: String?
-        try decoder.decodeSingularStringField(value: &v)
-        if let v = v {
-          if self.key != nil {try decoder.handleConflictingOneOf()}
-          self.key = .name(v)
-        }
-      }()
-      case 2: try {
-        var v: Compiler_Protobuf_Expression?
-        var hadOneofValue = false
-        if let current = self.key {
-          hadOneofValue = true
-          if case .expression(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.key = .expression(v)
-        }
-      }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    switch self.key {
-    case .name?: try {
-      guard case .name(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    }()
-    case .expression?: try {
-      guard case .expression(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
-    case nil: break
-    }
-    if !self.body.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 3)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Compiler_Protobuf_ObjectGetter, rhs: Compiler_Protobuf_ObjectGetter) -> Bool {
-    if lhs.key != rhs.key {return false}
-    if lhs.body != rhs.body {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension Compiler_Protobuf_ObjectSetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".ObjectSetter"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}expression\0\u{1}parameter\0\u{1}body\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try {
-        var v: String?
-        try decoder.decodeSingularStringField(value: &v)
-        if let v = v {
-          if self.key != nil {try decoder.handleConflictingOneOf()}
-          self.key = .name(v)
-        }
-      }()
-      case 2: try {
-        var v: Compiler_Protobuf_Expression?
-        var hadOneofValue = false
-        if let current = self.key {
-          hadOneofValue = true
-          if case .expression(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.key = .expression(v)
-        }
-      }()
-      case 3: try { try decoder.decodeSingularMessageField(value: &self._parameter) }()
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.type) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
       }
@@ -5526,18 +5386,13 @@ extension Compiler_Protobuf_ObjectSetter: SwiftProtobuf.Message, SwiftProtobuf._
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    switch self.key {
-    case .name?: try {
-      guard case .name(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
-    }()
-    case .expression?: try {
-      guard case .expression(let v)? = self.key else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
-    case nil: break
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.type != .plain {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 2)
     }
-    try { if let v = self._parameter {
+    try { if let v = self._parameters {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     } }()
     if !self.body.isEmpty {
@@ -5546,8 +5401,92 @@ extension Compiler_Protobuf_ObjectSetter: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
+  public static func ==(lhs: Compiler_Protobuf_ObjectMethod, rhs: Compiler_Protobuf_ObjectMethod) -> Bool {
+    if lhs._key != rhs._key {return false}
+    if lhs.type != rhs.type {return false}
+    if lhs._parameters != rhs._parameters {return false}
+    if lhs.body != rhs.body {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Compiler_Protobuf_ObjectGetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ObjectGetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}body\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.body.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Compiler_Protobuf_ObjectGetter, rhs: Compiler_Protobuf_ObjectGetter) -> Bool {
+    if lhs._key != rhs._key {return false}
+    if lhs.body != rhs.body {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Compiler_Protobuf_ObjectSetter: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ObjectSetter"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}parameter\0\u{1}body\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._key) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._parameter) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._key {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._parameter {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.body.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
   public static func ==(lhs: Compiler_Protobuf_ObjectSetter, rhs: Compiler_Protobuf_ObjectSetter) -> Bool {
-    if lhs.key != rhs.key {return false}
+    if lhs._key != rhs._key {return false}
     if lhs._parameter != rhs._parameter {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -5728,7 +5667,7 @@ extension Compiler_Protobuf_FunctionExpression: SwiftProtobuf.Message, SwiftProt
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.type) }()
-      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.parameters) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
       default: break
       }
@@ -5736,15 +5675,19 @@ extension Compiler_Protobuf_FunctionExpression: SwiftProtobuf.Message, SwiftProt
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
     if self.type != .plain {
       try visitor.visitSingularEnumField(value: self.type, fieldNumber: 2)
     }
-    if !self.parameters.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.parameters, fieldNumber: 3)
-    }
+    try { if let v = self._parameters {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 4)
     }
@@ -5754,7 +5697,7 @@ extension Compiler_Protobuf_FunctionExpression: SwiftProtobuf.Message, SwiftProt
   public static func ==(lhs: Compiler_Protobuf_FunctionExpression, rhs: Compiler_Protobuf_FunctionExpression) -> Bool {
     if lhs.name != rhs.name {return false}
     if lhs.type != rhs.type {return false}
-    if lhs.parameters != rhs.parameters {return false}
+    if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -5767,7 +5710,7 @@ extension Compiler_Protobuf_ArrowFunctionExpression: SwiftProtobuf.Message, Swif
 
   fileprivate class _StorageClass {
     var _type: Compiler_Protobuf_FunctionType = .plain
-    var _parameters: [Compiler_Protobuf_Parameter] = []
+    var _parameters: Compiler_Protobuf_Parameters? = nil
     var _body: Compiler_Protobuf_ArrowFunctionExpression.OneOf_Body?
 
       // This property is used as the initial default value for new instances of the type.
@@ -5801,7 +5744,7 @@ extension Compiler_Protobuf_ArrowFunctionExpression: SwiftProtobuf.Message, Swif
         // enabled. https://github.com/apple/swift-protobuf/issues/1034
         switch fieldNumber {
         case 1: try { try decoder.decodeSingularEnumField(value: &_storage._type) }()
-        case 2: try { try decoder.decodeRepeatedMessageField(value: &_storage._parameters) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._parameters) }()
         case 3: try {
           var v: Compiler_Protobuf_Statement?
           var hadOneofValue = false
@@ -5843,9 +5786,9 @@ extension Compiler_Protobuf_ArrowFunctionExpression: SwiftProtobuf.Message, Swif
       if _storage._type != .plain {
         try visitor.visitSingularEnumField(value: _storage._type, fieldNumber: 1)
       }
-      if !_storage._parameters.isEmpty {
-        try visitor.visitRepeatedMessageField(value: _storage._parameters, fieldNumber: 2)
-      }
+      try { if let v = _storage._parameters {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      } }()
       switch _storage._body {
       case .block?: try {
         guard case .block(let v)? = _storage._body else { preconditionFailure() }

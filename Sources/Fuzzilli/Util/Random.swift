@@ -43,9 +43,11 @@ extension Int {
 
 extension String {
     // Returns a random string of the specified length.
-    public static func random(ofLength length: Int,
-      withCharSet charSet: [Character] = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-      ) -> String {
+    public static func random(
+        ofLength length: Int,
+        withCharSet charSet: [Character] = Array(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    ) -> String {
         var s = ""
         for _ in 0..<length {
             s += String(chooseUniform(from: charSet))

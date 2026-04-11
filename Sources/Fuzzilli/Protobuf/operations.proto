@@ -19,6 +19,7 @@ package fuzzilli.protobuf;
 message Parameters {
     uint32 count = 1;
     bool hasRest = 2;
+    repeated uint32 defaultParameterIndices = 3;
 }
 
 message LoadInteger {
@@ -107,11 +108,23 @@ message BeginObjectLiteralGetter {
 message EndObjectLiteralGetter {
 }
 
+message BeginObjectLiteralComputedGetter {
+}
+
+message EndObjectLiteralComputedGetter {
+}
+
 message BeginObjectLiteralSetter {
     string propertyName = 1;
 }
 
 message EndObjectLiteralSetter {
+}
+
+message BeginObjectLiteralComputedSetter {
+}
+
+message EndObjectLiteralComputedSetter {
 }
 
 message EndObjectLiteral {
@@ -129,61 +142,68 @@ message BeginClassConstructor {
 message EndClassConstructor {
 }
 
-message ClassAddInstanceProperty {
+message ClassAddProperty {
     string propertyName = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message ClassAddInstanceElement {
+message ClassAddElement {
     int64 index = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message ClassAddInstanceComputedProperty {
+message ClassAddComputedProperty {
     bool hasValue = 1;
+    bool is_static = 2;
 }
 
-message BeginClassInstanceMethod {
+message BeginClassMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_static = 3;
 }
 
-message EndClassInstanceMethod {
+message EndClassMethod {
 }
 
-message BeginClassInstanceComputedMethod {
+message BeginClassComputedMethod {
     Parameters parameters = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceComputedMethod {
+message EndClassComputedMethod {
 }
 
-message BeginClassInstanceGetter {
+message BeginClassGetter {
     string propertyName = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceGetter {
+message EndClassGetter {
 }
 
-message BeginClassInstanceSetter {
+message BeginClassComputedGetter {
+    bool is_static = 1;
+}
+
+message EndClassComputedGetter {
+}
+
+message BeginClassSetter {
     string propertyName = 1;
+    bool is_static = 2;
 }
 
-message EndClassInstanceSetter {
+message EndClassSetter {
 }
 
-message ClassAddStaticProperty {
-    string propertyName = 1;
-    bool hasValue = 2;
+message BeginClassComputedSetter {
+    bool is_static = 1;
 }
 
-message ClassAddStaticElement {
-    int64 index = 1;
-    bool hasValue = 2;
-}
-
-message ClassAddStaticComputedProperty {
-    bool hasValue = 1;
+message EndClassComputedSetter {
 }
 
 message BeginClassStaticInitializer {
@@ -192,59 +212,19 @@ message BeginClassStaticInitializer {
 message EndClassStaticInitializer {
 }
 
-message BeginClassStaticMethod {
-    string methodName = 1;
-    Parameters parameters = 2;
-}
-
-message EndClassStaticMethod {
-}
-
-message BeginClassStaticComputedMethod {
-    Parameters parameters = 1;
-}
-
-message EndClassStaticComputedMethod {
-}
-
-message BeginClassStaticGetter {
-    string propertyName = 1;
-}
-
-message EndClassStaticGetter {
-}
-
-message BeginClassStaticSetter {
-    string propertyName = 1;
-}
-
-message EndClassStaticSetter {
-}
-
-message ClassAddPrivateInstanceProperty {
+message ClassAddPrivateProperty {
     string propertyName = 1;
     bool hasValue = 2;
+    bool is_static = 3;
 }
 
-message BeginClassPrivateInstanceMethod {
+message BeginClassPrivateMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_static = 3;
 }
 
-message EndClassPrivateInstanceMethod {
-}
-
-message ClassAddPrivateStaticProperty {
-    string propertyName = 1;
-    bool hasValue = 2;
-}
-
-message BeginClassPrivateStaticMethod {
-    string methodName = 1;
-    Parameters parameters = 2;
-}
-
-message EndClassPrivateStaticMethod {
+message EndClassPrivateMethod {
 }
 
 message EndClassDefinition {
@@ -884,7 +864,6 @@ message Constf64 {
 }
 
 message WasmReturn {
-  repeated WasmILType returnTypes = 1;
 }
 
 // We only serialize the wasm types as the rest would be overkill and are not needed.
@@ -930,18 +909,16 @@ message WasmILType {
 }
 
 message BeginWasmFunction {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 message EndWasmFunction {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 outputCount = 1;
 }
 
 message WasmJsCall {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
+  int32 outputCount = 2;
 }
 
 message Wasmi32CompareOp {
@@ -1147,19 +1124,10 @@ message WasmStoreGlobal {
   WasmILType globalType = 2;
 }
 
-// WasmTableGet and WasmTableSet need a WasmTableType as input.
 message WasmTableGet {
-  WasmILType elementType = 1;
-  int64 minSize = 2;
-  optional int64 maxSize = 3;
-  bool isTable64 = 4;
 }
 
 message WasmTableSet {
-  WasmILType elementType = 1;
-  int64 minSize = 2;
-  optional int64 maxSize = 3;
-  bool isTable64 = 4;
 }
 
 message WasmTableSize {
@@ -1174,13 +1142,12 @@ message WasmCallIndirect {
 }
 
 message WasmCallDirect {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
+  int32 outputCount = 2;
 }
 
 message WasmReturnCallDirect {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 message WasmReturnCallIndirect {
@@ -1238,21 +1205,19 @@ message WasmMemoryFill {
 }
 
 message WasmBeginBlock {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 message WasmEndBlock {
-  repeated WasmILType outputTypes = 1;
+  int32 outputCount = 1;
 }
 
 message WasmBeginLoop {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
 }
 
 message WasmEndLoop {
-  repeated WasmILType outputTypes = 1;
+  int32 outputCount = 1;
 }
 
 enum WasmCatchKind {
@@ -1263,44 +1228,40 @@ enum WasmCatchKind {
 }
 
 message WasmBeginTryTable {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
-  repeated WasmCatchKind catches = 3;
+  int32 parameterCount = 1;
+  repeated WasmCatchKind catches = 2;
 }
 
 message WasmEndTryTable {
-  repeated WasmILType outputTypes = 1;
+  int32 outputCount = 1;
 }
 
 message WasmBeginTry {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+    int32 parameterCount = 1;
 }
 
 message WasmBeginCatchAll {
-  repeated WasmILType inputTypes = 1;
+    int32 blockOutputCount = 1;
 }
 
 message WasmBeginCatch {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+    int32 blockOutputCount = 1;
+    int32 labelParameterCount = 2;
 }
 
 message WasmEndTry {
-  repeated WasmILType outputTypes = 1;
+    int32 blockOutputCount = 1;
 }
 
 message WasmBeginTryDelegate {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+    int32 parameterCount = 1;
 }
 
 message WasmEndTryDelegate {
-  repeated WasmILType outputTypes = 1;
+    int32 outputCount = 1;
 }
 
 message WasmThrow {
-  repeated WasmILType parameterTypes = 1;
 }
 
 message WasmThrowRef {
@@ -1310,11 +1271,9 @@ message WasmRethrow {
 }
 
 message WasmDefineTag {
-  repeated WasmILType parameterTypes = 1;
 }
 
 message WasmBranch {
-  repeated WasmILType parameters = 1;
 }
 
 enum WasmBranchHint {
@@ -1324,33 +1283,29 @@ enum WasmBranchHint {
 }
 
 message WasmBranchIf {
-  repeated WasmILType parameters = 1;
   WasmBranchHint hint = 2;
 }
 
 message WasmBranchTable {
-  repeated WasmILType parameters = 1;
   uint32 valueCount = 2;
 }
 
 message WasmReassign {
-  WasmILType variableType = 1;
 }
 
 message WasmBeginIf {
-  repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
   bool inverted = 3;
   WasmBranchHint hint = 4;
 }
 
 message WasmBeginElse {
-    repeated WasmILType parameterTypes = 1;
-  repeated WasmILType outputTypes = 2;
+  int32 parameterCount = 1;
+  int32 outputCount = 2;
 }
 
 message WasmEndIf {
-    repeated WasmILType outputTypes = 1;
+  int32 outputCount = 1;
 }
 
 message WasmNop {
@@ -1503,6 +1458,16 @@ message WasmDefineSignatureType {
     repeated WasmILType outputTypes = 2;
 }
 
+message WasmDefineAdHocSignatureType {
+    repeated WasmILType parameterTypes = 1;
+    repeated WasmILType outputTypes = 2;
+}
+
+message WasmDefineAdHocModuleSignatureType {
+    repeated WasmILType parameterTypes = 1;
+    repeated WasmILType outputTypes = 2;
+}
+
 message WasmDefineArrayType {
     WasmILType elementType = 1;
     bool mutability = 2;
@@ -1542,6 +1507,9 @@ message WasmArraySet {
 message WasmStructNewDefault {
 }
 
+message WasmStructNew {
+}
+
 message WasmStructGet {
     int32 fieldIndex = 1;
     bool isSigned = 2;
@@ -1558,7 +1526,19 @@ message WasmRefNull {
 message WasmRefIsNull {
 }
 
+message WasmRefEq {
+}
+
+message WasmRefTest {
+    WasmILType type = 1;
+}
+
+message WasmRefCast {
+    WasmILType type = 1;
+}
+
 message WasmRefI31 {
+    bool isShared = 1;
 }
 
 message WasmI31Get {

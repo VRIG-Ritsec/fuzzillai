@@ -58,7 +58,11 @@ public class Operation {
         fatalError("Operations must override the opcode getter. \(self.name) does not")
     }
 
-    init(numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0, firstVariadicInput: Int = -1, attributes: Attributes = [], requiredContext: Context = .empty, contextOpened: Context = .empty) {
+    init(
+        numInputs: Int = 0, numOutputs: Int = 0, numInnerOutputs: Int = 0,
+        firstVariadicInput: Int = -1, attributes: Attributes = [],
+        requiredContext: Context = .empty, contextOpened: Context = .empty
+    ) {
         assert(attributes.contains(.isVariadic) == (firstVariadicInput != -1))
         assert(firstVariadicInput == -1 || firstVariadicInput <= numInputs)
         assert(contextOpened == .empty || attributes.contains(.isBlockStart))
@@ -87,28 +91,28 @@ public class Operation {
         // is the isStrict member of function definitions: the value space is two
         // (true or false) and mutating the isStrict member is probably not very
         // interesting compared to mutations on other operations.
-        static let isMutable                    = Attributes(rawValue: 1 << 0)
+        static let isMutable = Attributes(rawValue: 1 << 0)
 
         // The operation performs a subroutine call.
-        static let isCall                       = Attributes(rawValue: 1 << 1)
+        static let isCall = Attributes(rawValue: 1 << 1)
 
         // The operation is the start of a block.
-        static let isBlockStart                 = Attributes(rawValue: 1 << 2)
+        static let isBlockStart = Attributes(rawValue: 1 << 2)
 
         // The operation is the end of a block.
-        static let isBlockEnd                   = Attributes(rawValue: 1 << 3)
+        static let isBlockEnd = Attributes(rawValue: 1 << 3)
 
         // The operation is used for internal purposes and should not
         // be visible to the user (e.g. appear in emitted samples).
-        static let isInternal                   = Attributes(rawValue: 1 << 4)
+        static let isInternal = Attributes(rawValue: 1 << 4)
 
         // The operation behaves like an (unconditional) jump. Any
         // code until the next block end is therefore dead code.
-        static let isJump                       = Attributes(rawValue: 1 << 5)
+        static let isJump = Attributes(rawValue: 1 << 5)
 
         // The operation can take a variable number of inputs.
         // The firstVariadicInput contains the index of the first variadic input.
-        static let isVariadic                   = Attributes(rawValue: 1 << 6)
+        static let isVariadic = Attributes(rawValue: 1 << 6)
 
         // This operation should occur at most once in its surrounding context.
         // If there are multiple singular operations in the same context, then
@@ -119,7 +123,7 @@ public class Operation {
         // block instead of ignoring all but the first one. However, that would
         // complicate code generation and splicing which cannot generally
         // uphold this property.
-        static let isSingular                   = Attributes(rawValue: 1 << 7)
+        static let isSingular = Attributes(rawValue: 1 << 7)
 
         // The operation propagates the surrounding context.
         // Most control-flow operations keep their surrounding context active.
@@ -127,15 +131,15 @@ public class Operation {
 
         // The instruction resumes the context from before its parent context.
         // This is useful for example for BeginSwitch and BeginSwitchCase.
-        static let resumesSurroundingContext    = Attributes(rawValue: 1 << 9)
+        static let resumesSurroundingContext = Attributes(rawValue: 1 << 9)
 
         // The instruction is a Nop operation.
-        static let isNop                        = Attributes(rawValue: 1 << 10)
+        static let isNop = Attributes(rawValue: 1 << 10)
 
         // The instruction cannot be mutated with the input mutator
         // This is not the case for most instructions except wasm instructions where we need to
         // preserve types for correctness. Note: this is different than the .isMutable attribute.
-        static let isNotInputMutable            = Attributes(rawValue: 1 << 11)
+        static let isNotInputMutable = Attributes(rawValue: 1 << 11)
     }
 }
 
@@ -153,7 +157,6 @@ final class Nop: Operation {
         super.init(numOutputs: numOutputs, attributes: [.isNop])
     }
 }
-
 
 // Expose the name of an operation as instance and class variable
 extension Operation {

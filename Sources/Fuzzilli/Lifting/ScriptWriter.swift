@@ -36,7 +36,10 @@ struct ScriptWriter {
     /// Current line, used when including line numbers in the output.
     public private(set) var currentLineNumber = 0
 
-    public init (stripComments: Bool = false, includeLineNumbers: Bool = false, indent: Int = 4, initialIndentionLevel: Int = 0, maxLineLength: Int = Int.max) {
+    public init(
+        stripComments: Bool = false, includeLineNumbers: Bool = false, indent: Int = 4,
+        initialIndentionLevel: Int = 0, maxLineLength: Int = Int.max
+    ) {
         self.indent = String(repeating: " ", count: indent)
         self.currentIndention = String(repeating: " ", count: indent * initialIndentionLevel)
         self.stripComments = stripComments
@@ -59,7 +62,8 @@ struct ScriptWriter {
         while line.count > splitAt {
             var lineToPrint = line.prefix(splitAt + 1)
             if let spaceIndex = lineToPrint.lastIndex(of: " "),
-                spaceIndex != lineToPrint.startIndex {
+                spaceIndex != lineToPrint.startIndex
+            {
                 // Only print the line if it contains non-space characters trimming all trailing
                 // spaces.
                 lineToPrint = lineToPrint.prefix(upTo: spaceIndex)
@@ -71,7 +75,7 @@ struct ScriptWriter {
                 emitImpl(line.prefix(splitAt))
                 line = line.suffix(line.count - splitAt)
             }
-            line = line.suffix(from: line.firstIndex {$0 != " "} ?? line.endIndex)
+            line = line.suffix(from: line.firstIndex { $0 != " " } ?? line.endIndex)
         }
         if !line.isEmpty {
             emitImpl(line)
@@ -94,7 +98,9 @@ struct ScriptWriter {
         for line in block.split(separator: "\n", omittingEmptySubsequences: false) {
             if stripComments {
                 let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmedLine.hasPrefix("//") || (trimmedLine.hasPrefix("/*") && trimmedLine.hasSuffix("*/")) {
+                if trimmedLine.hasPrefix("//")
+                    || (trimmedLine.hasPrefix("/*") && trimmedLine.hasSuffix("*/"))
+                {
                     continue
                 }
             }

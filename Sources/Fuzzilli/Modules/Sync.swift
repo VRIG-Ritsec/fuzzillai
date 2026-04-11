@@ -59,30 +59,30 @@ import Foundation
 /// The different messages supported by the distributed fuzzing protocol.
 enum MessageType: UInt32 {
     // Informs the other side that the sender is terminating.
-    case shutdown            = 0
+    case shutdown = 0
 
     // A synchronization packet sent by a parent to a newly connected child.
     // Contains the exported state of the parent so the child can
     // synchronize itself with that.
-    case sync                = 1
+    case sync = 1
 
     // A program from a corpus import. Send from parents to children.
     // Children are expected to add this program to their corpus
     // even if it does not trigger new coverage and without minimization.
-    case importedProgram     = 2
+    case importedProgram = 2
 
     // A program that triggered interesting behaviour and which should
     // therefore be imported by the receiver.
-    case interestingProgram  = 3
+    case interestingProgram = 3
 
     // A program that caused a crash. Only sent from a children to their parent.
-    case crashingProgram     = 4
+    case crashingProgram = 4
 
     // A statistics package send by a child to a parent node.
-    case statistics          = 5
+    case statistics = 5
 
     // Log messages are forwarded from child to parent nides.
-    case log                 = 6
+    case log = 6
 }
 
 /// Distributed fuzzing nodes can be configured to only share their corpus in one direction in the tree.
@@ -161,7 +161,9 @@ public class DistributedFuzzingNode {
                 // If the wasm enablement is different, we can't safely import the corpus.
                 let parentState = fuzzer.config.isWasmEnabled ? "enabled" : "disabled"
                 let selfState = state.isWasmEnabled ? "enabled" : "disabled"
-                throw FuzzilliError.corpusImportError("Inconsistent state between distributed nodes: The parent has wasm \(parentState) while the current fuzzer has wasm \(selfState)!")
+                throw FuzzilliError.corpusImportError(
+                    "Inconsistent state between distributed nodes: The parent has wasm \(parentState) while the current fuzzer has wasm \(selfState)!"
+                )
             }
 
             try fuzzer.corpus.importState(state.corpus)
@@ -191,7 +193,10 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
     /// List of all child nodes connected to us. They are identified by their UUID.
     private var children = Set<UUID>()
 
-    init(for fuzzer: Fuzzer, name: String, corpusSynchronizationMode: CorpusSynchronizationMode, transport: DistributedFuzzingParentNodeTransport) {
+    init(
+        for fuzzer: Fuzzer, name: String, corpusSynchronizationMode: CorpusSynchronizationMode,
+        transport: DistributedFuzzingParentNodeTransport
+    ) {
         self.transport = transport
         super.init(for: fuzzer, name: name, corpusSynchronizationMode: corpusSynchronizationMode)
         transport.setOnMessageCallback(onMessageReceived)
@@ -205,7 +210,8 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
         fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
             let shutdownGroup = DispatchGroup()
             for child in self.children {
-                self.transport.send(.shutdown, to: child, contents: Data(), synchronizeWith: shutdownGroup)
+                self.transport.send(
+                    .shutdown, to: child, contents: Data(), synchronizeWith: shutdownGroup)
             }
             // Attempt to make sure that the shutdown messages have been sent before continuing.
             let _ = shutdownGroup.wait(timeout: .now() + .seconds(5))
@@ -254,7 +260,9 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
 
         case .interestingProgram:
             guard shouldAcceptCorpusSamplesFromChildren() else {
-                logger.warning("Received corpus sample from child node but not configured to accept them (corpus synchronization mode is \(corpusSynchronizationMode)). Ignoring message.")
+                logger.warning(
+                    "Received corpus sample from child node but not configured to accept them (corpus synchronization mode is \(corpusSynchronizationMode)). Ignoring message."
+                )
                 return
             }
 
@@ -277,15 +285,19 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
 
         case .log:
             if let proto = try? Fuzzilli_Protobuf_LogMessage(serializedBytes: data),
-               let origin = UUID(uuidString: proto.origin),
-               let level = LogLevel(rawValue: Int(clamping: proto.level)) {
-                fuzzer.dispatchEvent(fuzzer.events.Log, data: (origin: origin, level: level, label: proto.label, message: proto.content))
+                let origin = UUID(uuidString: proto.origin),
+                let level = LogLevel(rawValue: Int(clamping: proto.level))
+            {
+                fuzzer.dispatchEvent(
+                    fuzzer.events.Log,
+                    data: (origin: origin, level: level, label: proto.label, message: proto.content)
+                )
             } else {
                 logger.warning("Received malformed log message from child node")
             }
 
         case .importedProgram,
-             .sync:
+            .sync:
             logger.error("Received unexpected message: \(messageType)")
 
         }
@@ -316,7 +328,9 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
         }
 
         let (state, duration) = measureTime { exportState() }
-        logger.info("Encoding fuzzer state took \((String(format: "%.2f", duration)))s. Data size: \(ByteCountFormatter.string(fromByteCount: Int64(state.count), countStyle: .memory))")
+        logger.info(
+            "Encoding fuzzer state took \((String(format: "%.2f", duration)))s. Data size: \(ByteCountFormatter.string(fromByteCount: Int64(state.count), countStyle: .memory))"
+        )
         transport.send(.sync, to: child, contents: state)
     }
 
@@ -333,14 +347,15 @@ public class DistributedFuzzingParentNode: DistributedFuzzingNode, Module {
 protocol DistributedFuzzingParentNodeTransport {
     func initialize()
     func send(_ messageType: MessageType, to child: UUID, contents: Data)
-    func send(_ messageType: MessageType, to child: UUID, contents: Data, synchronizeWith: DispatchGroup)
+    func send(
+        _ messageType: MessageType, to child: UUID, contents: Data, synchronizeWith: DispatchGroup)
     func disconnect(_ child: UUID)
 
-    typealias OnMessageCallback = (_ messageType: MessageType, _ data: Data, _ child: UUID) -> ()
+    typealias OnMessageCallback = (_ messageType: MessageType, _ data: Data, _ child: UUID) -> Void
     func setOnMessageCallback(_ callback: @escaping OnMessageCallback)
-    typealias OnChildConnectedCallback = (_ child: UUID) -> ()
+    typealias OnChildConnectedCallback = (_ child: UUID) -> Void
     func setOnChildConnectedCallback(_ callback: @escaping OnChildConnectedCallback)
-    typealias OnChildDisconnectedCallback = (_ child: UUID) -> ()
+    typealias OnChildDisconnectedCallback = (_ child: UUID) -> Void
     func setOnChildDisconnectedCallback(_ callback: @escaping OnChildDisconnectedCallback)
 }
 
@@ -353,7 +368,10 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
     private let transport: DistributedFuzzingChildNodeTransport
     private var parentIsShuttingDown = false
 
-    init(for fuzzer: Fuzzer, name: String, corpusSynchronizationMode: CorpusSynchronizationMode, transport: DistributedFuzzingChildNodeTransport) {
+    init(
+        for fuzzer: Fuzzer, name: String, corpusSynchronizationMode: CorpusSynchronizationMode,
+        transport: DistributedFuzzingChildNodeTransport
+    ) {
         self.transport = transport
         super.init(for: fuzzer, name: name, corpusSynchronizationMode: corpusSynchronizationMode)
         transport.setOnMessageCallback(onMessageReceived)
@@ -427,14 +445,18 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
             guard shouldAcceptCorpusSamplesFromParent() else { return }
 
             guard !data.isEmpty else {
-                return logger.warning("Received empty synchronization message. Is the parent node configured to synchronize its corpus with its children?")
+                return logger.warning(
+                    "Received empty synchronization message. Is the parent node configured to synchronize its corpus with its children?"
+                )
             }
 
             guard fuzzer.state == .waiting else {
                 // While child nodes will remain in the .waiting state until we've received a sync message, this can
                 // still legitimately happen, for example if we imported our own corpus, or if we've lost the connection
                 // to our parent node and are reconnecting to it.
-                return logger.info("Not synchronizing our state with that of our parent as we already have a corpus")
+                return logger.info(
+                    "Not synchronizing our state with that of our parent as we already have a corpus"
+                )
             }
 
             let start = Date()
@@ -444,12 +466,16 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
                 logger.error("Failed to synchronize state: \(error)")
             }
             let end = Date()
-            logger.info("Synchronized with parent node (took \((String(format: "%.2f", end.timeIntervalSince(start))))s). Corpus now contains \(fuzzer.corpus.size) programs")
+            logger.info(
+                "Synchronized with parent node (took \((String(format: "%.2f", end.timeIntervalSince(start))))s). Corpus now contains \(fuzzer.corpus.size) programs"
+            )
 
         case .importedProgram,
-             .interestingProgram:
+            .interestingProgram:
             guard shouldAcceptCorpusSamplesFromParent() else {
-                return logger.warning("Received corpus sample but not configured to accept them (corpus synchronization mode is \(corpusSynchronizationMode)). Ignoring message.")
+                return logger.warning(
+                    "Received corpus sample but not configured to accept them (corpus synchronization mode is \(corpusSynchronizationMode)). Ignoring message."
+                )
             }
 
             do {
@@ -460,7 +486,8 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
                     // Regardless of the corpus import mode used by the parent node, as a child node we
                     // always add the program to our corpus without further checks or minimization as
                     // that will, if necessary, already have been performed by our parent node.
-                    fuzzer.importProgram(program, origin: .corpusImport(mode: .full), enableDropout: true)
+                    fuzzer.importProgram(
+                        program, origin: .corpusImport(mode: .full), enableDropout: true)
                 } else {
                     assert(messageType == .interestingProgram)
                     fuzzer.importProgram(program, origin: .parent, enableDropout: true)
@@ -470,8 +497,8 @@ public class DistributedFuzzingChildNode: DistributedFuzzingNode, Module {
             }
 
         case .crashingProgram,
-             .statistics,
-             .log:
+            .statistics,
+            .log:
             logger.error("Received unexpected message: \(messageType)")
         }
     }
@@ -508,6 +535,6 @@ protocol DistributedFuzzingChildNodeTransport {
     func send(_ messageType: MessageType, contents: Data)
     func send(_ messageType: MessageType, contents: Data, synchronizeWith: DispatchGroup)
 
-    typealias OnMessageCallback = (_ messageType: MessageType, _ data: Data) -> ()
+    typealias OnMessageCallback = (_ messageType: MessageType, _ data: Data) -> Void
     func setOnMessageCallback(_ callback: @escaping OnMessageCallback)
 }

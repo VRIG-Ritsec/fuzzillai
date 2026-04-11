@@ -32,8 +32,19 @@ public class FuzzEngine: ComponentBase {
         fatalError("Must be implemented by child classes")
     }
 
-    final func execute(_ program: Program, withTimeout timeout: UInt32? = nil) -> ExecutionOutcome {
-        let program = postProcessor?.process(program, for: fuzzer) ?? program
+    final func execute(_ rawProgram: Program, withTimeout timeout: UInt32? = nil)
+        -> ExecutionOutcome
+    {
+        let program: Program
+        do {
+            // An optional post processor can reject a sample right away with
+            // the postProcessRejectionError.
+            program = try postProcessor?.process(rawProgram, for: fuzzer) ?? rawProgram
+        } catch InternalError.postProcessRejection {
+            return ExecutionOutcome.failed(1)
+        } catch {
+            fatalError("Unexpected error in post processor.")
+        }
 
         fuzzer.dispatchEvent(fuzzer.events.ProgramGenerated, data: program)
 
@@ -55,6 +66,9 @@ public class FuzzEngine: ComponentBase {
                     }
                     isInteresting = fuzzer.processMaybeInteresting(program, havingAspects: aspects, origin: .local, execution: execution)
                 }
+                isInteresting = fuzzer.processMaybeInteresting(
+                    program, havingAspects: aspects, origin: .local)
+            }
 
                 if isInteresting {
                     program.contributors.generatedInterestingSample()
@@ -88,13 +102,16 @@ public class FuzzEngine: ComponentBase {
 
     private final func ensureDeterministicExecutionOutcomeForDiagnostic(of program: Program) {
         let execution1 = fuzzer.execute(program, purpose: .other)
-        let stdout1 = execution1.stdout, stderr1 = execution1.stderr
+        let stdout1 = execution1.stdout
+        let stderr1 = execution1.stderr
         let execution2 = fuzzer.execute(program, purpose: .other)
         switch (execution1.outcome, execution2.outcome) {
         case (.succeeded, .failed(_)),
-             (.failed(_), .succeeded):
-            let stdout2 = execution2.stdout, stderr2 = execution2.stderr
-            logger.warning("""
+            (.failed(_), .succeeded):
+            let stdout2 = execution2.stdout
+            let stderr2 = execution2.stderr
+            logger.warning(
+                """
                 Non-deterministic execution detected for program
                 \(fuzzer.lifter.lift(program))
                 // Stdout of first execution

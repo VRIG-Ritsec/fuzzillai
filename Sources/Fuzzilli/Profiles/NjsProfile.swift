@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
 let njsProfile = Profile(
     processArgs: { randomize in
         ["fuzz"]
     },
+
+    processArgsReference: nil,
 
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
@@ -26,10 +26,10 @@ let njsProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 

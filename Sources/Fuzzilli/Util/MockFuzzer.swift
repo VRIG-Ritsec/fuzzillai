@@ -29,11 +29,12 @@ class MockScriptRunner: ScriptRunner {
     var env: [(String, String)] = []
 
     func run(_ script: String, withTimeout timeout: UInt32) -> Execution {
-        return MockExecution(outcome: .succeeded,
-                             stdout: "",
-                             stderr: "",
-                             fuzzout: "",
-                             execTime: TimeInterval(0.1))
+        return MockExecution(
+            outcome: .succeeded,
+            stdout: "",
+            stderr: "",
+            fuzzout: "",
+            execTime: TimeInterval(0.1))
     }
 
     func setEnvironmentVariable(_ key: String, to value: String) {}
@@ -74,7 +75,9 @@ class MockEvaluator: ProgramEvaluator {
 
     func importState(_ state: Data) {}
 
-    func computeAspectIntersection(of program: Program, with aspects: ProgramAspects) -> ProgramAspects? {
+    func computeAspectIntersection(of program: Program, with aspects: ProgramAspects)
+        -> ProgramAspects?
+    {
         return nil
     }
 
@@ -82,7 +85,14 @@ class MockEvaluator: ProgramEvaluator {
 }
 
 /// Create a fuzzer instance usable for testing.
-public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engine maybeEngine: FuzzEngine? = nil, runner maybeRunner: ScriptRunner? = nil, environment maybeEnvironment: JavaScriptEnvironment? = nil, evaluator maybeEvaluator: ProgramEvaluator? = nil, corpus maybeCorpus: Corpus? = nil, codeGenerators additionalCodeGenerators : [(CodeGenerator, Int)] = [], queue: DispatchQueue? = nil, overwriteGenerators: WeightedList<CodeGenerator>? = nil) -> Fuzzer {
+public func makeMockFuzzer(
+    config maybeConfiguration: Configuration? = nil, engine maybeEngine: FuzzEngine? = nil,
+    runner maybeRunner: ScriptRunner? = nil,
+    environment maybeEnvironment: JavaScriptEnvironment? = nil,
+    evaluator maybeEvaluator: ProgramEvaluator? = nil, corpus maybeCorpus: Corpus? = nil,
+    codeGenerators additionalCodeGenerators: [(CodeGenerator, Int)] = [],
+    queue: DispatchQueue? = nil, overwriteGenerators: WeightedList<CodeGenerator>? = nil
+) -> Fuzzer {
     // The configuration of this fuzzer.
     let configuration = maybeConfiguration ?? Configuration(logLevel: .warning)
 
@@ -91,10 +101,10 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
 
     // the mutators to use for this fuzzing engine.
     let mutators = WeightedList<Mutator>([
-        (CodeGenMutator(),                    1),
-        (OperationMutator(),                  1),
+        (CodeGenMutator(), 1),
+        (OperationMutator(), 1),
         (InputMutator(typeAwareness: .loose), 1),
-        (CombineMutator(),                    1),
+        (CombineMutator(), 1),
     ])
 
     let engine = maybeEngine ?? MutationEngine(numConsecutiveMutations: 5)
@@ -106,7 +116,9 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
     let environment = maybeEnvironment ?? JavaScriptEnvironment()
 
     // A lifter to translate FuzzIL programs to JavaScript.
-    let lifter = JavaScriptLifter(prefix: "", suffix: "", ecmaVersion: .es6, environment: environment, alwaysEmitVariables: configuration.forDifferentialFuzzing)
+    let lifter = JavaScriptLifter(
+        prefix: "", suffix: "", ecmaVersion: .es6, environment: environment,
+        alwaysEmitVariables: configuration.forDifferentialFuzzing)
 
     // Corpus managing interesting programs that have been found during fuzzing.
     let corpus = maybeCorpus ?? BasicCorpus(minSize: 1000, maxSize: 2000, minMutationsPerSample: 5)
@@ -115,32 +127,38 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
     let minimizer = Minimizer()
 
     // Use all builtin CodeGenerators
-    let codeGenerators = overwriteGenerators ?? WeightedList<CodeGenerator>(
-        (CodeGenerators + WasmCodeGenerators).map {
-            guard let weight = codeGeneratorWeights[$0.name] else {
-                fatalError("Missing weight for CodeGenerator \($0.name) in CodeGeneratorWeights.swift")
-            }
-            return ($0, weight)
-        } + additionalCodeGenerators)
+    let codeGenerators =
+        overwriteGenerators
+        ?? WeightedList<CodeGenerator>(
+            (CodeGenerators + WasmCodeGenerators).map {
+                guard let weight = codeGeneratorWeights[$0.name] else {
+                    fatalError(
+                        "Missing weight for CodeGenerator \($0.name) in CodeGeneratorWeights.swift")
+                }
+                return ($0, weight)
+            } + additionalCodeGenerators)
 
     // Use all builtin ProgramTemplates
-    let programTemplates = WeightedList<ProgramTemplate>(ProgramTemplates.map { return ($0, programTemplateWeights[$0.name]!) })
+    let programTemplates = WeightedList<ProgramTemplate>(
+        ProgramTemplates.map { return ($0, programTemplateWeights[$0.name]!) })
 
     // Construct the fuzzer instance.
-    let fuzzer = Fuzzer(configuration: configuration,
-                        scriptRunner: runner,
-                        engine: engine,
-                        mutators: mutators,
-                        codeGenerators: codeGenerators,
-                        programTemplates: programTemplates,
-                        evaluator: evaluator,
-                        environment: environment,
-                        lifter: lifter,
-                        corpus: corpus,
-                        minimizer: minimizer,
-                        queue: queue ?? DispatchQueue.main)
+    let fuzzer = Fuzzer(
+        configuration: configuration,
+        scriptRunner: runner,
+        referenceScriptRunner: nil,
+        engine: engine,
+        mutators: mutators,
+        codeGenerators: codeGenerators,
+        programTemplates: programTemplates,
+        evaluator: evaluator,
+        environment: environment,
+        lifter: lifter,
+        corpus: corpus,
+        minimizer: minimizer,
+        queue: queue ?? DispatchQueue.main)
 
-    let initializeFuzzer =  {
+    let initializeFuzzer = {
         fuzzer.registerEventListener(for: fuzzer.events.Log) { ev in
             print("[\(ev.label)] \(ev.message)")
         }
@@ -150,7 +168,7 @@ public func makeMockFuzzer(config maybeConfiguration: Configuration? = nil, engi
     // If a DispatchQueue was provided by the caller, initialize the fuzzer
     // there. Otherwise initialize it directly.
     if let queue {
-        queue.sync {initializeFuzzer()}
+        queue.sync { initializeFuzzer() }
     } else {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
         initializeFuzzer()

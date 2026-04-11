@@ -37,7 +37,7 @@ public struct ProgramComments {
         }
     }
 
-    private var comments: [Int32:String] = [:]
+    private var comments: [Int32: String] = [:]
 
     public init() {}
 

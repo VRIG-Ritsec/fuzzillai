@@ -40,7 +40,7 @@ public struct Variable: Hashable, CustomStringConvertible {
         return "v\(number)"
     }
 
-    public static func ==(lhs: Variable, rhs: Variable) -> Bool {
+    public static func == (lhs: Variable, rhs: Variable) -> Bool {
         return lhs.number == rhs.number
     }
 
@@ -50,7 +50,7 @@ public struct Variable: Hashable, CustomStringConvertible {
 }
 
 extension Variable: Comparable {
-    public static func <(lhs: Variable, rhs: Variable) -> Bool {
+    public static func < (lhs: Variable, rhs: Variable) -> Bool {
         return lhs.number < rhs.number
     }
 }

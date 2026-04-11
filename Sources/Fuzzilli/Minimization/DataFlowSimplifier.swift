@@ -41,7 +41,7 @@ struct DataFlowSimplifier: Reducer {
             }
 
             // For now, we only consider simple instructions as candidates.
-            guard instr.isSimple else  { continue }
+            guard instr.isSimple else { continue }
             // The instruction must have at least one output and one input,
             // otherwise it wouldn't be an intermediate node.
             guard instr.numOutputs > 0 else { continue }
@@ -54,7 +54,9 @@ struct DataFlowSimplifier: Reducer {
         }
 
         // Remove those candidates whose outputs aren't used.
-        candidates = candidates.filter({ helper.code[$0].allOutputs.map({ uses[$0]! }).reduce(0, +) > 0 })
+        candidates = candidates.filter({
+            helper.code[$0].allOutputs.map({ uses[$0]! }).reduce(0, +) > 0
+        })
 
         // Filter out Wasm instructions where the types would be invalid if we replaced them.
         candidates = candidates.filter({
@@ -69,7 +71,9 @@ struct DataFlowSimplifier: Reducer {
             if operation is WasmOperation {
                 guard operation.numOutputs == 1 else { return false }
                 let outputType = typer.type(of: helper.code[$0].output)
-                let filteredOutputs = helper.code[$0].inputs.map(typer.type).filter {$0.Is(outputType)}
+                let filteredOutputs = helper.code[$0].inputs.map(typer.type).filter {
+                    $0.Is(outputType)
+                }
                 // If we have outputs, we can actually try to replace this.
                 return !filteredOutputs.isEmpty
             } else {
@@ -90,10 +94,13 @@ struct DataFlowSimplifier: Reducer {
                     // if the candidate is a Wasm operation we need to preserve types.
                     if instr.op is WasmOperation {
                         let outputType = typer.type(of: instr.output)
-                        let filteredOutputs = instr.inputs.map(typer.type).enumerated().filter {$0.element.Is(outputType)}
+                        let filteredOutputs = instr.inputs.map(typer.type).enumerated().filter {
+                            $0.element.Is(outputType)
+                        }
                         if !filteredOutputs.isEmpty {
                             // Now pick a random index and choose that input as a replacement.
-                            replacement = instr.inputs[chooseUniform(from: filteredOutputs.map { $0.offset })]
+                            replacement =
+                                instr.inputs[chooseUniform(from: filteredOutputs.map { $0.offset })]
                         }
                     } else {
                         // Pick a random input as replacement. Here we could attempt to be smarter and
@@ -125,4 +132,3 @@ struct DataFlowSimplifier: Reducer {
         }
     }
 }
-

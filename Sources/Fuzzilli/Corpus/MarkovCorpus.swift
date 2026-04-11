@@ -22,7 +22,7 @@ public class MarkovCorpus: ComponentBase, Corpus {
     private var programExecutionQueue: [Program] = []
 
     // For each edge encountered thus far, track which program initially discovered it
-    private var edgeMap: [UInt32:Program] = [:]
+    private var edgeMap: [UInt32: Program] = [:]
 
     // This scheduler tracks the total number of samples it has returned
     // This allows it to build an initial baseline by randomly selecting a program to mutate
@@ -179,7 +179,9 @@ public class MarkovCorpus: ComponentBase, Corpus {
             // Applies dropout on otherwise valid samples, to ensure variety between instances
             // This will likely select some samples multiple times, which is acceptable as
             // it is proportional to how many infrquently hit edges the sample has
-            if val != 0 && val <= maxEdgeCountToFind && (probability(1 - dropoutRate) || programExecutionQueue.isEmpty) {
+            if val != 0 && val <= maxEdgeCountToFind
+                && (probability(1 - dropoutRate) || programExecutionQueue.isEmpty)
+            {
                 if let prog = edgeMap[UInt32(i)] {
                     programExecutionQueue.append(prog)
                     selectedEdges += 1

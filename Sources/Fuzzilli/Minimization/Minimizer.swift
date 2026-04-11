@@ -42,16 +42,23 @@ public class Minimizer: ComponentBase {
     ///
     /// Minimization will not modify the given program. Instead, it produce a new Program instance.
     /// Once minimization is finished, the passed block will be invoked on the fuzzer's queue with the minimized program.
-    func withMinimizedCopy(_ program: Program, withAspects aspects: ProgramAspects, limit minimizationLimit: Double = 0.0, block: @escaping (Program) -> ()) {
+    func withMinimizedCopy(
+        _ program: Program, withAspects aspects: ProgramAspects,
+        limit minimizationLimit: Double = 0.0, block: @escaping (Program) -> Void
+    ) {
         minimizationQueue.async {
-            let minimizedCode = self.internalMinimize(program, withAspects: aspects, limit: minimizationLimit, performPostprocessing: true, runningSynchronously: false)
+            let minimizedCode = self.internalMinimize(
+                program, withAspects: aspects, limit: minimizationLimit,
+                performPostprocessing: true, runningSynchronously: false)
             self.fuzzer.async {
                 let minimizedProgram: Program
                 if self.fuzzer.config.enableInspection {
-                    minimizedProgram = Program(code: minimizedCode, parent: program, contributors: program.contributors)
+                    minimizedProgram = Program(
+                        code: minimizedCode, parent: program, contributors: program.contributors)
                     minimizedProgram.comments.add("Minimizing \(program.id)", at: .header)
                 } else {
-                    minimizedProgram = Program(code: minimizedCode, contributors: program.contributors)
+                    minimizedProgram = Program(
+                        code: minimizedCode, contributors: program.contributors)
                 }
                 block(minimizedProgram)
             }
@@ -59,15 +66,25 @@ public class Minimizer: ComponentBase {
     }
 
     /// Synchronous version of withMinimizedCopy. Should only be used for tests since it otherwise blocks the fuzzer queue.
-    func minimize(_ program: Program, withAspects aspects: ProgramAspects, limit minimizationLimit: Double = 0.0, performPostprocessing: Bool = true) -> Program {
-        let minimizedCode = internalMinimize(program, withAspects: aspects, limit: minimizationLimit, performPostprocessing: performPostprocessing, runningSynchronously: true)
+    func minimize(
+        _ program: Program, withAspects aspects: ProgramAspects,
+        limit minimizationLimit: Double = 0.0, performPostprocessing: Bool = true
+    ) -> Program {
+        let minimizedCode = internalMinimize(
+            program, withAspects: aspects, limit: minimizationLimit,
+            performPostprocessing: performPostprocessing, runningSynchronously: true)
         return Program(code: minimizedCode, parent: program, contributors: program.contributors)
     }
 
-    private func internalMinimize(_ program: Program, withAspects aspects: ProgramAspects, limit minimizationLimit: Double, performPostprocessing: Bool, runningSynchronously: Bool) -> Code {
+    private func internalMinimize(
+        _ program: Program, withAspects aspects: ProgramAspects, limit minimizationLimit: Double,
+        performPostprocessing: Bool, runningSynchronously: Bool
+    ) -> Code {
         assert(program.code.countIntructionsWith(flags: .notRemovable) == 0)
 
-        let helper = MinimizationHelper(for: aspects, forCode: program.code, of: fuzzer, runningOnFuzzerQueue: runningSynchronously)
+        let helper = MinimizationHelper(
+            for: aspects, forCode: program.code, of: fuzzer,
+            runningOnFuzzerQueue: runningSynchronously)
 
         helper.applyMinimizationLimit(limit: minimizationLimit)
 
@@ -91,20 +108,24 @@ public class Minimizer: ComponentBase {
                 DataFlowSimplifier(),
                 VariadicInputReducer(),
                 DeduplicatingReducer(),
-                WasmTypeGroupReducer()
+                WasmTypeGroupReducer(),
             ]
             for reducer in reducers {
                 reducer.reduce(with: helper)
                 // The reducers should not remove any instructions that we want to keep unconditionally.
                 // The code might have more non-removable instructions due to other analyzers marking them as non-removable
                 // but it should be at least more than we have seen at the start.
-                assert(helper.code.countIntructionsWith(flags: .notRemovable) >= helper.numKeptInstructions)
+                assert(
+                    helper.code.countIntructionsWith(flags: .notRemovable)
+                        >= helper.numKeptInstructions)
                 assert(helper.code.isStaticallyValid())
             }
             iterations += 1
             guard iterations < 100 else {
                 // This can happen if a reducer performs a no-op change in every iteration, e.g. replacing one instruction with the same instruction. This is considered a bug since it leads to this kind of issue.
-                logger.error("Fixpoint iteration for program minimization did not converge after 100 iterations for program:\n\(FuzzILLifter().lift(helper.code)). Aborting minimization.")
+                logger.error(
+                    "Fixpoint iteration for program minimization did not converge after 100 iterations for program:\n\(FuzzILLifter().lift(helper.code)). Aborting minimization."
+                )
                 break
             }
         } while helper.didReduce

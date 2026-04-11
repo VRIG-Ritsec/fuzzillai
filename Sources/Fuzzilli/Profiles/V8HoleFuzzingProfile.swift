@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
 // This value generator inserts Hole leaks into the program.  Use this if you
 // want to fuzz for Memory Corruption using holes, this should be used in
 // conjunction with the --hole-fuzzing runtime flag.
-fileprivate let HoleLeakGenerator = CodeGenerator("HoleLeakGenerator", produces: [.jsAnything]) { b in
+private let HoleLeakGenerator = CodeGenerator("HoleLeakGenerator", produces: [.jsAnything]) { b in
     b.eval("%LeakHole()", hasOutput: true)
 }
 
@@ -36,6 +34,8 @@ let v8HoleFuzzingProfile = Profile(
         return args
     },
 
+    processArgsReference: nil,
+
     processEnv: [:],
 
     maxExecsBeforeRespawn: 1000,
@@ -43,10 +43,10 @@ let v8HoleFuzzingProfile = Profile(
     timeout: Timeout.interval(300, 900),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -67,24 +67,25 @@ let v8HoleFuzzingProfile = Profile(
     ],
 
     additionalCodeGenerators: [
-        (ForceJITCompilationThroughLoopGenerator,  5),
-        (ForceTurboFanCompilationGenerator,        5),
-        (ForceMaglevCompilationGenerator,          5),
-        (V8GcGenerator,                           10),
-        (HoleLeakGenerator,                       25),
+        (ForceJITCompilationThroughLoopGenerator, 5),
+        (ForceTurboFanCompilationGenerator, 5),
+        (ForceMaglevCompilationGenerator, 5),
+        (ForceOsrGenerator, 5),
+        (V8GcGenerator, 10),
+        (HoleLeakGenerator, 25),
     ],
 
-    additionalProgramTemplates: WeightedList<ProgramTemplate>([
-    ]),
+    additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
 
     disabledCodeGenerators: [],
 
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"                                            : .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
-        "d8"                                            : .object(),
-        "Worker"                                        : .constructor([.jsAnything, .object()] => .object(withMethods: ["postMessage","getMessage"])),
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
+        "d8": .object(),
+        "Worker": .constructor(
+            [.jsAnything, .object()] => .object(withMethods: ["postMessage", "getMessage"])),
     ],
 
     additionalObjectGroups: [jsD8, jsD8Test, jsD8FastCAPI, gcOptions],

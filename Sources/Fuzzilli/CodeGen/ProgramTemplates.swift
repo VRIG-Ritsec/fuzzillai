@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 /// Builtin program templates to target specific types of bugs.
 public let ProgramTemplates = [
     ProgramTemplate("Codegen100") { b in
@@ -29,7 +28,7 @@ public let ProgramTemplates = [
 
     WasmProgramTemplate("WasmCodegen50") { b in
         b.buildPrefix()
-        let m = b.buildWasmModule() { _ in
+        let m = b.buildWasmModule { _ in
             b.build(n: 50)
         }
         b.build(n: 10)
@@ -41,7 +40,7 @@ public let ProgramTemplates = [
 
     WasmProgramTemplate("WasmCodegen100") { b in
         b.buildPrefix()
-        let m = b.buildWasmModule() { _ in
+        let m = b.buildWasmModule { _ in
             b.build(n: 100)
         }
         b.build(n: 10)
@@ -54,8 +53,8 @@ public let ProgramTemplates = [
     WasmProgramTemplate("MixedJsAndWasm1") { b in
         b.buildPrefix()
         b.build(n: 10)
-        let m = b.buildWasmModule() { _ in
-            b.build(n:30)
+        let m = b.buildWasmModule { _ in
+            b.build(n: 30)
         }
         b.build(n: 20)
 
@@ -67,11 +66,11 @@ public let ProgramTemplates = [
     WasmProgramTemplate("MixedJsAndWasm2") { b in
         b.buildPrefix()
         b.build(n: 10)
-        b.buildWasmModule() { _ in
+        b.buildWasmModule { _ in
             b.build(n: 20)
         }
         b.build(n: 10)
-        let m = b.buildWasmModule() { _ in
+        let m = b.buildWasmModule { _ in
             b.build(n: 20)
         }
         b.build(n: 20)
@@ -87,25 +86,31 @@ public let ProgramTemplates = [
 
         var f: Variable? = nil
 
-        withEqualProbability({
-            f = b.buildAsyncFunction(with: b.randomParameters()) { _ in
-                b.build(n: Int.random(in: 5...20))
-            }
-        }, {
-            f = b.buildPlainFunction(with: b.randomParameters()) { _ in
-                b.build(n: Int.random(in: 5...20))
-            }
-        })
+        withEqualProbability(
+            {
+                f = b.buildAsyncFunction(with: b.randomParameters()) { _ in
+                    b.build(n: Int.random(in: 5...20))
+                }
+            },
+            {
+                f = b.buildPlainFunction(with: b.randomParameters()) { _ in
+                    b.build(n: Int.random(in: 5...20))
+                }
+            })
 
         let signature = b.type(of: f!).signature ?? Signature.forUnknownFunction
         // As we do not yet know what types we have in the Wasm module when we try to call this, let Fuzzilli know that it could potentially use all Wasm types here.
-        let allWasmTypes: WeightedList<ILType> = WeightedList([(.wasmi32, 1), (.wasmi64, 1), (.wasmf32, 1), (.wasmf64, 1), (.wasmExternRef, 1), (.wasmFuncRef, 1)])
+        let allWasmTypes: WeightedList<ILType> = WeightedList([
+            (.wasmi32, 1), (.wasmi64, 1), (.wasmf32, 1), (.wasmf64, 1), (.wasmExternRef(), 1),
+            (.wasmFuncRef(), 1),
+        ])
 
-        var wasmSignature = ProgramBuilder.convertJsSignatureToWasmSignature(signature, availableTypes: allWasmTypes)
+        var wasmSignature = ProgramBuilder.convertJsSignatureToWasmSignature(
+            signature, availableTypes: allWasmTypes)
         let wrapped = b.wrapSuspending(function: f!)
 
         let m = b.buildWasmModule { mod in
-            mod.addWasmFunction(with: [] => []) { fbuilder, _, _  in
+            mod.addWasmFunction(with: [] => []) { fbuilder, _, _ in
                 // This will create a bunch of locals, which should create large (>4KB) frames.
                 if probability(0.02) {
                     for _ in 0..<1000 {
@@ -117,7 +122,8 @@ public let ProgramTemplates = [
                 // Best effort call...
                 // TODO: Extend findOrGenerateArguments to work in Wasm as well.
                 if let args {
-                    fbuilder.wasmJsCall(function: wrapped, withArgs: args, withWasmSignature: wasmSignature)
+                    fbuilder.wasmJsCall(
+                        function: wrapped, withArgs: args, withWasmSignature: wasmSignature)
                 }
                 b.build(n: 4)
                 return []
@@ -135,7 +141,8 @@ public let ProgramTemplates = [
 
         b.build(n: 10)
 
-        b.callFunction(exportedMethod, withArgs: b.randomArguments(forCallingFunctionWithSignature: signature))
+        b.callFunction(
+            exportedMethod, withArgs: b.randomArguments(forCallingFunctionWithSignature: signature))
 
         b.build(n: 5)
     },
@@ -146,34 +153,41 @@ public let ProgramTemplates = [
 
         // A few tags (wasm exception kinds) to be used later on.
         let wasmTags = (0...Int.random(in: 0..<5)).map { _ in
-            b.createWasmTag(parameterTypes: b.randomTagParameters())
+            b.createWasmTag(parameterTypes: b.randomTagParametersJs())
         }
         let tags = [b.createWasmJSTag()] + wasmTags
         let tagToThrow = chooseUniform(from: wasmTags)
         let throwParamTypes = b.type(of: tagToThrow).wasmTagType!.parameters
         let tagToCatchForRethrow = chooseUniform(from: tags)
-        let catchBlockOutputTypes = b.type(of: tagToCatchForRethrow).wasmTagType!.parameters + [.wasmExnRef]
+        let catchBlockOutputTypes =
+            b.type(of: tagToCatchForRethrow).wasmTagType!.parameters + [.wasmExnRef()]
 
         let module = b.buildWasmModule { wasmModule in
             // Wasm function that throws a tag, catches a tag (the same or a different one) to
             // rethrow it again (or another exnref if present).
             wasmModule.addWasmFunction(with: [] => []) { function, label, args in
                 b.build(n: 10)
-                let caughtValues = function.wasmBuildBlockWithResults(with: [] => catchBlockOutputTypes, args: []) { catchRefLabel, _ in
+                let caughtValues = function.wasmBuildBlockWithResults(
+                    with: [] => catchBlockOutputTypes, args: []
+                ) { catchRefLabel, _ in
                     // TODO(mliedtke): We should probably allow mutations of try_tables to make
                     // these cases more generic. This would probably require being able to wrap
                     // things in a new block (so we can insert a target destination for a new catch
                     // with a matching signature) or to at least create a new tag for an existing
                     // block target. Either way, this is non-trivial.
-                    function.wasmBuildTryTable(with: [] => [], args: [tagToCatchForRethrow, catchRefLabel], catches: [.Ref]) { _, _ in
+                    function.wasmBuildTryTable(
+                        with: [] => [], args: [tagToCatchForRethrow, catchRefLabel], catches: [.Ref]
+                    ) { _, _ in
                         b.build(n: 10)
-                        function.WasmBuildThrow(tag: tagToThrow, inputs: throwParamTypes.map(function.findOrGenerateWasmVar))
+                        function.WasmBuildThrow(
+                            tag: tagToThrow,
+                            inputs: throwParamTypes.map(function.findOrGenerateWasmVar))
                         return []
                     }
                     return catchBlockOutputTypes.map(function.findOrGenerateWasmVar)
                 }
                 b.build(n: 10)
-                function.wasmBuildThrowRef(exception: b.randomVariable(ofType: .wasmExnRef)!)
+                function.wasmBuildThrowRef(exception: b.randomVariable(ofType: .wasmExnRef())!)
                 return []
             }
         }
@@ -201,29 +215,37 @@ public let ProgramTemplates = [
         let numCallees = Int.random(in: 1...5)
 
         let module = b.buildWasmModule { wasmModule in
-            let callees = (0..<numCallees).map {_ in wasmModule.addWasmFunction(with: calleeSig) { function, label, params in
-                b.build(n: 10)
-                return calleeSig.outputTypes.map(function.findOrGenerateWasmVar)
-            }}
+            let callees = (0..<numCallees).map { _ in
+                wasmModule.addWasmFunction(with: calleeSig) { function, label, params in
+                    b.build(n: 10)
+                    return calleeSig.outputTypes.map(function.findOrGenerateWasmVar)
+                }
+            }
 
-            let table = wasmModule.addTable(elementType: .wasmFuncRef,
-                                            minSize: 10,
-                                            definedEntries: callees.enumerated().map { (index, callee) in
-                                                .init(indexInTable: index, signature: calleeSig)
-                                            },
-                                            definedEntryValues: callees,
-                                            isTable64: useTable64)
+            let table = wasmModule.addTable(
+                elementType: .wasmFuncRef(),
+                minSize: 10,
+                definedEntries: callees.enumerated().map { (index, callee) in
+                    .init(indexInTable: index, signature: calleeSig)
+                },
+                definedEntryValues: callees,
+                isTable64: useTable64)
 
             let main = wasmModule.addWasmFunction(with: mainSig) { function, label, params in
-                b.build(n:20)
+                b.build(n: 20)
                 if let arguments = b.randomWasmArguments(forWasmSignature: calleeSig) {
                     if Bool.random() {
-                        function.wasmReturnCallDirect(signature: calleeSig, function: callees.randomElement()!, functionArgs: arguments)
+                        function.wasmReturnCallDirect(
+                            signature: calleeSig, function: callees.randomElement()!,
+                            functionArgs: arguments)
                     } else {
-                        let calleeIndex = useTable64
+                        let calleeIndex =
+                            useTable64
                             ? function.consti64(Int64(Int.random(in: 0..<callees.count)))
                             : function.consti32(Int32(Int.random(in: 0..<callees.count)))
-                        function.wasmReturnCallIndirect(signature: calleeSig, table: table, functionArgs: arguments, tableIndex: calleeIndex)
+                        function.wasmReturnCallIndirect(
+                            signature: calleeSig, table: table, functionArgs: arguments,
+                            tableIndex: calleeIndex)
                     }
                 }
                 return mainSig.outputTypes.map(function.findOrGenerateWasmVar)
@@ -231,8 +253,9 @@ public let ProgramTemplates = [
         }
 
         let exports = module.loadExports()
-        let args = b.randomArguments(forCallingFunctionWithSignature:
-            ProgramBuilder.convertWasmSignatureToJsSignature(mainSig))
+        let args = b.randomArguments(
+            forCallingFunctionWithSignature:
+                ProgramBuilder.convertWasmSignatureToJsSignature(mainSig))
         b.callMethod(module.getExportedMethod(at: numCallees), on: exports, withArgs: args)
     },
 
@@ -364,14 +387,17 @@ public let ProgramTemplates = [
             let cond: Variable
             if probability(0.5) {
                 // Run the code in one specific iteration
-                let selectedIteration = withEqualProbability({
-                    // Prefer to perform the action during one of the last iterations
-                    assert(numIterations > 10)
-                    return Int.random(in: (numIterations - 10)..<numIterations)
-                }, {
-                    return Int.random(in: 0..<numIterations)
-                })
-                cond = b.compare(iterationCount, with: b.loadInt(Int64(selectedIteration)), using: .equal)
+                let selectedIteration = withEqualProbability(
+                    {
+                        // Prefer to perform the action during one of the last iterations
+                        assert(numIterations > 10)
+                        return Int.random(in: (numIterations - 10)..<numIterations)
+                    },
+                    {
+                        return Int.random(in: 0..<numIterations)
+                    })
+                cond = b.compare(
+                    iterationCount, with: b.loadInt(Int64(selectedIteration)), using: .equal)
             } else {
                 // Run the code every nth iteration
                 let modulus = b.loadInt(chooseUniform(from: [2, 5, 10, 25]))
@@ -473,7 +499,8 @@ public let ProgramTemplates = [
 
             // Extract the original char code, xor it with a random 7-bit number, then construct the new character value.
             let originalCharCode = b.callMethod("charCodeAt", on: json, withArgs: [index])
-            let newCharCode = b.binary(originalCharCode, b.loadInt(Int64.random(in: 1..<128)), with: .Xor)
+            let newCharCode = b.binary(
+                originalCharCode, b.loadInt(Int64.random(in: 1..<128)), with: .Xor)
             let newChar = b.callMethod("fromCharCode", on: String, withArgs: [newCharCode])
 
             // And finally construct the mutated string.

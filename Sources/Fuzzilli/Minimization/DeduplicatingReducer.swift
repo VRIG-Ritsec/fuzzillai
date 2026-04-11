@@ -36,7 +36,8 @@ struct DeduplicatingReducer: Reducer {
             let oldInouts = Array(instr.inouts)
             let newInouts = oldInouts.map({ deduplicatedVariables[$0] ?? $0 })
             if oldInouts != newInouts {
-                replacements.append((instr.index, Instruction(instr.op, inouts: newInouts, flags: instr.flags)))
+                replacements.append(
+                    (instr.index, Instruction(instr.op, inouts: newInouts, flags: instr.flags)))
             }
 
             // Scope management.
@@ -57,7 +58,10 @@ struct DeduplicatingReducer: Reducer {
                         deduplicatedVariables[instr.output] = replacement
                     } else {
                         // Each builtin must only be present once (all other instances are replaced with the first one).
-                        assert(visibleBuiltins.elementsStartingAtBottom().allSatisfy({ !$0.contains(op.variableName) }))
+                        assert(
+                            visibleBuiltins.elementsStartingAtBottom().allSatisfy({
+                                !$0.contains(op.variableName)
+                            }))
                         visibleBuiltins.top.append(op.variableName)
                         variableForName[op.variableName] = instr.output
                     }

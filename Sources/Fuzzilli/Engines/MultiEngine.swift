@@ -29,7 +29,10 @@ public class MultiEngine: FuzzEngine {
     /// The number of fuzzing iterations.
     private var currentIteration = 0
 
-    public init(engines: WeightedList<FuzzEngine>, initialActive: FuzzEngine? = nil, iterationsPerEngine: Int) {
+    public init(
+        engines: WeightedList<FuzzEngine>, initialActive: FuzzEngine? = nil,
+        iterationsPerEngine: Int
+    ) {
         assert(iterationsPerEngine > 0)
         self.iterationsPerEngine = iterationsPerEngine
         self.engines = engines
@@ -49,7 +52,8 @@ public class MultiEngine: FuzzEngine {
         if currentIteration % iterationsPerEngine == 0 {
             let nextEngine = engines.randomElement()
             if nextEngine !== activeEngine {
-                logger.info("Switching active engine from \(activeEngine.name) to \(nextEngine.name)")
+                logger.info(
+                    "Switching active engine from \(activeEngine.name) to \(nextEngine.name)")
                 activeEngine = nextEngine
             }
         }

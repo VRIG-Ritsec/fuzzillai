@@ -15,10 +15,34 @@
 import Foundation
 
 #if os(Windows)
-import WinSDK
+    import WinSDK
 #endif /* os(Windows) */
 
 public class JavaScriptExecutor {
+    // helper to support program output larger than the Pipe()'s buffer.
+    private final class OutputBuffer: @unchecked Sendable {
+        private var data = Data()
+        private let lock = NSLock()
+
+        func append(_ newData: Data) {
+            lock.lock()
+            defer { lock.unlock() }
+            data.append(newData)
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return data.count
+        }
+
+        var currentData: Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return data
+        }
+    }
+
     /// Path to the js shell binary.
     let executablePath: String
 
@@ -41,18 +65,23 @@ public class JavaScriptExecutor {
     let env: [(String, String)]
 
     /// Depending on the type this constructor will try to find the requested shell or fail
-    public init?(type: ExecutorType = .any, withArguments maybeArguments: [String]? = nil, withEnv maybeEnv: [(String, String)]? = nil) {
+    public init?(
+        type: ExecutorType = .any, withArguments maybeArguments: [String]? = nil,
+        withEnv maybeEnv: [(String, String)]? = nil
+    ) {
         self.arguments = maybeArguments ?? []
         self.env = maybeEnv ?? []
         let path: String?
 
         switch type {
-            case .any:
-                path = JavaScriptExecutor.findJsShellExecutable() ?? JavaScriptExecutor.findNodeJsExecutable()
-            case .nodejs:
-                path = JavaScriptExecutor.findNodeJsExecutable()
-            case .user:
-                path = JavaScriptExecutor.findJsShellExecutable()
+        case .any:
+            path =
+                JavaScriptExecutor.findJsShellExecutable()
+                ?? JavaScriptExecutor.findNodeJsExecutable()
+        case .nodejs:
+            path = JavaScriptExecutor.findNodeJsExecutable()
+        case .user:
+            path = JavaScriptExecutor.findJsShellExecutable()
         }
 
         if path == nil {
@@ -62,38 +91,57 @@ public class JavaScriptExecutor {
         self.executablePath = path!
     }
 
-    public init(withExecutablePath executablePath: String, arguments: [String], env: [(String, String)]) {
+    public init(
+        withExecutablePath executablePath: String, arguments: [String], env: [(String, String)]
+    ) {
         self.executablePath = executablePath
         self.arguments = arguments
         self.env = env
     }
 
     /// Executes the JavaScript script using the configured engine and returns the stdout.
-    public func executeScript(_ script: String, withTimeout timeout: TimeInterval? = nil) throws -> Result {
-        return try execute(executablePath, withInput: prefix + script.data(using: .utf8)!, withArguments: self.arguments, withEnv: self.env, timeout: timeout)
+    public func executeScript(_ script: String, withTimeout timeout: TimeInterval? = nil) throws
+        -> Result
+    {
+        return try execute(
+            executablePath, withInput: prefix + script.data(using: .utf8)!,
+            withArguments: self.arguments, withEnv: self.env, timeout: timeout)
     }
 
     /// Executes the JavaScript script at the specified path using the configured engine and returns the stdout.
-    public func executeScript(at url: URL, withTimeout timeout: TimeInterval? = nil) throws -> Result {
+    public func executeScript(at url: URL, withTimeout timeout: TimeInterval? = nil) throws
+        -> Result
+    {
         let script = try Data(contentsOf: url)
-        return try execute(executablePath, withInput: prefix + script, withArguments: self.arguments, withEnv: self.env, timeout: timeout)
+        return try execute(
+            executablePath, withInput: prefix + script, withArguments: self.arguments,
+            withEnv: self.env, timeout: timeout)
     }
 
-    func execute(_ path: String, withInput input: Data = Data(), withArguments arguments: [String] = [], withEnv env: [(String, String)] = [], timeout maybeTimeout: TimeInterval? = nil) throws -> Result {
+    func execute(
+        _ path: String, withInput input: Data = Data(), withArguments arguments: [String] = [],
+        withEnv env: [(String, String)] = [], timeout maybeTimeout: TimeInterval? = nil
+    ) throws -> Result {
         let inputPipe = Pipe()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
 
+        let outputData = OutputBuffer()
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            outputData.append(handle.availableData)
+        }
+
         // Write input into file.
         let url = FileManager.default.temporaryDirectory
-               .appendingPathComponent(UUID().uuidString)
-               .appendingPathExtension("js")
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("js")
 
         try input.write(to: url)
         // Close stdin
         try inputPipe.fileHandleForWriting.close()
 
-        let environment = ProcessInfo.processInfo.environment.merging(env, uniquingKeysWith: { _, new in new })
+        let environment = ProcessInfo.processInfo.environment.merging(
+            env, uniquingKeysWith: { _, new in new })
 
         // Execute the subprocess.
         let task = Process()
@@ -116,19 +164,22 @@ public class JavaScriptExecutor {
             }
             runningCheck: if task.isRunning {
                 timedOut = true
-#if os(Windows)
-                guard let processHandle = OpenProcess(DWORD(PROCESS_TERMINATE), false, DWORD(task.processIdentifier)) else {
-                    // Fall back to built-in termination
-                    task.terminate()
-                    break runningCheck
-                }
-                defer { CloseHandle(processHandle) }
-                TerminateProcess(processHandle, 1)
-#else
-                // Properly kill the task now with SIGKILL as it might be stuck
-                // in Wasm, where SIGTERM is not enough.
-                kill(task.processIdentifier, SIGKILL)
-#endif /* os(Windows) */
+                #if os(Windows)
+                    guard
+                        let processHandle = OpenProcess(
+                            DWORD(PROCESS_TERMINATE), false, DWORD(task.processIdentifier))
+                    else {
+                        // Fall back to built-in termination
+                        task.terminate()
+                        break runningCheck
+                    }
+                    defer { CloseHandle(processHandle) }
+                    TerminateProcess(processHandle, 1)
+                #else
+                    // Properly kill the task now with SIGKILL as it might be stuck
+                    // in Wasm, where SIGTERM is not enough.
+                    kill(task.processIdentifier, SIGKILL)
+                #endif /* os(Windows) */
             }
         }
 
@@ -138,19 +189,13 @@ public class JavaScriptExecutor {
         try FileManager.default.removeItem(at: url)
 
         // Fetch and return the output.
-        var output = ""
-        if let data = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-            output = data
-        } else {
-            output = "Process output is not valid UTF-8"
-        }
-        var error = ""
-        if let data = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) {
-            error = data
-        } else {
-            error = "Process stderr is not valid UTF-8"
-        }
-        var outcome: Result.Outcome
+        var output =
+            String(data: outputData.currentData, encoding: .utf8)
+            ?? "Process output is not valid UTF-8"
+        let error =
+            String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+            ?? "Process stderr is not valid UTF-8"
+        let outcome: Result.Outcome
         if timedOut {
             outcome = .timedOut
             output += "\nError: Timed out"
@@ -166,6 +211,10 @@ public class JavaScriptExecutor {
             var directories = pathVar.split(separator: ":")
             // Also append the homebrew binary path since it may not be in $PATH, especially inside XCode.
             directories.append("/opt/homebrew/bin")
+            // Append the CWD to enable bundling node.js from where the script
+            // is called.
+            directories.append(
+                String.SubSequence(FileManager.default.currentDirectoryPath))
             for directory in directories {
                 let path = String(directory + "/node")
                 if FileManager.default.isExecutableFile(atPath: path) {
@@ -183,22 +232,22 @@ public class JavaScriptExecutor {
 
     /// The Result of a JavaScript Execution, the exit code and any associated output.
     public struct Result {
-        enum Outcome: Equatable {
+        public enum Outcome: Equatable {
             case terminated(status: Int32)
             case timedOut
         }
 
-        let outcome: Outcome
-        let output: String
-        let error: String
+        public let outcome: Outcome
+        public let output: String
+        public let error: String
 
-        var isSuccess: Bool {
+        public var isSuccess: Bool {
             return outcome == .terminated(status: 0)
         }
-        var isFailure: Bool {
+        public var isFailure: Bool {
             return !isSuccess
         }
-        var isTimeOut: Bool {
+        public var isTimeOut: Bool {
             return outcome == .timedOut
         }
     }

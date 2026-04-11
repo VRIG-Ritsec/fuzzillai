@@ -75,7 +75,7 @@ public class ProbingMutator: RuntimeAssistedMutator {
         // the block that they are the output of is closed.
         var pendingProbesStack = Stack<Variable?>()
         let b = fuzzer.makeBuilder()
-        b.adopting(from: program) {
+        b.adopting {
             for instr in program.code {
                 b.adopt(instr)
 
@@ -106,7 +106,10 @@ public class ProbingMutator: RuntimeAssistedMutator {
         return instrumentedProgram
     }
 
-    override func process(_ output: String, ofInstrumentedProgram instrumentedProgram: Program, using b: ProgramBuilder) -> (Program?, RuntimeAssistedMutator.Outcome) {
+    override func process(
+        _ output: String, ofInstrumentedProgram instrumentedProgram: Program,
+        using b: ProgramBuilder
+    ) -> (Program?, RuntimeAssistedMutator.Outcome) {
         assert(instrumentedProgram.code.contains(where: { $0.op is Probe }))
 
         // Parse the output: look for either "PROBING_ERROR" or "PROBING_RESULTS" and process the content.
@@ -130,7 +133,8 @@ public class ProbingMutator: RuntimeAssistedMutator {
 
             let decoder = JSONDecoder()
             let payload = Data(line.dropFirst(resultsMarker.count).utf8)
-            guard let decodedResults = try? decoder.decode([String: Result].self, from: payload) else {
+            guard let decodedResults = try? decoder.decode([String: Result].self, from: payload)
+            else {
                 logger.error("Failed to decode JSON payload in \"\(line)\"")
                 return (nil, .unexpectedError)
             }
@@ -143,7 +147,7 @@ public class ProbingMutator: RuntimeAssistedMutator {
 
         // Now build the final program by parsing the results and replacing the Probe operations
         // with FuzzIL operations that install one of the non-existent properties (if any).
-        b.adopting(from: instrumentedProgram) {
+        b.adopting {
             for instr in instrumentedProgram.code {
                 if let op = instr.op as? Probe {
                     if let results = results[op.id] {
@@ -162,10 +166,13 @@ public class ProbingMutator: RuntimeAssistedMutator {
     }
 
     override func logAdditionalStatistics() {
-        logger.verbose("Average number of inserted probes: \(String(format: "%.2f", averageNumberOfInsertedProbes.currentValue))")
-        logger.verbose("Properties installed during recent mutations (in total: \(installedPropertyCounter)):")
+        logger.verbose(
+            "Average number of inserted probes: \(String(format: "%.2f", averageNumberOfInsertedProbes.currentValue))"
+        )
+        logger.verbose(
+            "Properties installed during recent mutations (in total: \(installedPropertyCounter)):")
         var statsAsList = installedPropertiesForGetAccess.map({ (key: $0, count: $1, op: "get") })
-        statsAsList +=   installedPropertiesForSetAccess.map({ (key: $0, count: $1, op: "set") })
+        statsAsList += installedPropertiesForSetAccess.map({ (key: $0, count: $1, op: "set") })
         for (key, count, op) in statsAsList.sorted(by: { $0.count > $1.count }) {
             let type = isCallableProperty(key) ? "function" : "anything"
             logger.verbose("    \(count)x \(key.description) (access: \(op), type: \(type))")
@@ -178,7 +185,10 @@ public class ProbingMutator: RuntimeAssistedMutator {
 
     private func processProbeResults(_ result: Result, on obj: Variable, using b: ProgramBuilder) {
         // Extract all candidates: properties that are accessed but not present (or explicitly marked as overwritable).
-        let loadCandidates = result.loads.filter({ $0.value == .notFound || ($0.value == .found && propertiesOnPrototypeToOverwrite.contains($0.key)) }).map({ $0.key })
+        let loadCandidates = result.loads.filter({
+            $0.value == .notFound
+                || ($0.value == .found && propertiesOnPrototypeToOverwrite.contains($0.key))
+        }).map({ $0.key })
         // For stores we only care about properties that don't exist anywhere on the prototype chain.
         let storeCandidates = result.stores.filter({ $0.value == .notFound }).map({ $0.key })
         let candidates = Set(loadCandidates).union(storeCandidates)
@@ -194,25 +204,30 @@ public class ProbingMutator: RuntimeAssistedMutator {
         if probability(0.8) {
             installRegularProperty(property, on: obj, using: b)
         } else {
-            installPropertyAccessor(for: property, on: obj, using: b, shouldHaveGetter: propertyIsLoaded, shouldHaveSetter: propertyIsStored)
+            installPropertyAccessor(
+                for: property, on: obj, using: b, shouldHaveGetter: propertyIsLoaded,
+                shouldHaveSetter: propertyIsStored)
         }
 
         // Update our statistics.
         if verbose && propertyIsLoaded {
-            installedPropertiesForGetAccess[property] = (installedPropertiesForGetAccess[property] ?? 0) + 1
+            installedPropertiesForGetAccess[property] =
+                (installedPropertiesForGetAccess[property] ?? 0) + 1
         }
         if verbose && propertyIsStored {
-            installedPropertiesForSetAccess[property] = (installedPropertiesForSetAccess[property] ?? 0) + 1
+            installedPropertiesForSetAccess[property] =
+                (installedPropertiesForSetAccess[property] ?? 0) + 1
         }
         installedPropertyCounter += 1
     }
 
-    private func installRegularProperty(_ property: Property, on obj: Variable, using b: ProgramBuilder) {
+    private func installRegularProperty(
+        _ property: Property, on obj: Variable, using b: ProgramBuilder
+    ) {
         let value = selectValue(for: property, using: b)
 
         switch property {
         case .regular(let name):
-            assert(isValidPropertyName(name))
             b.setProperty(name, of: obj, to: value)
         case .element(let index):
             b.setElement(index, of: obj, to: value)
@@ -223,7 +238,10 @@ public class ProbingMutator: RuntimeAssistedMutator {
         }
     }
 
-    private func installPropertyAccessor(for property: Property, on obj: Variable, using b: ProgramBuilder, shouldHaveGetter: Bool, shouldHaveSetter: Bool) {
+    private func installPropertyAccessor(
+        for property: Property, on obj: Variable, using b: ProgramBuilder, shouldHaveGetter: Bool,
+        shouldHaveSetter: Bool
+    ) {
         assert(shouldHaveGetter || shouldHaveSetter)
         let installAsValue = probability(0.5)
         let installGetter = !installAsValue && (shouldHaveGetter || probability(0.5))
@@ -257,14 +275,14 @@ public class ProbingMutator: RuntimeAssistedMutator {
 
         switch property {
         case .regular(let name):
-            assert(isValidPropertyName(name))
             b.configureProperty(name, of: obj, usingFlags: PropertyFlags.random(), as: config)
         case .element(let index):
             b.configureElement(index, of: obj, usingFlags: PropertyFlags.random(), as: config)
         case .symbol(let desc):
             let Symbol = b.createNamedVariable(forBuiltin: "Symbol")
             let symbol = b.getProperty(extractSymbolNameFromDescription(desc), of: Symbol)
-            b.configureComputedProperty(symbol, of: obj, usingFlags: PropertyFlags.random(), as: config)
+            b.configureComputedProperty(
+                symbol, of: obj, usingFlags: PropertyFlags.random(), as: config)
         }
     }
 
@@ -279,8 +297,12 @@ public class ProbingMutator: RuntimeAssistedMutator {
     }
 
     private func isCallableProperty(_ property: Property) -> Bool {
-        let knownFunctionPropertyNames = ["valueOf", "toString", "constructor", "then", "next", "get", "set"]
-        let knownNonFunctionSymbolNames = ["Symbol.isConcatSpreadable", "Symbol.unscopables", "Symbol.toStringTag"]
+        let knownFunctionPropertyNames = [
+            "valueOf", "toString", "constructor", "then", "next", "get", "set",
+        ]
+        let knownNonFunctionSymbolNames = [
+            "Symbol.isConcatSpreadable", "Symbol.unscopables", "Symbol.toStringTag",
+        ]
 
         // Check if the property should be a function.
         switch property {
@@ -297,11 +319,13 @@ public class ProbingMutator: RuntimeAssistedMutator {
         if isCallableProperty(property) {
             // Either create a new function or reuse an existing one
             let probabilityOfReusingExistingFunction = 2.0 / 3.0
-            if let f = b.randomVariable(ofType: .function()), probability(probabilityOfReusingExistingFunction) {
+            if let f = b.randomVariable(ofType: .function()),
+                probability(probabilityOfReusingExistingFunction)
+            {
                 return f
             } else {
                 let f = b.buildPlainFunction(with: .parameters(n: Int.random(in: 0..<3))) { args in
-                    b.build(n: 2)       // TODO maybe forbid generating any nested blocks here?
+                    b.build(n: 2)  // TODO maybe forbid generating any nested blocks here?
                     b.doReturn(b.randomJsVariable())
                 }
                 return f
@@ -310,11 +334,6 @@ public class ProbingMutator: RuntimeAssistedMutator {
             // Otherwise, just return a random variable.
             return b.randomJsVariable()
         }
-    }
-
-    private func isValidPropertyName(_ name: String) -> Bool {
-        // Currently only property names containing whitespaces or newlines are invalid.
-        return name.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
     }
 
     private func parsePropertyName(_ propertyName: String) -> Property? {
@@ -332,11 +351,6 @@ public class ProbingMutator: RuntimeAssistedMutator {
         }
 
         // Everything else is a regular property name.
-        guard isValidPropertyName(propertyName) else {
-            // Invalid property names should have been filtered out on the JavaScript side, so receiving them here is an error.
-            logger.error("Received invalid property name: \(propertyName)")
-            return nil
-        }
         return .regular(propertyName)
     }
 

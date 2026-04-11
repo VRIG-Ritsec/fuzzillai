@@ -36,11 +36,14 @@ public class CodeGenMutator: BaseInstructionMutator {
 
         // Don't CodeGen on Type definition instructions, with this line they are not available as candidates which effectively compresses the program and avoids useless CodeGeneration.
         // (As any emitted type would not be an input to the EndTypeGroup instruction).
-        if (instr.op.requiredContext.contains(.wasmTypeGroup) && !(instr.op is WasmEndTypeGroup)) || (instr.op is WasmBeginTypeGroup) {
+        if (instr.op.requiredContext.contains(.wasmTypeGroup) && !(instr.op is WasmEndTypeGroup))
+            || (instr.op is WasmBeginTypeGroup)
+        {
             return false
         }
 
-        return variableAnalyzer.visibleVariables.count >= minVisibleVariables && !deadCodeAnalyzer.currentlyInDeadCode
+        return variableAnalyzer.visibleVariables.count >= minVisibleVariables
+            && !deadCodeAnalyzer.currentlyInDeadCode
     }
 
     public override func mutate(_ instr: Instruction, _ b: ProgramBuilder) {

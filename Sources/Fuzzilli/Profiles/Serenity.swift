@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
-let duktapeProfile = Profile(
-    processArgs: { randomize in
-        ["--reprl"]
-    },
-
-    processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
-
+let serenityProfile = Profile(
+    processArgs: { randomize in return [""] },
+    processArgsReference: nil,
+    processEnv: [
+        "UBSAN_OPTIONS": "handle_segv=0 handle_abrt=0",
+        "ASAN_OPTIONS": "abort_on_error=1",
+    ],
     maxExecsBeforeRespawn: 1000,
-
     timeout: Timeout.value(250),
-
     codePrefix: """
-                """,
-
+        function main() {
+        """,
     codeSuffix: """
-                """,
-
-    ecmaVersion: ECMAScriptVersion.es5,
+        }
+        main();
+        """,
+    ecmaVersion: ECMAScriptVersion.es6,
 
     startupTests: [
         // Check that the fuzzilli integration is available.
@@ -43,22 +40,13 @@ let duktapeProfile = Profile(
     ],
 
     additionalCodeGenerators: [],
-
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
 
     disabledCodeGenerators: [],
-
     disabledMutators: [],
 
     additionalBuiltins: [
-        "CBOR.encode"               :  .function([.jsAnything] => .object()),
-        "CBOR.decode"               :  .function([.object()] => .object()),
-        "Duktape.fin"               :  .function([.object(), .opt(.function())] => .undefined),
-        "Duktape.act"               :  .function([.number] => .object()),
-        "Duktape.gc"                :  .function([] => .undefined),
-        "Duktape.compact"           :  .function([.object()] => .undefined),
-        "placeholder"               :  .function([] => .undefined),
-
+        "gc": .function([] => .undefined)
     ],
 
     additionalObjectGroups: [],

@@ -35,7 +35,8 @@ public class SpliceMutator: BaseInstructionMutator {
         // actually update that instruction to make spliced type definitions
         // available.
         if (instr.op.requiredContext.contains(.wasmTypeGroup) && !(instr.op is WasmEndTypeGroup))
-            || (instr.op is WasmBeginTypeGroup) {
+            || (instr.op is WasmBeginTypeGroup)
+        {
             return false
         }
         // It only makes sense to copy code if we're not currently in dead code.

@@ -34,7 +34,7 @@ public class JavaScriptLifter: Lifter {
     let version: ECMAScriptVersion
 
     /// This environment is used if we need to re-type a program before we compile Wasm code.
-    private var environment: JavaScriptEnvironment?
+    private var environment: JavaScriptEnvironment
 
     /// Counter to assist the lifter in detecting nested CodeStrings
     private var codeStringNestingLevel = 0
@@ -64,17 +64,41 @@ public class JavaScriptLifter: Lifter {
         }
     }
 
-    public init(prefix: String = "",
-                suffix: String = "",
-                ecmaVersion: ECMAScriptVersion,
-                environment: JavaScriptEnvironment? = nil,
-                alwaysEmitVariables: Bool = false) {
+    struct FunctionLiftingState {
+        let outputVariable: Variable
+        // If true, the function refers to itself (e.g. recursion), preventing inlining.
+        let isSelfReferencing: Bool
+        // For inlineable functions:
+        var parameters: String = ""
+        var isAsync: Bool = false
+        let startInstructionIndex: Int
+    }
+    private var functionLiftingStack = Stack<FunctionLiftingState>()
+
+    public init(
+        prefix: String = "",
+        suffix: String = "",
+        ecmaVersion: ECMAScriptVersion,
+        environment: JavaScriptEnvironment,
+        alwaysEmitVariables: Bool = false
+    ) {
         self.prefix = prefix
         self.suffix = suffix
         self.version = ecmaVersion
         self.environment = environment
         self.logger = Logger(withLabel: "JavaScriptLifter")
         self.alwaysEmitVariables = alwaysEmitVariables
+    }
+
+    func isUsedInBlock(variable: Variable, blockStart: Int, blockEnd: Int, analyzer: DefUseAnalyzer)
+        -> Bool
+    {
+        // Check if any use of 'variable' is inside [blockStart, blockEnd]
+        // Note: The variable is defined at blockStart, so we only care about uses strictly after that.
+        // And strictly before or at blockEnd (the EndInstruction itself can use the variable).
+        return analyzer.uses(of: variable).contains {
+            $0.index > blockStart && $0.index <= blockEnd
+        }
     }
 
     public func lift(_ program: Program, withOptions options: LiftingOptions) -> String {
@@ -90,6 +114,20 @@ public class JavaScriptLifter: Lifter {
         var typer: JSTyper? = nil
         // The currently active WasmLifter, we can only have one of them.
         var wasmInstructions = Code()
+
+        // Map block start index to end index.
+        let blockEndIndices = program.code.reduce(
+            into: (indices: [Int: Int](), stack: Stack<Int>())
+        ) { context, instr in
+            if instr.isBlockEnd {
+                let start = context.stack.pop()
+                context.indices[start] = instr.index
+            }
+            if instr.isBlockStart {
+                context.stack.push(instr.index)
+            }
+        }.indices
+
         for instr in program.code {
             analyzer.analyze(instr)
             if instr.op is Explore { needToSupportExploration = true }
@@ -101,10 +139,14 @@ public class JavaScriptLifter: Lifter {
 
         if needToSupportWasm {
             // If we need to support Wasm we need to type all instructions outside of Wasm such that the WasmLifter can access extra type information during lifting.
-            typer = JSTyper(for: environment!)
+            typer = JSTyper(for: environment)
         }
 
-        var w = JavaScriptWriter(analyzer: analyzer, version: version, stripComments: !options.contains(.includeComments), includeLineNumbers: options.contains(.includeLineNumbers), alwaysEmitVariables: alwaysEmitVariables)
+        var w = JavaScriptWriter(
+            analyzer: analyzer, version: version,
+            stripComments: !options.contains(.includeComments),
+            includeLineNumbers: options.contains(.includeLineNumbers),
+            alwaysEmitVariables: alwaysEmitVariables)
 
         var wasmCodeStarts: Int? = nil
         var wasmTypeGroupStarts: Int? = nil
@@ -146,7 +188,9 @@ public class JavaScriptLifter: Lifter {
         }
 
         for instr in program.code {
-            if options.contains(.includeComments), let comment = program.comments.at(.instruction(instr.index)) {
+            if options.contains(.includeComments),
+                let comment = program.comments.at(.instruction(instr.index))
+            {
                 w.emitComment(comment)
             }
 
@@ -210,7 +254,9 @@ public class JavaScriptLifter: Lifter {
 
                 // We need to declare all outputs of the guarded operation before the try-catch so that they are
                 // visible to subsequent code.
-                assert(instr.numInnerOutputs == 0, "Inner outputs are not currently supported in guarded operations")
+                assert(
+                    instr.numInnerOutputs == 0,
+                    "Inner outputs are not currently supported in guarded operations")
                 let neededOutputs = instr.allOutputs.filter({ analyzer.numUses(of: $0) > 0 })
                 if !neededOutputs.isEmpty {
                     let VARS = w.declareAll(neededOutputs).joined(separator: ", ")
@@ -230,9 +276,10 @@ public class JavaScriptLifter: Lifter {
             // We also have some lightweight checking logic to ensure that the input expressions are retrieved in the correct order.
             // This does not guarantee that they will also _evaluate_ in that order at runtime, but it's probably a decent approximation.
             guard let inputs = w.retrieve(expressionsFor: instr.inputs) else {
-                fatalError("Missing one or more expressions for inputs \(instr.inputs) of \(instr).\n" +
-                           "Program is \(FuzzILLifter().lift(program, withOptions: .includeComments))\n" +
-                           "Dying now.")
+                fatalError(
+                    "Missing one or more expressions for inputs \(instr.inputs) of \(instr).\n"
+                        + "Program is \(FuzzILLifter().lift(program, withOptions: .includeComments))\n"
+                        + "Dying now.")
             }
             var nextExpressionToFetch = 0
             func input(_ i: Int) -> Expression {
@@ -272,7 +319,8 @@ public class JavaScriptLifter: Lifter {
                 w.assign(expr, to: instr.output)
 
             case .loadString(let op):
-                w.assign(StringLiteral.new("\"\(op.value)\""), to: instr.output)
+                let escaped = op.value.replacingOccurrences(of: "\"", with: "\\\"")
+                w.assign(StringLiteral.new("\"\(escaped)\""), to: instr.output)
 
             case .loadRegExp(let op):
                 let flags = op.flags.asString()
@@ -324,20 +372,20 @@ public class JavaScriptLifter: Lifter {
                 w.declare(instr.output, as: op.variableName)
 
             case .createNamedDisposableVariable(let op):
-                w.emit("using \(op.variableName) = \(input(0));");
+                w.emit("using \(op.variableName) = \(input(0));")
                 w.declare(instr.output, as: op.variableName)
 
             case .createNamedAsyncDisposableVariable(let op):
-                w.emit("await using \(op.variableName) = \(input(0));");
+                w.emit("await using \(op.variableName) = \(input(0));")
                 w.declare(instr.output, as: op.variableName)
 
             case .loadDisposableVariable:
-                let V = w.declare(instr.output);
-                w.emit("using \(V) = \(input(0));");
+                let V = w.declare(instr.output)
+                w.emit("using \(V) = \(input(0));")
 
             case .loadAsyncDisposableVariable:
-                let V = w.declare(instr.output);
-                w.emit("await using \(V) = \(input(0));");
+                let V = w.declare(instr.output)
+                w.emit("await using \(V) = \(input(0));")
 
             case .beginObjectLiteral:
                 // We force all expressions to evaluate before the object literal.
@@ -352,9 +400,8 @@ public class JavaScriptLifter: Lifter {
                 w.pushTemporaryOutputBuffer(initialIndentionLevel: 0)
 
             case .objectLiteralAddProperty(let op):
-                let PROPERTY = op.propertyName
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
                 let VALUE = input(0)
-                assert(!PROPERTY.contains(" "))
                 currentObjectLiteral.addField("\(PROPERTY): \(VALUE)")
 
             case .objectLiteralAddElement(let op):
@@ -378,7 +425,7 @@ public class JavaScriptLifter: Lifter {
             case .beginObjectLiteralMethod(let op):
                 let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
                 let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = op.methodName
+                let METHOD = quoteIdentifierIfNeeded(op.methodName)
                 currentObjectLiteral.beginMethod("\(METHOD)(\(PARAMS)) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
@@ -397,20 +444,34 @@ public class JavaScriptLifter: Lifter {
 
             case .beginObjectLiteralGetter(let op):
                 assert(instr.numInnerOutputs == 1)
-                let PROPERTY = op.propertyName
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
                 currentObjectLiteral.beginMethod("get \(PROPERTY)() {", &w)
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .beginObjectLiteralComputedGetter:
+                let PROPERTY = input(0)
+                currentObjectLiteral.beginMethod("get [\(PROPERTY)]() {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
             case .beginObjectLiteralSetter(let op):
                 assert(instr.numInnerOutputs == 2)
                 let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
                 let PARAMS = liftParameters(op.parameters, as: vars)
-                let PROPERTY = op.propertyName
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
                 currentObjectLiteral.beginMethod("set \(PROPERTY)(\(PARAMS)) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
+            case .beginObjectLiteralComputedSetter:
+                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
+                let PARAMS = liftParameters(Parameters(count: 1), as: vars)
+                let PROPERTY = input(0)
+                currentObjectLiteral.beginMethod("set [\(PROPERTY)](\(PARAMS)) {", &w)
+                bindVariableToThis(instr.innerOutput(0))
+
             case .endObjectLiteralGetter,
-                 .endObjectLiteralSetter:
+                .endObjectLiteralSetter,
+                .endObjectLiteralComputedGetter,
+                .endObjectLiteralComputedSetter:
                 currentObjectLiteral.endMethod(&w)
 
             case .endObjectLiteral:
@@ -418,14 +479,16 @@ public class JavaScriptLifter: Lifter {
                 // Everything needs to be written into the object literal writer.
                 let dummy = w.popTemporaryOutputBuffer()
                 // The dummy might still contain the comments.
-                assert(dummy.isEmpty || dummy.split(separator: "\n").allSatisfy( {$0.hasPrefix("//")}))
+                assert(
+                    dummy.isEmpty || dummy.split(separator: "\n").allSatisfy({ $0.hasPrefix("//") })
+                )
 
                 let literal = objectLiteralStack.pop()
                 if literal.isEmpty {
                     w.assign(ObjectLiteral.new("{}"), to: instr.output)
                 } else if literal.canInline {
                     // In this case, we inline the object literal.
-                    let code = "{ \(literal.fields.joined(separator: ", ")) }";
+                    let code = "{ \(literal.fields.joined(separator: ", ")) }"
                     w.assign(ObjectLiteral.new(code), to: instr.output)
                 } else {
                     let LET = w.declarationKeyword(for: instr.output)
@@ -465,96 +528,34 @@ public class JavaScriptLifter: Lifter {
                 w.leaveCurrentBlock()
                 w.emit("}")
 
-            case .classAddInstanceProperty(let op):
-                let PROPERTY = op.propertyName
+            case .classAddProperty(let op):
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
+                let staticStr = op.isStatic ? "static " : ""
                 if op.hasValue {
                     let VALUE = input(0)
-                    w.emit("\(PROPERTY) = \(VALUE);")
+                    w.emit("\(staticStr)\(PROPERTY) = \(VALUE);")
                 } else {
-                    w.emit("\(PROPERTY);")
+                    w.emit("\(staticStr)\(PROPERTY);")
                 }
 
-            case .classAddInstanceElement(let op):
+            case .classAddElement(let op):
                 let INDEX = op.index < 0 ? "[\(op.index)]" : String(op.index)
+                let staticStr = op.isStatic ? "static " : ""
                 if op.hasValue {
                     let VALUE = input(0)
-                    w.emit("\(INDEX) = \(VALUE);")
+                    w.emit("\(staticStr)\(INDEX) = \(VALUE);")
                 } else {
-                    w.emit("\(INDEX);")
+                    w.emit("\(staticStr)\(INDEX);")
                 }
 
-            case .classAddInstanceComputedProperty(let op):
+            case .classAddComputedProperty(let op):
                 let PROPERTY = input(0)
+                let staticStr = op.isStatic ? "static " : ""
                 if op.hasValue {
                     let VALUE = input(1)
-                    w.emit("[\(PROPERTY)] = \(VALUE);")
+                    w.emit("\(staticStr)[\(PROPERTY)] = \(VALUE);")
                 } else {
-                    w.emit("[\(PROPERTY)];")
-                }
-
-            case .beginClassInstanceMethod(let op):
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = op.methodName
-                w.emit("\(METHOD)(\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .beginClassInstanceComputedMethod(let op):
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = input(0)
-                w.emit("[\(METHOD)](\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .beginClassInstanceGetter(let op):
-                let PROPERTY = op.propertyName
-                w.emit("get \(PROPERTY)() {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .beginClassInstanceSetter(let op):
-                assert(instr.numInnerOutputs == 2)
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let PROPERTY = op.propertyName
-                w.emit("set \(PROPERTY)(\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .endClassInstanceMethod,
-                 .endClassInstanceComputedMethod,
-                 .endClassInstanceGetter,
-                 .endClassInstanceSetter:
-                w.leaveCurrentBlock()
-                w.emit("}")
-
-            case .classAddStaticProperty(let op):
-                let PROPERTY = op.propertyName
-                if op.hasValue {
-                    let VALUE = input(0)
-                    w.emit("static \(PROPERTY) = \(VALUE);")
-                } else {
-                    w.emit("static \(PROPERTY);")
-                }
-
-            case .classAddStaticElement(let op):
-                let INDEX = op.index < 0 ? "[\(op.index)]" : String(op.index)
-                if op.hasValue {
-                    let VALUE = input(0)
-                    w.emit("static \(INDEX) = \(VALUE);")
-                } else {
-                    w.emit("static \(INDEX);")
-                }
-
-            case .classAddStaticComputedProperty(let op):
-                let PROPERTY = input(0)
-                if op.hasValue {
-                    let VALUE = input(1)
-                    w.emit("static [\(PROPERTY)] = \(VALUE);")
-                } else {
-                    w.emit("static [\(PROPERTY)];")
+                    w.emit("\(staticStr)[\(PROPERTY)];")
                 }
 
             case .beginClassStaticInitializer:
@@ -562,82 +563,90 @@ public class JavaScriptLifter: Lifter {
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
-            case .beginClassStaticMethod(let op):
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = op.methodName
-                w.emit("static \(METHOD)(\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .beginClassStaticComputedMethod(let op):
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = input(0)
-                w.emit("static [\(METHOD)](\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .beginClassStaticGetter(let op):
-                assert(instr.numInnerOutputs == 1)
-                let PROPERTY = op.propertyName
-                w.emit("static get \(PROPERTY)() {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput)
-
-            case .beginClassStaticSetter(let op):
-                assert(instr.numInnerOutputs == 2)
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let PROPERTY = op.propertyName
-                w.emit("static set \(PROPERTY)(\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .endClassStaticInitializer,
-                 .endClassStaticMethod,
-                 .endClassStaticComputedMethod,
-                 .endClassStaticGetter,
-                 .endClassStaticSetter:
+            case .endClassStaticInitializer:
                 w.leaveCurrentBlock()
                 w.emit("}")
 
-            case .classAddPrivateInstanceProperty(let op):
-                let PROPERTY = op.propertyName
-                if op.hasValue {
-                    let VALUE = input(0)
-                    w.emit("#\(PROPERTY) = \(VALUE);")
-                } else {
-                    w.emit("#\(PROPERTY);")
-                }
-
-            case .beginClassPrivateInstanceMethod(let op):
+            case .beginClassMethod(let op):
                 let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
                 let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = op.methodName
-                w.emit("#\(METHOD)(\(PARAMS)) {")
+                let METHOD = quoteIdentifierIfNeeded(op.methodName)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)\(METHOD)(\(PARAMS)) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
-            case .classAddPrivateStaticProperty(let op):
-                let PROPERTY = op.propertyName
-                if op.hasValue {
-                    let VALUE = input(0)
-                    w.emit("static #\(PROPERTY) = \(VALUE);")
-                } else {
-                    w.emit("static #\(PROPERTY);")
-                }
-
-            case .beginClassPrivateStaticMethod(let op):
+            case .beginClassComputedMethod(let op):
                 let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
                 let PARAMS = liftParameters(op.parameters, as: vars)
-                let METHOD = op.methodName
-                w.emit("static #\(METHOD)(\(PARAMS)) {")
+                let METHOD = input(0)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)[\(METHOD)](\(PARAMS)) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
-            case .endClassPrivateInstanceMethod,
-                 .endClassPrivateStaticMethod:
+            case .beginClassGetter(let op):
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)get \(PROPERTY)() {")
+                w.enterNewBlock()
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .beginClassComputedGetter(let op):
+                let PROPERTY = input(0)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)get [\(PROPERTY)]() {")
+                w.enterNewBlock()
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .beginClassSetter(let op):
+                assert(instr.numInnerOutputs == 2)
+                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
+                let PARAMS = liftParameters(op.parameters, as: vars)
+                let PROPERTY = quoteIdentifierIfNeeded(op.propertyName)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)set \(PROPERTY)(\(PARAMS)) {")
+                w.enterNewBlock()
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .beginClassComputedSetter(let op):
+                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
+                let PARAMS = liftParameters(op.parameters, as: vars)
+                let PROPERTY = input(0)
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)set [\(PROPERTY)](\(PARAMS)) {")
+                w.enterNewBlock()
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .endClassMethod,
+                .endClassComputedMethod,
+                .endClassGetter,
+                .endClassComputedGetter,
+                .endClassSetter,
+                .endClassComputedSetter:
+                w.leaveCurrentBlock()
+                w.emit("}")
+
+            case .classAddPrivateProperty(let op):
+                let PROPERTY = op.propertyName
+                let staticStr = op.isStatic ? "static " : ""
+                if op.hasValue {
+                    let VALUE = input(0)
+                    w.emit("\(staticStr)#\(PROPERTY) = \(VALUE);")
+                } else {
+                    w.emit("\(staticStr)#\(PROPERTY);")
+                }
+
+            case .beginClassPrivateMethod(let op):
+                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
+                let PARAMS = liftParameters(op.parameters, as: vars)
+                let METHOD = op.methodName
+                let staticStr = op.isStatic ? "static " : ""
+                w.emit("\(staticStr)#\(METHOD)(\(PARAMS)) {")
+                w.enterNewBlock()
+                bindVariableToThis(instr.innerOutput(0))
+
+            case .endClassPrivateMethod:
                 w.leaveCurrentBlock()
                 w.emit("}")
 
@@ -647,7 +656,8 @@ public class JavaScriptLifter: Lifter {
 
             case .createArray:
                 // When creating arrays, treat undefined elements as holes. This also relies on literals always being inlined.
-                var elems = inputs.map({ $0.text }).map({ $0 == "undefined" ? "" : $0 }).joined(separator: ",")
+                var elems = inputs.map({ $0.text }).map({ $0 == "undefined" ? "" : $0 }).joined(
+                    separator: ",")
                 if elems.last == "," || (instr.inputs.count == 1 && elems == "") {
                     // If the last element is supposed to be a hole, we need one additional comma
                     elems += ","
@@ -673,8 +683,8 @@ public class JavaScriptLifter: Lifter {
                         elems.append(text == "undefined" ? "" : text)
                     }
                 }
-                var elemString = elems.joined(separator: ",");
-                if elemString.last == "," || (instr.inputs.count==1 && elemString=="") {
+                var elemString = elems.joined(separator: ",")
+                if elemString.last == "," || (instr.inputs.count == 1 && elemString == "") {
                     // If the last element is supposed to be a hole, we need one additional commas
                     elemString += ","
                 }
@@ -689,43 +699,47 @@ public class JavaScriptLifter: Lifter {
                     parts.append("${\(VALUE)}\(op.parts[i])")
                 }
                 // See BeginCodeString case.
-                let count = Int(pow(2, Double(codeStringNestingLevel)))-1
+                let count = Int(pow(2, Double(codeStringNestingLevel))) - 1
                 let escapeSequence = String(repeating: "\\", count: count)
-                let expr = TemplateLiteral.new("\(escapeSequence)`" + parts.joined() + "\(escapeSequence)`")
+                let expr = TemplateLiteral.new(
+                    "\(escapeSequence)`" + parts.joined() + "\(escapeSequence)`")
                 w.assign(expr, to: instr.output)
 
             case .getProperty(let op):
                 let obj = input(0)
-                let accessOperator = op.isGuarded ? "?." : "."
-                let expr = MemberExpression.new() + obj + accessOperator + op.propertyName
+                let expr =
+                    MemberExpression.new() + obj
+                    + (liftMemberAccess(op.propertyName, isGuarded: op.isGuarded))
                 w.assign(expr, to: instr.output)
 
             case .setProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of an assignment, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let PROPERTY = MemberExpression.new() + obj + "." + op.propertyName
+                let PROPERTY = MemberExpression.new() + obj + (liftMemberAccess(op.propertyName))
                 let VALUE = input(1)
                 w.emit("\(PROPERTY) = \(VALUE);")
 
             case .updateProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of an assignment, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let PROPERTY = MemberExpression.new() + obj + "." + op.propertyName
+                let PROPERTY = MemberExpression.new() + obj + (liftMemberAccess(op.propertyName))
                 let VALUE = input(1)
                 w.emit("\(PROPERTY) \(op.op.token)= \(VALUE);")
 
             case .deleteProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of a property deletion, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let accessOperator = op.isGuarded ? "?." : "."
-                let target = MemberExpression.new() + obj + accessOperator + op.propertyName
+                let target =
+                    MemberExpression.new() + obj
+                    + (liftMemberAccess(op.propertyName, isGuarded: op.isGuarded))
                 let expr = UnaryExpression.new() + "delete " + target
                 w.assign(expr, to: instr.output)
 
             case .configureProperty(let op):
                 let OBJ = input(0)
                 let PROPERTY = op.propertyName
-                let DESCRIPTOR = liftPropertyDescriptor(flags: op.flags, type: op.type, values: inputs.dropFirst())
+                let DESCRIPTOR = liftPropertyDescriptor(
+                    flags: op.flags, type: op.type, values: inputs.dropFirst())
                 w.emit("Object.defineProperty(\(OBJ), \"\(PROPERTY)\", \(DESCRIPTOR));")
 
             case .getElement(let op):
@@ -759,7 +773,8 @@ public class JavaScriptLifter: Lifter {
             case .configureElement(let op):
                 let OBJ = input(0)
                 let INDEX = op.index
-                let DESCRIPTOR = liftPropertyDescriptor(flags: op.flags, type: op.type, values: inputs.dropFirst())
+                let DESCRIPTOR = liftPropertyDescriptor(
+                    flags: op.flags, type: op.type, values: inputs.dropFirst())
                 w.emit("Object.defineProperty(\(OBJ), \(INDEX), \(DESCRIPTOR));")
 
             case .getComputedProperty(let op):
@@ -793,7 +808,8 @@ public class JavaScriptLifter: Lifter {
             case .configureComputedProperty(let op):
                 let OBJ = input(0)
                 let PROPERTY = input(1)
-                let DESCRIPTOR = liftPropertyDescriptor(flags: op.flags, type: op.type, values: inputs.dropFirst(2))
+                let DESCRIPTOR = liftPropertyDescriptor(
+                    flags: op.flags, type: op.type, values: inputs.dropFirst(2))
                 w.emit("Object.defineProperty(\(OBJ), \(PROPERTY), \(DESCRIPTOR));")
 
             case .typeOf:
@@ -817,42 +833,75 @@ public class JavaScriptLifter: Lifter {
                 w.assign(expr, to: instr.output)
 
             case .beginPlainFunction:
-                liftFunctionDefinitionBegin(instr, keyword: "function", using: &w)
+                liftFunctionDefinitionBegin(
+                    instr, keyword: "function", withInputs: inputs, using: &w)
 
             case .beginArrowFunction(let op):
-                let LET = w.declarationKeyword(for: instr.output)
-                let V = w.declare(instr.output)
-                let vars = w.declareAll(instr.innerOutputs, usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                w.emit("\(LET) \(V) = (\(PARAMS)) => {")
-                w.enterNewBlock()
+                guard let endIndex = blockEndIndices[instr.index] else {
+                    fatalError("Block analysis failed")
+                }
+                liftArrowFunctionDefinitionBegin(
+                    instr, withInputs: inputs, parameters: op.parameters, isAsync: false, using: &w,
+                    functionEndIndex: endIndex, analyzer: analyzer)
 
             case .beginGeneratorFunction:
-                liftFunctionDefinitionBegin(instr, keyword: "function*", using: &w)
+                liftFunctionDefinitionBegin(
+                    instr, keyword: "function*", withInputs: inputs, using: &w)
 
             case .beginAsyncFunction:
-                liftFunctionDefinitionBegin(instr, keyword: "async function", using: &w)
+                liftFunctionDefinitionBegin(
+                    instr, keyword: "async function", withInputs: inputs, using: &w)
 
             case .beginAsyncArrowFunction(let op):
-                let LET = w.declarationKeyword(for: instr.output)
-                let V = w.declare(instr.output)
-                let vars = w.declareAll(instr.innerOutputs, usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                w.emit("\(LET) \(V) = async (\(PARAMS)) => {")
-                w.enterNewBlock()
+                guard let endIndex = blockEndIndices[instr.index] else {
+                    fatalError("Block analysis failed")
+                }
+                liftArrowFunctionDefinitionBegin(
+                    instr, withInputs: inputs, parameters: op.parameters, isAsync: true, using: &w,
+                    functionEndIndex: endIndex, analyzer: analyzer)
 
             case .beginAsyncGeneratorFunction:
-                liftFunctionDefinitionBegin(instr, keyword: "async function*", using: &w)
+                liftFunctionDefinitionBegin(
+                    instr, keyword: "async function*", withInputs: inputs, using: &w)
 
             case .endArrowFunction(_),
-                 .endAsyncArrowFunction:
-                w.leaveCurrentBlock()
-                w.emit("};")
+                .endAsyncArrowFunction:
+                let state = functionLiftingStack.pop()
+                if state.isSelfReferencing {
+                    w.leaveCurrentBlock()
+                    w.emit("};")
+                } else {
+                    w.emitPendingExpressions()
+                    let body = w.popTemporaryOutputBuffer()
+
+                    let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+                    var conciseBody: String?
+
+                    let lastInstr = program.code[instr.index - 1]
+                    if lastInstr.index > state.startInstructionIndex,
+                        let returnOp = lastInstr.op as? Return,
+                        returnOp.hasReturnValue,
+                        !trimmedBody.contains("\n"),
+                        !trimmedBody.contains("//"),
+                        trimmedBody.hasPrefix("return ")
+                    {
+                        let content = trimmedBody.dropFirst("return ".count).trimmingCharacters(
+                            in: .whitespaces.union(.init(charactersIn: ";")))
+                        conciseBody = content.hasPrefix("{") ? "(\(content))" : content
+                    }
+
+                    let implementation = conciseBody ?? "{\n\(body)}"
+                    let asyncPrefix = state.isAsync ? "async " : ""
+                    let arrowFuncCode = "\(asyncPrefix)(\(state.parameters)) => \(implementation)"
+
+                    let expr = ArrowFunctionExpression.new(arrowFuncCode)
+                    w.assign(expr, to: state.outputVariable)
+                }
 
             case .endPlainFunction(_),
-                 .endGeneratorFunction(_),
-                 .endAsyncFunction(_),
-                 .endAsyncGeneratorFunction:
+                .endGeneratorFunction(_),
+                .endAsyncFunction(_),
+                .endAsyncGeneratorFunction:
                 w.leaveCurrentBlock()
                 w.emit("}")
 
@@ -912,7 +961,9 @@ public class JavaScriptLifter: Lifter {
             case .callFunctionWithSpread(let op):
                 let f = inputAsIdentifier(0)
                 let args = inputs.dropFirst()
-                let expr = CallExpression.new() + f + "(" + liftCallArguments(args, spreading: op.spreads) + ")"
+                let expr =
+                    CallExpression.new() + f + "(" + liftCallArguments(args, spreading: op.spreads)
+                    + ")"
                 w.assign(expr, to: instr.output)
 
             case .construct:
@@ -925,22 +976,26 @@ public class JavaScriptLifter: Lifter {
             case .constructWithSpread(let op):
                 let f = inputAsIdentifier(0)
                 let args = inputs.dropFirst()
-                let expr = NewExpression.new() + "new " + f + "(" + liftCallArguments(args, spreading: op.spreads) + ")"
+                let expr =
+                    NewExpression.new() + "new " + f + "("
+                    + liftCallArguments(args, spreading: op.spreads) + ")"
                 // For aesthetic reasons we disallow inlining "new" expressions so that their result is always assigned to a new variable.
                 w.assign(expr, to: instr.output, allowInlining: false)
 
             case .callMethod(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + "." + op.methodName
+                let method = MemberExpression.new() + obj + (liftMemberAccess(op.methodName))
                 let args = inputs.dropFirst()
                 let expr = CallExpression.new() + method + "(" + liftCallArguments(args) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callMethodWithSpread(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + "." + op.methodName
+                let method = MemberExpression.new() + obj + (liftMemberAccess(op.methodName))
                 let args = inputs.dropFirst()
-                let expr = CallExpression.new() + method + "(" + liftCallArguments(args, spreading: op.spreads) + ")"
+                let expr =
+                    CallExpression.new() + method + "("
+                    + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callComputedMethod:
@@ -954,7 +1009,9 @@ public class JavaScriptLifter: Lifter {
                 let obj = input(0)
                 let method = MemberExpression.new() + obj + "[" + input(1).text + "]"
                 let args = inputs.dropFirst(2)
-                let expr = CallExpression.new() + method + "(" + liftCallArguments(args, spreading: op.spreads) + ")"
+                let expr =
+                    CallExpression.new() + method + "("
+                    + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
             case .unaryOperation(let op):
@@ -1010,7 +1067,8 @@ public class JavaScriptLifter: Lifter {
             case .destructArray(let op):
                 let outputs = w.declareAll(instr.outputs)
                 let ARRAY = input(0)
-                let PATTERN = liftArrayDestructPattern(indices: op.indices, outputs: outputs, hasRestElement: op.lastIsRest)
+                let PATTERN = liftArrayDestructPattern(
+                    indices: op.indices, outputs: outputs, hasRestElement: op.lastIsRest)
                 let LET = w.varKeyword
                 w.emit("\(LET) [\(PATTERN)] = \(ARRAY);")
 
@@ -1018,13 +1076,15 @@ public class JavaScriptLifter: Lifter {
                 assert(inputs.dropFirst().allSatisfy({ $0.type === Identifier }))
                 let ARRAY = input(0)
                 let outputs = inputs.dropFirst().map({ $0.text })
-                let PATTERN = liftArrayDestructPattern(indices: op.indices, outputs: outputs, hasRestElement: op.lastIsRest)
+                let PATTERN = liftArrayDestructPattern(
+                    indices: op.indices, outputs: outputs, hasRestElement: op.lastIsRest)
                 w.emit("[\(PATTERN)] = \(ARRAY);")
 
             case .destructObject(let op):
                 let outputs = w.declareAll(instr.outputs)
                 let OBJ = input(0)
-                let PATTERN = liftObjectDestructPattern(properties: op.properties, outputs: outputs, hasRestElement: op.hasRestElement)
+                let PATTERN = liftObjectDestructPattern(
+                    properties: op.properties, outputs: outputs, hasRestElement: op.hasRestElement)
                 let LET = w.varKeyword
                 w.emit("\(LET) {\(PATTERN)} = \(OBJ);")
 
@@ -1032,7 +1092,8 @@ public class JavaScriptLifter: Lifter {
                 assert(inputs.dropFirst().allSatisfy({ $0.type === Identifier }))
                 let OBJ = input(0)
                 let outputs = inputs.dropFirst().map({ $0.text })
-                let PATTERN = liftObjectDestructPattern(properties: op.properties, outputs: outputs, hasRestElement: op.hasRestElement)
+                let PATTERN = liftObjectDestructPattern(
+                    properties: op.properties, outputs: outputs, hasRestElement: op.hasRestElement)
                 w.emit("({\(PATTERN)} = \(OBJ));")
 
             case .compare(let op):
@@ -1102,7 +1163,8 @@ public class JavaScriptLifter: Lifter {
                 w.emit("\(EXPR);")
 
             case .callSuperMethod(let op):
-                let expr = CallExpression.new() + "super.\(op.methodName)(" + liftCallArguments(inputs)  + ")"
+                let method = MemberExpression.new() + "super" + liftMemberAccess(op.methodName)
+                let expr = CallExpression.new() + method + "(" + liftCallArguments(inputs) + ")"
                 w.assign(expr, to: instr.output)
 
             case .getPrivateProperty(let op):
@@ -1132,13 +1194,13 @@ public class JavaScriptLifter: Lifter {
                 w.assign(expr, to: instr.output)
 
             case .getSuperProperty(let op):
-                let expr = MemberExpression.new() + "super.\(op.propertyName)"
+                let expr = MemberExpression.new() + "super" + liftMemberAccess(op.propertyName)
                 w.assign(expr, to: instr.output)
 
             case .setSuperProperty(let op):
-                let PROPERTY = op.propertyName
+                let PROPERTY = liftMemberAccess(op.propertyName)
                 let VALUE = input(0)
-                w.emit("super.\(PROPERTY) = \(VALUE);")
+                w.emit("super\(PROPERTY) = \(VALUE);")
 
             case .getComputedSuperProperty(_):
                 let expr = MemberExpression.new() + "super[" + input(0).text + "]"
@@ -1150,9 +1212,9 @@ public class JavaScriptLifter: Lifter {
                 w.emit("super[\(PROPERTY)] = \(VALUE);")
 
             case .updateSuperProperty(let op):
-                let PROPERTY = op.propertyName
+                let PROPERTY = liftMemberAccess(op.propertyName)
                 let VALUE = input(0)
-                w.emit("super.\(PROPERTY) \(op.op.token)= \(VALUE);")
+                w.emit("super\(PROPERTY) \(op.op.token)= \(VALUE);")
 
             case .beginIf(let op):
                 var COND = input(0)
@@ -1251,7 +1313,8 @@ public class JavaScriptLifter: Lifter {
                     if w.isCurrentTemporaryBufferEmpty && w.numPendingExpressions == 0 {
                         // The "good" case: we can emit `let i = X, j = Y, ...`
                         assert(loopVars.count == inputs.count)
-                        let declarations = zip(loopVars, inputs).map({ "\($0) = \($1)" }).joined(separator: ", ")
+                        let declarations = zip(loopVars, inputs).map({ "\($0) = \($1)" }).joined(
+                            separator: ", ")
                         initializer = "let \(declarations)"
                         let code = w.popTemporaryOutputBuffer()
                         assert(code.isEmpty)
@@ -1266,7 +1329,8 @@ public class JavaScriptLifter: Lifter {
                             initializer = "let \(I) = (() => {\n\(CODE)    })()"
                         } else {
                             // Emit a `let [i, j, k] = (() => { ...; return [X, Y, Z]; })()`
-                            let initialLoopVarValues = inputs.map({ $0.text }).joined(separator: ", ")
+                            let initialLoopVarValues = inputs.map({ $0.text }).joined(
+                                separator: ", ")
                             w.emit("return [\(initialLoopVarValues)];")
                             let VARS = loopVars.joined(separator: ", ")
                             let CODE = w.popTemporaryOutputBuffer()
@@ -1275,7 +1339,8 @@ public class JavaScriptLifter: Lifter {
                     }
                 }
 
-                forLoopHeaderStack.push(ForLoopHeader(initializer: initializer, loopVariables: loopVars))
+                forLoopHeaderStack.push(
+                    ForLoopHeader(initializer: initializer, loopVariables: loopVars))
                 handleBeginSingleExpressionContext(with: &w, initialIndentionLevel: 2)
 
             case .beginForLoopAfterthought:
@@ -1296,16 +1361,19 @@ public class JavaScriptLifter: Lifter {
                 var CONDITION = header.condition
                 var AFTERTHOUGHT = handleEndSingleExpressionContext(with: &w)
 
-                if !INITIALIZER.contains("\n") && !CONDITION.contains("\n") && !AFTERTHOUGHT.contains("\n") {
+                if !INITIALIZER.contains("\n") && !CONDITION.contains("\n")
+                    && !AFTERTHOUGHT.contains("\n")
+                {
                     if !CONDITION.isEmpty { CONDITION = " " + CONDITION }
                     if !AFTERTHOUGHT.isEmpty { AFTERTHOUGHT = " " + AFTERTHOUGHT }
                     w.emit("for (\(INITIALIZER);\(CONDITION);\(AFTERTHOUGHT)) {")
                 } else {
-                    w.emitBlock("""
-                                for (\(INITIALIZER);
-                                    \(CONDITION);
-                                    \(AFTERTHOUGHT)) {
-                                """)
+                    w.emitBlock(
+                        """
+                        for (\(INITIALIZER);
+                            \(CONDITION);
+                            \(AFTERTHOUGHT)) {
+                        """)
                 }
 
                 w.declareAll(instr.innerOutputs, as: header.loopVariables)
@@ -1335,7 +1403,8 @@ public class JavaScriptLifter: Lifter {
 
             case .beginForOfLoopWithDestruct(let op):
                 let outputs = w.declareAll(instr.innerOutputs)
-                let PATTERN = liftArrayDestructPattern(indices: op.indices, outputs: outputs, hasRestElement: op.hasRestElement)
+                let PATTERN = liftArrayDestructPattern(
+                    indices: op.indices, outputs: outputs, hasRestElement: op.hasRestElement)
                 let LET = w.varKeyword
                 let OBJ = input(0)
                 w.emit("for (\(LET) [\(PATTERN)] of \(OBJ)) {")
@@ -1362,7 +1431,7 @@ public class JavaScriptLifter: Lifter {
                 w.emit("}")
 
             case .loopBreak(_),
-                 .switchBreak:
+                .switchBreak:
                 w.emit("break;")
 
             case .loopContinue:
@@ -1394,7 +1463,7 @@ public class JavaScriptLifter: Lifter {
             case .beginCodeString:
                 // This power series (2**n -1) is used to generate a valid escape sequence for nested template literals.
                 // Here n represents the nesting level.
-                let count = Int(pow(2, Double(codeStringNestingLevel)))-1
+                let count = Int(pow(2, Double(codeStringNestingLevel))) - 1
                 let ESCAPE = String(repeating: "\\", count: count)
                 let V = w.declare(instr.output)
                 let LET = w.declarationKeyword(for: instr.output)
@@ -1405,7 +1474,7 @@ public class JavaScriptLifter: Lifter {
             case .endCodeString:
                 codeStringNestingLevel -= 1
                 w.leaveCurrentBlock()
-                let count = Int(pow(2, Double(codeStringNestingLevel)))-1
+                let count = Int(pow(2, Double(codeStringNestingLevel))) - 1
                 let ESCAPE = String(repeating: "\\", count: count)
                 w.emit("\(ESCAPE)`;")
 
@@ -1429,7 +1498,9 @@ public class JavaScriptLifter: Lifter {
                 let LET = w.varKeyword
                 let type = op.value.typeString()
                 let value = op.value.valueToString()
-                w.emit("\(LET) \(V) = new WebAssembly.Global({ value: \"\(type)\", mutable: \(op.isMutable) }, \(value));")
+                w.emit(
+                    "\(LET) \(V) = new WebAssembly.Global({ value: \"\(type)\", mutable: \(op.isMutable) }, \(value));"
+                )
 
             case .createWasmMemory(let op):
                 let V = w.declare(instr.output)
@@ -1445,7 +1516,9 @@ public class JavaScriptLifter: Lifter {
                     sharedStr = ", shared: true"
                 }
                 let addressType = isMemory64 ? "'i64'" : "'i32'"
-                w.emit("\(LET) \(V) = new WebAssembly.Memory({ initial: \(minPageStr)\(maxPagesStr)\(sharedStr), address: \(addressType) });")
+                w.emit(
+                    "\(LET) \(V) = new WebAssembly.Memory({ initial: \(minPageStr)\(maxPagesStr)\(sharedStr), address: \(addressType) });"
+                )
 
             case .wrapSuspending(_):
                 let V = w.declare(instr.output)
@@ -1461,9 +1534,9 @@ public class JavaScriptLifter: Lifter {
 
             case .bindMethod(let op):
                 let V = w.declare(instr.output)
-                let OBJECT = input(0)
                 let LET = w.varKeyword
-                w.emit("\(LET) \(V) = Function.prototype.call.bind(\(OBJECT).\(op.methodName));")
+                let method = MemberExpression.new() + input(0) + liftMemberAccess(op.methodName)
+                w.emit("\(LET) \(V) = Function.prototype.call.bind(\(method));")
 
             case .bindFunction(_):
                 let V = w.declare(instr.output)
@@ -1486,7 +1559,9 @@ public class JavaScriptLifter: Lifter {
                 let V = w.declare(instr.output, as: "v\(instr.output.number)")
                 // TODO: support a better diagnostics mode which stores the .wasm binary file alongside the samples.
                 do {
-                    let (bytecode, importRefs) = try WasmLifter(withTyper: typer!, withWasmCode: wasmInstructions).lift()
+                    let (bytecode, importRefs) = try WasmLifter(
+                        withTyper: typer!, withWasmCode: wasmInstructions
+                    ).lift()
                     // Get and check that we have the imports here as expressions and fail otherwise.
                     let imports: [(Variable, Expression)] = try importRefs.map { ref in
                         if let expr = w.retrieve(expressionsFor: [ref]) {
@@ -1495,11 +1570,17 @@ public class JavaScriptLifter: Lifter {
                             throw WasmLifter.CompileError.failedRetrieval
                         }
                     }
-                    w.emit("\(LET) \(V) = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([")
+                    w.emit(
+                        "\(LET) \(V) = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array(["
+                    )
                     w.enterNewBlock()
                     let blockSize = 10
-                    for chunk in stride(from: 0, to: bytecode.count, by: blockSize).map({ Array(bytecode[$0 ..< Swift.min($0 + blockSize, bytecode.count)])}) {
-                        let byteString = chunk.map({ String(format: "0x%02X", $0) }).joined(separator: ", ") + ","
+                    for chunk in stride(from: 0, to: bytecode.count, by: blockSize).map({
+                        Array(bytecode[$0..<Swift.min($0 + blockSize, bytecode.count)])
+                    }) {
+                        let byteString =
+                            chunk.map({ String(format: "0x%02X", $0) }).joined(separator: ", ")
+                            + ","
                         w.emit("\(byteString)")
                     }
                     w.leaveCurrentBlock()
@@ -1516,14 +1597,23 @@ public class JavaScriptLifter: Lifter {
                         w.emit("} });")
                     }
                 } catch WasmLifter.CompileError.fatalError(let errorMsg) {
-                    fatalError("\(errorMsg)\nFor program:\n\(FuzzILLifter().lift(program, withOptions: [.includeComments]))\nWith contributors: \(program.contributors.map {$0.name})")
+                    fatalError(
+                        "\(errorMsg)\nFor program:\n\(FuzzILLifter().lift(program, withOptions: [.includeComments]))\nWith contributors: \(program.contributors.map {$0.name})"
+                    )
                 } catch {
                     wasmLiftingFailures += 1
-                    logger.warning("WasmLifting failed with error \(error), current failure count:  \(wasmLiftingFailures) (failure rate: \(String(format: "%.5f", Double(wasmLiftingFailures) / Double(liftedSamples) * 100.0))%)")
+                    logger.warning(
+                        "WasmLifting failed with error \(error), current failure count:  \(wasmLiftingFailures) (failure rate: \(String(format: "%.5f", Double(wasmLiftingFailures) / Double(liftedSamples) * 100.0))%)"
+                    )
                     do {
                         // Try to save this failed program for further analysis if diagnostics are enabled.
                         if let fuzzer = Fuzzer.current {
-                            fuzzer.dispatchEvent(fuzzer.events.DiagnosticsEvent, data: (name: "FailedWasmLifting-\(error)", content: try program.asProtobuf().serializedData()))
+                            fuzzer.dispatchEvent(
+                                fuzzer.events.DiagnosticsEvent,
+                                data: (
+                                    name: "FailedWasmLifting-\(error)",
+                                    content: try program.asProtobuf().serializedData()
+                                ))
                         } else {
                             logger.warning("Not saving sample because no fuzzer was found.")
                         }
@@ -1540,11 +1630,12 @@ public class JavaScriptLifter: Lifter {
                 let LET = w.varKeyword
                 let type: String
                 switch op.tableType.elementType {
-                case .wasmExternRef:
+                case .wasmExternRef():
                     type = "externref"
-                case .wasmFuncRef:
+                case .wasmFuncRef():
                     type = "anyfunc"
                 // TODO(mliedtke): add tables for i31ref.
+                // TODO(pawkra): add shared ref variants.
                 default:
                     fatalError("Unknown table type")
                 }
@@ -1557,7 +1648,9 @@ public class JavaScriptLifter: Lifter {
                 }
                 let addressType = isTable64 ? "'i64'" : "'i32'"
 
-                w.emit("\(LET) \(V) = new WebAssembly.Table({ element: \"\(type)\", initial: \(minSizeStr)\(maxSizeStr), address: \(addressType) });")
+                w.emit(
+                    "\(LET) \(V) = new WebAssembly.Table({ element: \"\(type)\", initial: \(minSizeStr)\(maxSizeStr), address: \(addressType) });"
+                )
 
             case .createWasmJSTag(_):
                 let V = w.declare(instr.output)
@@ -1567,186 +1660,193 @@ public class JavaScriptLifter: Lifter {
             case .createWasmTag(let op):
                 let V = w.declare(instr.output)
                 let LET = w.varKeyword
-                let types = op.parameterTypes.map {type in
-                    switch(type) {
-                        case .wasmf32:
-                            return "\"f32\""
-                        case .wasmf64:
-                            return "\"f64\""
-                        case .wasmi32:
-                            return "\"i32\""
-                        case .wasmi64:
-                            return "\"i64\""
-                        case .wasmSimd128:
-                            return "\"v128\""
-                        case .wasmExternRef:
-                            return "\"externref\""
-                        case .wasmFuncRef:
-                            return "\"anyfunc\""
-                        case .wasmAnyRef:
-                            return "\"anyref\""
-                        case .wasmEqRef:
-                            return "\"eqref\""
-                        case .wasmI31Ref:
-                            return "\"i31ref\""
-                        case .wasmStructRef:
-                            return "\"structref\""
-                        case .wasmArrayRef:
-                            return "\"arrayref\""
-                        case .wasmExnRef:
-                            return "\"exnref\""
+                let types = op.parameterTypes.map { type in
+                    switch type {
+                    case .wasmf32:
+                        return "\"f32\""
+                    case .wasmf64:
+                        return "\"f64\""
+                    case .wasmi32:
+                        return "\"i32\""
+                    case .wasmi64:
+                        return "\"i64\""
+                    case .wasmSimd128:
+                        return "\"v128\""
+                    case ILType.wasmExternRef():
+                        return "\"externref\""
+                    case ILType.wasmFuncRef():
+                        return "\"anyfunc\""
+                    case ILType.wasmAnyRef():
+                        return "\"anyref\""
+                    case ILType.wasmEqRef():
+                        return "\"eqref\""
+                    case ILType.wasmI31Ref():
+                        return "\"i31ref\""
+                    case ILType.wasmStructRef():
+                        return "\"structref\""
+                    case ILType.wasmArrayRef():
+                        return "\"arrayref\""
+                    case ILType.wasmExnRef():
+                        return "\"exnref\""
 
-                        default:
-                            fatalError("Unhandled wasm type \(type)")
+                    default:
+                        fatalError("Unhandled wasm type \(type)")
                     }
                 }.joined(separator: ", ")
                 w.emit("\(LET) \(V) = new WebAssembly.Tag({parameters: [\(types)]});")
 
             case .consti64(_),
-                 .consti32(_),
-                 .constf32(_),
-                 .constf64(_),
-                 .wasmReturn(_),
-                 .wasmJsCall(_),
-                 .wasmi32CompareOp(_),
-                 .wasmi64CompareOp(_),
-                 .wasmf32CompareOp(_),
-                 .wasmf64CompareOp(_),
-                 .wasmi64BinOp(_),
-                 .wasmi32BinOp(_),
-                 .wasmi32UnOp(_),
-                 .wasmi64UnOp(_),
-                 .wasmf32UnOp(_),
-                 .wasmf64UnOp(_),
-                 .wasmf32BinOp(_),
-                 .wasmf64BinOp(_),
-                 .wasmi32EqualZero(_),
-                 .wasmi64EqualZero(_),
-                 .wasmWrapi64Toi32(_),
-                 .wasmTruncatef32Toi32(_),
-                 .wasmTruncatef64Toi32(_),
-                 .wasmExtendi32Toi64(_),
-                 .wasmTruncatef32Toi64(_),
-                 .wasmTruncatef64Toi64(_),
-                 .wasmConverti32Tof32(_),
-                 .wasmConverti64Tof32(_),
-                 .wasmDemotef64Tof32(_),
-                 .wasmConverti32Tof64(_),
-                 .wasmConverti64Tof64(_),
-                 .wasmPromotef32Tof64(_),
-                 .wasmReinterpretf32Asi32(_),
-                 .wasmReinterpretf64Asi64(_),
-                 .wasmReinterpreti32Asf32(_),
-                 .wasmReinterpreti64Asf64(_),
-                 .wasmSignExtend8Intoi32(_),
-                 .wasmSignExtend16Intoi32(_),
-                 .wasmSignExtend8Intoi64(_),
-                 .wasmSignExtend16Intoi64(_),
-                 .wasmSignExtend32Intoi64(_),
-                 .wasmTruncateSatf32Toi32(_),
-                 .wasmTruncateSatf64Toi32(_),
-                 .wasmTruncateSatf32Toi64(_),
-                 .wasmTruncateSatf64Toi64(_),
-                 .wasmReassign(_),
-                 .wasmDefineGlobal(_),
-                 .wasmDefineTable(_),
-                 .wasmDefineElementSegment(_),
-                 .wasmDropElementSegment(_),
-                 .wasmTableInit(_),
-                 .wasmTableCopy(_),
-                 .wasmDefineMemory(_),
-                 .wasmDefineDataSegment(_),
-                 .wasmLoadGlobal(_),
-                 .wasmStoreGlobal(_),
-                 .wasmTableGet(_),
-                 .wasmTableSet(_),
-                 .wasmTableSize(_),
-                 .wasmTableGrow(_),
-                 .wasmCallIndirect(_),
-                 .wasmCallDirect(_),
-                 .wasmReturnCallDirect(_),
-                 .wasmReturnCallIndirect(_),
-                 .wasmMemoryLoad(_),
-                 .wasmMemoryStore(_),
-                 .wasmAtomicLoad(_),
-                 .wasmAtomicStore(_),
-                 .wasmAtomicRMW(_),
-                 .wasmAtomicCmpxchg(_),
-                 .wasmMemorySize(_),
-                 .wasmMemoryGrow(_),
-                 .wasmMemoryCopy(_),
-                 .wasmMemoryFill(_),
-                 .wasmMemoryInit(_),
-                 .wasmDropDataSegment(_),
-                 .beginWasmFunction(_),
-                 .endWasmFunction(_),
-                 .wasmBeginBlock(_),
-                 .wasmEndBlock(_),
-                 .wasmBeginLoop(_),
-                 .wasmEndLoop(_),
-                 .wasmBeginTryTable(_),
-                 .wasmEndTryTable(_),
-                 .wasmBeginTry(_),
-                 .wasmBeginCatchAll(_),
-                 .wasmBeginCatch(_),
-                 .wasmEndTry(_),
-                 .wasmBeginTryDelegate(_),
-                 .wasmEndTryDelegate(_),
-                 .wasmThrow(_),
-                 .wasmThrowRef(_),
-                 .wasmRethrow(_),
-                 .wasmDefineTag(_),
-                 .wasmBranch(_),
-                 .wasmBranchIf(_),
-                 .wasmBranchTable(_),
-                 .wasmBeginIf(_),
-                 .wasmBeginElse(_),
-                 .wasmEndIf(_),
-                 .wasmNop(_),
-                 .wasmUnreachable(_),
-                 .wasmSelect(_),
-                 .constSimd128(_),
-                 .wasmSimd128IntegerUnOp(_),
-                 .wasmSimd128IntegerBinOp(_),
-                 .wasmSimd128IntegerTernaryOp(_),
-                 .wasmSimd128FloatUnOp(_),
-                 .wasmSimd128FloatBinOp(_),
-                 .wasmSimd128FloatTernaryOp(_),
-                 .wasmSimd128Compare(_),
-                 .wasmSimdSplat(_),
-                 .wasmSimdExtractLane(_),
-                 .wasmSimdReplaceLane(_),
-                 .wasmSimdStoreLane(_),
-                 .wasmSimdLoadLane(_),
-                 .wasmSimdLoad(_),
-                 .wasmBeginTypeGroup(_),
-                 .wasmEndTypeGroup(_),
-                 .wasmDefineSignatureType(_),
-                 .wasmDefineArrayType(_),
-                 .wasmDefineStructType(_),
-                 .wasmDefineForwardOrSelfReference(_),
-                 .wasmResolveForwardReference(_),
-                 .wasmArrayNewFixed(_),
-                 .wasmArrayNewDefault(_),
-                 .wasmArrayLen(_),
-                 .wasmArrayGet(_),
-                 .wasmArraySet(_),
-                 .wasmStructNewDefault(_),
-                 .wasmStructGet(_),
-                 .wasmStructSet(_),
-                 .wasmRefNull(_),
-                 .wasmRefIsNull(_),
-                 .wasmRefI31(_),
-                 .wasmI31Get(_),
-                 .wasmAnyConvertExtern(_),
-                 .wasmExternConvertAny(_):
-                 fatalError("unreachable")
+                .consti32(_),
+                .constf32(_),
+                .constf64(_),
+                .wasmReturn(_),
+                .wasmJsCall(_),
+                .wasmi32CompareOp(_),
+                .wasmi64CompareOp(_),
+                .wasmf32CompareOp(_),
+                .wasmf64CompareOp(_),
+                .wasmi64BinOp(_),
+                .wasmi32BinOp(_),
+                .wasmi32UnOp(_),
+                .wasmi64UnOp(_),
+                .wasmf32UnOp(_),
+                .wasmf64UnOp(_),
+                .wasmf32BinOp(_),
+                .wasmf64BinOp(_),
+                .wasmi32EqualZero(_),
+                .wasmi64EqualZero(_),
+                .wasmWrapi64Toi32(_),
+                .wasmTruncatef32Toi32(_),
+                .wasmTruncatef64Toi32(_),
+                .wasmExtendi32Toi64(_),
+                .wasmTruncatef32Toi64(_),
+                .wasmTruncatef64Toi64(_),
+                .wasmConverti32Tof32(_),
+                .wasmConverti64Tof32(_),
+                .wasmDemotef64Tof32(_),
+                .wasmConverti32Tof64(_),
+                .wasmConverti64Tof64(_),
+                .wasmPromotef32Tof64(_),
+                .wasmReinterpretf32Asi32(_),
+                .wasmReinterpretf64Asi64(_),
+                .wasmReinterpreti32Asf32(_),
+                .wasmReinterpreti64Asf64(_),
+                .wasmSignExtend8Intoi32(_),
+                .wasmSignExtend16Intoi32(_),
+                .wasmSignExtend8Intoi64(_),
+                .wasmSignExtend16Intoi64(_),
+                .wasmSignExtend32Intoi64(_),
+                .wasmTruncateSatf32Toi32(_),
+                .wasmTruncateSatf64Toi32(_),
+                .wasmTruncateSatf32Toi64(_),
+                .wasmTruncateSatf64Toi64(_),
+                .wasmReassign(_),
+                .wasmDefineGlobal(_),
+                .wasmDefineTable(_),
+                .wasmDefineElementSegment(_),
+                .wasmDropElementSegment(_),
+                .wasmTableInit(_),
+                .wasmTableCopy(_),
+                .wasmDefineMemory(_),
+                .wasmDefineDataSegment(_),
+                .wasmLoadGlobal(_),
+                .wasmStoreGlobal(_),
+                .wasmTableGet(_),
+                .wasmTableSet(_),
+                .wasmTableSize(_),
+                .wasmTableGrow(_),
+                .wasmCallIndirect(_),
+                .wasmCallDirect(_),
+                .wasmReturnCallDirect(_),
+                .wasmReturnCallIndirect(_),
+                .wasmMemoryLoad(_),
+                .wasmMemoryStore(_),
+                .wasmAtomicLoad(_),
+                .wasmAtomicStore(_),
+                .wasmAtomicRMW(_),
+                .wasmAtomicCmpxchg(_),
+                .wasmMemorySize(_),
+                .wasmMemoryGrow(_),
+                .wasmMemoryCopy(_),
+                .wasmMemoryFill(_),
+                .wasmMemoryInit(_),
+                .wasmDropDataSegment(_),
+                .beginWasmFunction(_),
+                .endWasmFunction(_),
+                .wasmBeginBlock(_),
+                .wasmEndBlock(_),
+                .wasmBeginLoop(_),
+                .wasmEndLoop(_),
+                .wasmBeginTryTable(_),
+                .wasmEndTryTable(_),
+                .wasmBeginTry(_),
+                .wasmBeginCatchAll(_),
+                .wasmBeginCatch(_),
+                .wasmEndTry(_),
+                .wasmBeginTryDelegate(_),
+                .wasmEndTryDelegate(_),
+                .wasmThrow(_),
+                .wasmThrowRef(_),
+                .wasmRethrow(_),
+                .wasmDefineTag(_),
+                .wasmBranch(_),
+                .wasmBranchIf(_),
+                .wasmBranchTable(_),
+                .wasmBeginIf(_),
+                .wasmBeginElse(_),
+                .wasmEndIf(_),
+                .wasmNop(_),
+                .wasmUnreachable(_),
+                .wasmSelect(_),
+                .constSimd128(_),
+                .wasmSimd128IntegerUnOp(_),
+                .wasmSimd128IntegerBinOp(_),
+                .wasmSimd128IntegerTernaryOp(_),
+                .wasmSimd128FloatUnOp(_),
+                .wasmSimd128FloatBinOp(_),
+                .wasmSimd128FloatTernaryOp(_),
+                .wasmSimd128Compare(_),
+                .wasmSimdSplat(_),
+                .wasmSimdExtractLane(_),
+                .wasmSimdReplaceLane(_),
+                .wasmSimdStoreLane(_),
+                .wasmSimdLoadLane(_),
+                .wasmSimdLoad(_),
+                .wasmBeginTypeGroup(_),
+                .wasmEndTypeGroup(_),
+                .wasmDefineSignatureType(_),
+                .wasmDefineAdHocSignatureType(_),
+                .wasmDefineAdHocModuleSignatureType(_),
+                .wasmDefineArrayType(_),
+                .wasmDefineStructType(_),
+                .wasmDefineForwardOrSelfReference(_),
+                .wasmResolveForwardReference(_),
+                .wasmArrayNewFixed(_),
+                .wasmArrayNewDefault(_),
+                .wasmArrayLen(_),
+                .wasmArrayGet(_),
+                .wasmArraySet(_),
+                .wasmStructNew(_),
+                .wasmStructNewDefault(_),
+                .wasmStructGet(_),
+                .wasmStructSet(_),
+                .wasmRefNull(_),
+                .wasmRefIsNull(_),
+                .wasmRefEq(_),
+                .wasmRefI31(_),
+                .wasmI31Get(_),
+                .wasmAnyConvertExtern(_),
+                .wasmExternConvertAny(_),
+                .wasmRefTest(_),
+                .wasmRefCast(_):
+                fatalError("unreachable")
             }
 
             // Handling of guarded operations, part 2: emit the guarded operation and surround it with a try-catch.
             if guarding {
                 w.emitPendingExpressions()
-                let code = w.popTemporaryOutputBuffer().trimmingCharacters(in: .whitespacesAndNewlines)
+                let code = w.popTemporaryOutputBuffer().trimmingCharacters(
+                    in: .whitespacesAndNewlines)
                 assert(!code.isEmpty)
                 let lines = code.split(separator: "\n")
                 if lines.count == 1 {
@@ -1776,7 +1876,9 @@ public class JavaScriptLifter: Lifter {
     }
 
     // Signal that the following code needs to be lifted into a single expression.
-    private func handleBeginSingleExpressionContext(with w: inout JavaScriptWriter, initialIndentionLevel: Int) {
+    private func handleBeginSingleExpressionContext(
+        with w: inout JavaScriptWriter, initialIndentionLevel: Int
+    ) {
         // Lift the following code into a temporary buffer so that it can either be emitted
         // as a single expression, or as body of a temporary function, see below.
         w.pushTemporaryOutputBuffer(initialIndentionLevel: initialIndentionLevel)
@@ -1784,7 +1886,9 @@ public class JavaScriptLifter: Lifter {
 
     // Lift all code between the begin and end of the single expression context (e.g. a loop header) into a single expression.
     // The optional result parameter contains the value to which the entire expression must ultimately evaluate.
-    private func handleEndSingleExpressionContext(result maybeResult: Expression? = nil, with w: inout JavaScriptWriter) -> String {
+    private func handleEndSingleExpressionContext(
+        result maybeResult: Expression? = nil, with w: inout JavaScriptWriter
+    ) -> String {
         if w.isCurrentTemporaryBufferEmpty {
             // This means that the code consists entirely of expressions that can be inlined, and that the result
             // variable is either not an inlined expression (but instead e.g. the identifier for a local variable), or that
@@ -1792,7 +1896,8 @@ public class JavaScriptLifter: Lifter {
             //
             // In this case, we can emit a single expression by combining all pending expressions using the comma operator.
             var COND = CommaExpression.new()
-            let expressions = w.takePendingExpressions() + (maybeResult != nil ? [maybeResult!] : [])
+            let expressions =
+                w.takePendingExpressions() + (maybeResult != nil ? [maybeResult!] : [])
             for expr in expressions {
                 if COND.text.isEmpty {
                     COND = COND + expr
@@ -1818,12 +1923,36 @@ public class JavaScriptLifter: Lifter {
         }
     }
 
-    private func liftParameters(_ parameters: Parameters, as variables: [String]) -> String {
+    func quoteIdentifierIfNeeded(_ name: String) -> String {
+        if environment.isValidIdentifierOrIndex(name) {
+            return name
+        }
+        return "\"\(name)\""
+    }
+
+    private func liftMemberAccess(_ name: String, isGuarded: Bool = false) -> String {
+        if environment.isValidDotNotationName(name) {
+            return (isGuarded ? "?." : ".") + name
+        }
+        let safeName = environment.isValidPropertyIndex(name) ? name : "\"\(name)\""
+        return (isGuarded ? "?." : "") + "[" + safeName + "]"
+    }
+
+    private func liftParameters(
+        _ parameters: Parameters, as variables: [String], defaultValues: [String?] = []
+    ) -> String {
         assert(parameters.count == variables.count)
+        let actualDefaultValues =
+            defaultValues.isEmpty
+            ? [String?](repeating: nil, count: parameters.count) : defaultValues
+        assert(actualDefaultValues.count == parameters.count)
         var paramList = [String]()
-        for v in variables {
+        for (v, defaultValue) in zip(variables, actualDefaultValues) {
             if parameters.hasRestParameter && v == variables.last {
+                assert(defaultValue == nil)
                 paramList.append("..." + v)
+            } else if let defaultValue {
+                paramList.append(v + " = " + defaultValue)
             } else {
                 paramList.append(v)
             }
@@ -1831,7 +1960,10 @@ public class JavaScriptLifter: Lifter {
         return paramList.joined(separator: ", ")
     }
 
-    private func liftFunctionDefinitionBegin(_ instr: Instruction, keyword FUNCTION: String, using w: inout JavaScriptWriter) {
+    private func liftFunctionDefinitionBegin(
+        _ instr: Instruction, keyword FUNCTION: String, withInputs inputs: [Expression],
+        using w: inout JavaScriptWriter
+    ) {
         // Function are lifted as `function f3(a4, a5, a6) { ...`.
         // This will produce functions with a recognizable .name property, which the JavaScriptExploreLifting code makes use of (see shouldTreatAsConstructor).
         guard let op = instr.op as? BeginAnyFunction else {
@@ -1845,12 +1977,66 @@ public class JavaScriptLifter: Lifter {
         }
         let NAME = w.declare(instr.output, as: functionName)
         let vars = w.declareAll(instr.innerOutputs, usePrefix: "a")
-        let PARAMS = liftParameters(op.parameters, as: vars)
+
+        var defaultValues = [String?](repeating: nil, count: op.parameters.count)
+        for (inputIdx, paramIdx) in op.parameters.defaultParameterIndices.enumerated() {
+            defaultValues[paramIdx] = inputs[inputIdx].text
+        }
+
+        let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
         w.emit("\(FUNCTION) \(NAME)(\(PARAMS)) {")
         w.enterNewBlock()
     }
 
-    private func liftCallArguments<Arguments: Sequence>(_ args: Arguments, spreading spreads: [Bool] = []) -> String where Arguments.Element == Expression {
+    private func liftArrowFunctionDefinitionBegin(
+        _ instr: Instruction,
+        withInputs inputs: [Expression],
+        parameters: Parameters,
+        isAsync: Bool,
+        using w: inout JavaScriptWriter,
+        functionEndIndex: Int,
+        analyzer: DefUseAnalyzer
+    ) {
+        let isSelfReferencing = isUsedInBlock(
+            variable: instr.output,
+            blockStart: instr.index,
+            blockEnd: functionEndIndex,
+            analyzer: analyzer
+        )
+
+        let vars = w.declareAll(instr.innerOutputs, usePrefix: "a")
+
+        var defaultValues = [String?](repeating: nil, count: parameters.count)
+        for (inputIdx, paramIdx) in parameters.defaultParameterIndices.enumerated() {
+            defaultValues[paramIdx] = inputs[inputIdx].text
+        }
+
+        let params = liftParameters(parameters, as: vars, defaultValues: defaultValues)
+
+        functionLiftingStack.push(
+            FunctionLiftingState(
+                outputVariable: instr.output,
+                isSelfReferencing: isSelfReferencing,
+                parameters: params,
+                isAsync: isAsync,
+                startInstructionIndex: instr.index
+            ))
+
+        if isSelfReferencing {
+            let keyword = w.declarationKeyword(for: instr.output)
+            let varName = w.declare(instr.output)
+
+            w.emit("\(keyword) \(varName) = \(isAsync ? "async " : "")(\(params)) => {")
+            w.enterNewBlock()
+        } else {
+            w.emitPendingExpressions()
+            w.pushTemporaryOutputBuffer(initialIndentionLevel: 1)
+        }
+    }
+
+    private func liftCallArguments<Arguments: Sequence>(
+        _ args: Arguments, spreading spreads: [Bool] = []
+    ) -> String where Arguments.Element == Expression {
         var arguments = [String]()
         for (i, a) in args.enumerated() {
             if spreads.count > i && spreads[i] {
@@ -1863,7 +2049,9 @@ public class JavaScriptLifter: Lifter {
         return arguments.joined(separator: ", ")
     }
 
-    private func liftPropertyDescriptor(flags: PropertyFlags, type: PropertyType, values: ArraySlice<Expression>) -> String {
+    private func liftPropertyDescriptor(
+        flags: PropertyFlags, type: PropertyType, values: ArraySlice<Expression>
+    ) -> String {
         assert(values.count <= 2)
         var parts = [String]()
         if flags.contains(.writable) {
@@ -1891,7 +2079,9 @@ public class JavaScriptLifter: Lifter {
         return "{ \(parts.joined(separator: ", ")) }"
     }
 
-    private func liftArrayDestructPattern(indices: [Int64], outputs: [String], hasRestElement: Bool) -> String {
+    private func liftArrayDestructPattern(indices: [Int64], outputs: [String], hasRestElement: Bool)
+        -> String
+    {
         assert(indices.count == outputs.count)
 
         var arrayPattern = ""
@@ -1907,7 +2097,9 @@ public class JavaScriptLifter: Lifter {
         return arrayPattern
     }
 
-    private func liftObjectDestructPattern(properties: [String], outputs: [String], hasRestElement: Bool) -> String {
+    private func liftObjectDestructPattern(
+        properties: [String], outputs: [String], hasRestElement: Bool
+    ) -> String {
         assert(outputs.count == properties.count + (hasRestElement ? 1 : 0))
 
         var objectPattern = ""
@@ -1937,13 +2129,13 @@ public class JavaScriptLifter: Lifter {
 
     private func haveSpecialHandlingForGuardedOp(_ op: Operation) -> Bool {
         switch op.opcode {
-            // We handle guarded property loads by emitting an optional chain, so no try-catch is necessary.
+        // We handle guarded property loads by emitting an optional chain, so no try-catch is necessary.
         case .getProperty,
-             .getElement,
-             .getComputedProperty,
-             .deleteProperty,
-             .deleteElement,
-             .deleteComputedProperty:
+            .getElement,
+            .getComputedProperty,
+            .deleteProperty,
+            .deleteElement,
+            .deleteComputedProperty:
             return true
         default:
             return false
@@ -1990,14 +2182,20 @@ public class JavaScriptLifter: Lifter {
         // List of effectful expressions that are still waiting to be inlined. In the order that they need to be executed at runtime.
         // The expressions are identified by the FuzzIL output variable that they generate. The actual expression is stored in the expressions dictionary.
         private var pendingExpressions = [Variable]()
+        private var pendingExpressionsStack = Stack<[Variable]>()
 
         // We also try to inline reassignments once, into the next use of the reassigned FuzzIL variable. However, for all subsequent uses we have to use the
         // identifier of the JavaScript variable again (the lhs of the reassignment). This map is used to remember these identifiers.
         // See `reassign()` for more details about reassignment inlining.
         private var inlinedReassignments = VariableMap<Expression>()
 
-        init(analyzer: DefUseAnalyzer, version: ECMAScriptVersion, stripComments: Bool = false, includeLineNumbers: Bool = false, indent: Int = 4, alwaysEmitVariables: Bool = false) {
-            self.writer = ScriptWriter(stripComments: stripComments, includeLineNumbers: includeLineNumbers, indent: indent)
+        init(
+            analyzer: DefUseAnalyzer, version: ECMAScriptVersion, stripComments: Bool = false,
+            includeLineNumbers: Bool = false, indent: Int = 4, alwaysEmitVariables: Bool = false
+        ) {
+            self.writer = ScriptWriter(
+                stripComments: stripComments, includeLineNumbers: includeLineNumbers, indent: indent
+            )
             self.analyzer = analyzer
             self.varKeyword = version == .es6 ? "let" : "var"
             self.constKeyword = version == .es6 ? "const" : "var"
@@ -2025,7 +2223,9 @@ public class JavaScriptLifter: Lifter {
                 // The expression cannot be inlined. Now decide whether to define the output variable or not. The output variable can be omitted if:
                 //  * It is not used by any following instructions, and
                 //  * It is not an Object literal, as that would not be valid syntax (it would mistakenly be interpreted as a block statement)
-                if analyzer.numUses(of: v) == 0 && expr.type !== ObjectLiteral && !alwaysEmitVariables {
+                if analyzer.numUses(of: v) == 0 && expr.type !== ObjectLiteral
+                    && !alwaysEmitVariables
+                {
                     emit("\(expr);")
                 } else {
                     let LET = declarationKeyword(for: v)
@@ -2076,7 +2276,9 @@ public class JavaScriptLifter: Lifter {
         /// Otherwise, expression inlining will change the semantics of the program.
         ///
         /// This is a mutating operation as it can modify the list of pending expressions or emit pending expression to retain the correct ordering.
-        mutating func retrieve(expressionsFor queriedVariables: ArraySlice<Variable>) -> [Expression]? {
+        mutating func retrieve(expressionsFor queriedVariables: ArraySlice<Variable>)
+            -> [Expression]?
+        {
             // If any of the expression for the variables is pending, then one of two things will happen:
             //
             // 1. Iff the pending expressions that are being retrieved are an exact suffix match of the pending expressions list, then these pending expressions
@@ -2112,13 +2314,16 @@ public class JavaScriptLifter: Lifter {
             //    since they can only occur once (otherwise, they wouldn't be inlined), but is important
             //    for inlined reassignments, e.g. to be able to correctly handle `foo(a = 42, a, bar(), a);`
             var queriedPendingExpressions = [Variable]()
-            for v in queriedVariables where pendingExpressions.contains(v) && !queriedPendingExpressions.contains(v) {
+            for v in queriedVariables
+            where pendingExpressions.contains(v) && !queriedPendingExpressions.contains(v) {
                 queriedPendingExpressions.append(v)
             }
             for v in queriedPendingExpressions.reversed() {
                 assert(matchingSuffixLength < pendingExpressions.count)
                 let currentSuffixPosition = pendingExpressions.count - 1 - matchingSuffixLength
-                if matchingSuffixLength < pendingExpressions.count && v == pendingExpressions[currentSuffixPosition] {
+                if matchingSuffixLength < pendingExpressions.count
+                    && v == pendingExpressions[currentSuffixPosition]
+                {
                     matchingSuffixLength += 1
                 }
             }
@@ -2204,7 +2409,9 @@ public class JavaScriptLifter: Lifter {
         /// Declare all of the given variables. Equivalent to calling declare() for each of them.
         /// The variable names will be constructed as prefix + v.number. By default, the prefix "v" is used.
         @discardableResult
-        mutating func declareAll<Variables: Sequence>(_ vars: Variables, usePrefix prefix: String = "v") -> [String] where Variables.Element == Variable {
+        mutating func declareAll<Variables: Sequence>(
+            _ vars: Variables, usePrefix prefix: String = "v"
+        ) -> [String] where Variables.Element == Variable {
             return vars.map({ declare($0, as: prefix + String($0.number)) })
         }
 
@@ -2236,7 +2443,7 @@ public class JavaScriptLifter: Lifter {
 
         mutating func emit(_ line: String) {
             emitPendingExpressions()
-            writer.emit(line)
+            writer.emitBlock(line)
         }
 
         /// Emit a (potentially multi-line) comment.
@@ -2261,13 +2468,18 @@ public class JavaScriptLifter: Lifter {
 
         mutating func pushTemporaryOutputBuffer(initialIndentionLevel: Int) {
             temporaryOutputBufferStack.push(writer)
-            writer = ScriptWriter(stripComments: writer.stripComments, includeLineNumbers: false, indent: writer.indent.count, initialIndentionLevel: initialIndentionLevel)
+            pendingExpressionsStack.push(pendingExpressions)
+            pendingExpressions = []
+            writer = ScriptWriter(
+                stripComments: writer.stripComments, includeLineNumbers: false,
+                indent: writer.indent.count, initialIndentionLevel: initialIndentionLevel)
         }
 
         mutating func popTemporaryOutputBuffer() -> String {
             assert(pendingExpressions.isEmpty)
             let code = writer.code
             writer = temporaryOutputBufferStack.pop()
+            pendingExpressions = pendingExpressionsStack.pop()
             return code
         }
 
@@ -2313,12 +2525,11 @@ public class JavaScriptLifter: Lifter {
             if EXPR.type === AssignmentExpression {
                 // Reassignments require special handling: there is already a variable declared for the lhs,
                 // so we only need to emit the AssignmentExpression as an expression statement.
-                writer.emit("\(EXPR);")
+                writer.emitBlock("\(EXPR);")
             } else if analyzer.numUses(of: v) > 0 {
                 let LET = declarationKeyword(for: v)
                 let V = declare(v)
-                // Need to use writer.emit instead of emit here as the latter will emit all pending expressions.
-                writer.emit("\(LET) \(V) = \(EXPR);")
+                writer.emitBlock("\(LET) \(V) = \(EXPR);")
             } else {
                 // Pending expressions with no uses are allowed and are for example necessary to be able to
                 // combine multiple expressions into a single comma-expression for e.g. a loop header.
@@ -2328,9 +2539,9 @@ public class JavaScriptLifter: Lifter {
                     // not be distinguishable from block statements. So create a dummy variable.
                     let LET = constKeyword
                     let V = declare(v)
-                    writer.emit("\(LET) \(V) = \(EXPR);")
+                    writer.emitBlock("\(LET) \(V) = \(EXPR);")
                 } else {
-                    writer.emit("\(EXPR);")
+                    writer.emitBlock("\(EXPR);")
                 }
             }
         }

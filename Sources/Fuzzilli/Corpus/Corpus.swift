@@ -18,7 +18,7 @@ import Foundation
 /// It manages discovered programs, determines the next seed to target,
 /// and provides programs to be used in the splice mutators
 
-public protocol Corpus : ComponentBase {
+public protocol Corpus: ComponentBase {
     var size: Int { get }
     var isEmpty: Bool { get }
 
@@ -54,7 +54,9 @@ extension Corpus {
 
         if fuzzer.config.enableInspection {
             // Except for one identifying them as part of the corpus
-            program.comments.add("Corpus entry #\(index) on instance \(fuzzer.id) with Corpus type \(name)", at: .header)
+            program.comments.add(
+                "Corpus entry #\(index) on instance \(fuzzer.id) with Corpus type \(name)",
+                at: .header)
         }
     }
 }

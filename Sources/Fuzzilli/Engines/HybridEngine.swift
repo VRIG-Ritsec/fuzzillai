@@ -21,6 +21,7 @@ public class HybridEngine: FuzzEngine {
     // The different outcomes of one fuzzing iterations.
     private enum CodeGenerationOutcome: String, CaseIterable {
         case success = "Success"
+        case generatedCodeDifferential = "Generated code differential"
         case generatedCodeFailed = "Generated code failed"
         case generatedCodeTimedOut = "Generated code timed out"
         case generatedCodeCrashed = "Generated code crashed"
@@ -56,11 +57,16 @@ public class HybridEngine: FuzzEngine {
                 for template in self.fuzzer.programTemplates {
                     let name = template.name.rightPadded(toLength: nameMaxLength)
                     let correctnessRate = Statistics.percentageOrNa(template.correctnessRate, 7)
-                    let interestingSamplesRate = Statistics.percentageOrNa(template.interestingSamplesRate, 7)
+                    let interestingSamplesRate = Statistics.percentageOrNa(
+                        template.interestingSamplesRate, 7)
                     let timeoutRate = Statistics.percentageOrNa(template.timeoutRate, 6)
-                    let avgInstructionsAdded = String(format: "%.2f", template.avgNumberOfInstructionsGenerated).leftPadded(toLength: 5)
+                    let avgInstructionsAdded = String(
+                        format: "%.2f", template.avgNumberOfInstructionsGenerated
+                    ).leftPadded(toLength: 5)
                     let samplesGenerated = template.totalSamples
-                    self.logger.verbose("    \(name) : Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions generated: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)")
+                    self.logger.verbose(
+                        "    \(name) : Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions generated: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"
+                    )
                 }
 
                 let totalOutcomes = self.outcomeCounts.values.reduce(0, +)
@@ -68,13 +74,21 @@ public class HybridEngine: FuzzEngine {
                 for outcome in CodeGenerationOutcome.allCases {
                     let count = self.outcomeCounts[outcome]!
                     let frequency = (Double(count) / Double(totalOutcomes)) * 100.0
-                    self.logger.verbose("    \(outcome.rawValue.rightPadded(toLength: 25)): \(String(format: "%.2f%%", frequency))")
+                    self.logger.verbose(
+                        "    \(outcome.rawValue.rightPadded(toLength: 25)): \(String(format: "%.2f%%", frequency))"
+                    )
                 }
 
                 self.logger.verbose("Number of generated programs: \(self.programsGenerated)")
-                self.logger.verbose("Average programs size: \(self.totalInstructionsGenerated / self.programsGenerated)")
-                self.logger.verbose("Average percentage of guarded operations after code generation: \(String(format: "%.2f%", self.percentageOfGuardedOperationsAfterCodeGeneration.currentValue))%")
-                self.logger.verbose("Average percentage of guarded operations after code refining: \(String(format: "%.2f%", self.percentageOfGuardedOperationsAfterCodeRefining.currentValue))%")
+                self.logger.verbose(
+                    "Average programs size: \(self.totalInstructionsGenerated / self.programsGenerated)"
+                )
+                self.logger.verbose(
+                    "Average percentage of guarded operations after code generation: \(String(format: "%.2f%", self.percentageOfGuardedOperationsAfterCodeGeneration.currentValue))%"
+                )
+                self.logger.verbose(
+                    "Average percentage of guarded operations after code refining: \(String(format: "%.2f%", self.percentageOfGuardedOperationsAfterCodeRefining.currentValue))%"
+                )
             }
         }
     }
@@ -98,7 +112,8 @@ public class HybridEngine: FuzzEngine {
         // Update basic codegen statistics.
         totalInstructionsGenerated += generatedProgram.size
         programsGenerated += 1
-        percentageOfGuardedOperationsAfterCodeGeneration.add(computePercentageOfGuardedOperations(in: generatedProgram))
+        percentageOfGuardedOperationsAfterCodeGeneration.add(
+            computePercentageOfGuardedOperations(in: generatedProgram))
 
         // We use a higher timeout for the initial execution as pure code generation should only rarely lead to infinite loops/recursion.
         // On the other hand, the generated program may contain slow operations (e.g. try-catch guards) that the subsequent fixup may remove.
@@ -112,6 +127,8 @@ public class HybridEngine: FuzzEngine {
             return recordOutcome(.generatedCodeTimedOut)
         case .crashed:
             return recordOutcome(.generatedCodeCrashed)
+        case .differential:
+            return recordOutcome(.generatedCodeDifferential)
         }
 
         // Now perform one round of fixup to improve the generated program based on runtime information and in particular remove all try-catch guards that are not needed.
@@ -122,7 +139,8 @@ public class HybridEngine: FuzzEngine {
         let refinedProgram: Program
         if let result = fixupMutator.mutate(generatedProgram, for: fuzzer) {
             refinedProgram = result
-            percentageOfGuardedOperationsAfterCodeRefining.add(computePercentageOfGuardedOperations(in: refinedProgram))
+            percentageOfGuardedOperationsAfterCodeRefining.add(
+                computePercentageOfGuardedOperations(in: refinedProgram))
         } else {
             // Fixup is expected to fail sometimes, for example if there is nothing to fix.
             refinedProgram = generatedProgram

@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // The settings here strive to achieve a correctness rate of around 75%. Empirically, this appears to be roughly optimal:
 // higher than that, and samples are too similar to each other, lower than that, and too many samples are invalid.
 // TODO evaluate this independently for every mutator.
 
 let defaultMaxSimultaneousMutations = 7
 let defaultMaxSimultaneousCodeGenerations = 3
-let defaultCodeGenerationAmount = 5      // This must be at least ProgramBuilder.minBudgetForRecursiveCodeGeneration
+let defaultCodeGenerationAmount = 5  // This must be at least ProgramBuilder.minBudgetForRecursiveCodeGeneration

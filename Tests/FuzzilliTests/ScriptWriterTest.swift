@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class ScriptWriterTest: XCTestCase {
@@ -21,17 +22,17 @@ class ScriptWriterTest: XCTestCase {
         var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 10)
         w.emit("My name is Ozymandias, king of kings. Look on my works, ye Mighty, and despair!")
         let expected = """
-        My name is
-        Ozymandias
-        , king of
-        kings.
-        Look on my
-        works, ye
-        Mighty,
-        and
-        despair!
+            My name is
+            Ozymandias
+            , king of
+            kings.
+            Look on my
+            works, ye
+            Mighty,
+            and
+            despair!
 
-        """
+            """
         XCTAssertEqual(expected, w.code)
     }
 
@@ -46,39 +47,39 @@ class ScriptWriterTest: XCTestCase {
         w.emit("and despair!")
         w.decreaseIndentionLevel()
         let expected = """
-        My name
-        is
-        Ozymandi
-        as,
-          king
-          of
-          kings.
-        Look on
-        my
-        works,
-        ye
-        Mighty,
-          and
-          despai
-          r!
+            My name
+            is
+            Ozymandi
+            as,
+              king
+              of
+              kings.
+            Look on
+            my
+            works,
+            ye
+            Mighty,
+              and
+              despai
+              r!
 
-        """
+            """
         XCTAssertEqual(expected, w.code)
     }
 
     func testLineSplittingMultiSpace() {
-      var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 8)
-      let str = (0...10).map {"\($0)\(String(repeating: " ", count: $0))"}.joined()
-      w.emit(str)
-      let expected = """
-      01 2  3
-      4    5
-      6      7
-      8
-      9
-      10
+        var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 8)
+        let str = (0...10).map { "\($0)\(String(repeating: " ", count: $0))" }.joined()
+        w.emit(str)
+        let expected = """
+            01 2  3
+            4    5
+            6      7
+            8
+            9
+            10
 
-      """
-      XCTAssertEqual(expected, w.code)
+            """
+        XCTAssertEqual(expected, w.code)
     }
 }

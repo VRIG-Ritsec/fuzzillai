@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 func testAndCompareSerialization(program: Program) {
@@ -81,10 +82,10 @@ class ProgramSerializationTests: XCTestCase {
         b.append(Instruction(complexOp, output: b.nextVariable(), inputs: [v(2), v(3)]))
 
         let program = b.finalize()
-        XCTAssert(program.code[0].op === program.code[2].op &&
-                  program.code[0].op === program.code[4].op)
-        XCTAssert(program.code[5].op === program.code[7].op &&
-                  program.code[5].op === program.code[9].op)
+        XCTAssert(
+            program.code[0].op === program.code[2].op && program.code[0].op === program.code[4].op)
+        XCTAssert(
+            program.code[5].op === program.code[7].op && program.code[5].op === program.code[9].op)
 
         let encodingCache = OperationCache.forEncoding()
         let decodingCache = OperationCache.forDecoding()
@@ -96,10 +97,8 @@ class ProgramSerializationTests: XCTestCase {
 
         XCTAssertEqual(program, copy)
         XCTAssert(copy.code[0].op !== program.code[0].op)
-        XCTAssert(copy.code[0].op === copy.code[2].op &&
-                  copy.code[0].op === copy.code[4].op)
-        XCTAssert(copy.code[5].op === copy.code[7].op &&
-                  copy.code[5].op === copy.code[9].op)
+        XCTAssert(copy.code[0].op === copy.code[2].op && copy.code[0].op === copy.code[4].op)
+        XCTAssert(copy.code[5].op === copy.code[7].op && copy.code[5].op === copy.code[9].op)
     }
 
     // As our equality operation is based on the protobuf representation, we do these tests here.

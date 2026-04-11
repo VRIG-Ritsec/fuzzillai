@@ -1,3 +1,19 @@
+#!/usr/bin/env python3
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import shutil
 import subprocess
@@ -13,14 +29,17 @@ KNOWN_PROTO_FILES = [
     "ast.proto"
 ]
 
-def check_git_clean():
+def check_git_clean(info):
     """Check that the git repository does not have any uncommitted changes."""
     result = subprocess.run(
         ["git", "diff", "--name-only"],
         cwd=BASE_DIR,
         capture_output=True,
         check=True)
-    assert result.stdout.decode().strip() == "", f"Unexpected modified files: {result.stdout.decode()}"
+    output = result.stdout.decode().strip()
+    if output != "":
+        diff_result = subprocess.run(["git", "diff"], cwd=BASE_DIR, capture_output=True, check=True)
+        assert False, f"Unexpected modified files {info}: {output}\n== Diff ==\n{diff_result.stdout.decode()}"
 
 def check_proto():
     """Check that program.proto is up-to-date."""
@@ -28,7 +47,7 @@ def check_proto():
     proto_dir = BASE_DIR / "Sources/Fuzzilli/Protobuf"
     subprocess.run(["python3", "./gen_programproto.py"], cwd=proto_dir, check=True)
     # gen_programproto.py should be a no-op.
-    check_git_clean()
+    check_git_clean("after running gen_programproto.py")
 
     if not shutil.which("protoc"):
         print("Skipping protobuf validation as protoc is not available.")
@@ -45,12 +64,16 @@ def check_proto():
     cmd = ["protoc", "--swift_opt=Visibility=Public", "--swift_out=."] + KNOWN_PROTO_FILES
     subprocess.run(cmd, cwd=proto_dir, check=True, env=env)
     # Regenerating the protobuf files should be a no-op.
-    check_git_clean()
+    check_git_clean("after regenerating protobuf files")
+
+def check_formatting():
+    subprocess.run(["swift", "format", BASE_DIR, "--recursive", "--parallel", "--in-place"], check=True)
+    check_git_clean("after auto-formatting")
 
 def main():
-    check_git_clean()
+    check_git_clean("before any checks")
     check_proto()
-    # TODO(mliedtke): Ensure formatting delta is zero once we enable automated formatting.
+    check_formatting()
 
 
 if __name__ == '__main__':

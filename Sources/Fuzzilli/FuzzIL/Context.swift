@@ -39,41 +39,41 @@ public struct Context: OptionSet, Hashable, CaseIterable {
     }
 
     // Default javascript context.
-    public static let javascript        = Context(rawValue: 1 << 0)
+    public static let javascript = Context(rawValue: 1 << 0)
     // Inside a subroutine (function, constructor, method, ...) definition.
     // This for example means that doing `return` or accessing `arguments` is allowed.
-    public static let subroutine        = Context(rawValue: 1 << 1)
+    public static let subroutine = Context(rawValue: 1 << 1)
     // Inside a generator function definition.
     // This for example means that `yield` and `yield*` are allowed.
     public static let generatorFunction = Context(rawValue: 1 << 2)
     // Inside an async function definition.
     // This for example means that `await` is allowed.
-    public static let asyncFunction     = Context(rawValue: 1 << 3)
+    public static let asyncFunction = Context(rawValue: 1 << 3)
     // Inside a method.
     // This for example means that access to `super` is allowed.
-    public static let method            = Context(rawValue: 1 << 4)
+    public static let method = Context(rawValue: 1 << 4)
     // Inside a class method.
     // This for example means that access to private properties is allowed.
-    public static let classMethod       = Context(rawValue: 1 << 5)
+    public static let classMethod = Context(rawValue: 1 << 5)
     // Inside a loop.
-    public static let loop              = Context(rawValue: 1 << 6)
+    public static let loop = Context(rawValue: 1 << 6)
     // Inside an object literal.
-    public static let objectLiteral     = Context(rawValue: 1 << 7)
+    public static let objectLiteral = Context(rawValue: 1 << 7)
     // Inside a class definition.
-    public static let classDefinition   = Context(rawValue: 1 << 8)
+    public static let classDefinition = Context(rawValue: 1 << 8)
     // Inside a switch block.
-    public static let switchBlock       = Context(rawValue: 1 << 9)
+    public static let switchBlock = Context(rawValue: 1 << 9)
     // Inside a switch case.
-    public static let switchCase        = Context(rawValue: 1 << 10)
+    public static let switchCase = Context(rawValue: 1 << 10)
     // Inside a wasm module
-    public static let wasm              = Context(rawValue: 1 << 11)
+    public static let wasm = Context(rawValue: 1 << 11)
     // Inside a function in a wasm module
-    public static let wasmFunction      = Context(rawValue: 1 << 12)
+    public static let wasmFunction = Context(rawValue: 1 << 12)
     // Inside a wasm recursive type group definition.
-    public static let wasmTypeGroup     = Context(rawValue: 1 << 13)
+    public static let wasmTypeGroup = Context(rawValue: 1 << 13)
 
-    public static let empty             = Context([])
-    
+    public static let empty = Context([])
+
     public var inWasm: Bool {
         self.contains(.wasm) || self.contains(.wasmFunction)
     }

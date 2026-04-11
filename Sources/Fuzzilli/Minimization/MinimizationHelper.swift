@@ -43,7 +43,10 @@ class MinimizationHelper {
     /// How many times we execute the modified code by default to determine whether its (relevant) behaviour has changed due to a modification.
     private static let defaultNumExecutions = 1
 
-    init(for aspects: ProgramAspects, forCode code: Code, of fuzzer: Fuzzer, runningOnFuzzerQueue: Bool) {
+    init(
+        for aspects: ProgramAspects, forCode code: Code, of fuzzer: Fuzzer,
+        runningOnFuzzerQueue: Bool
+    ) {
         assert(code.filter({ $0.isNop }).count == 0)
         self.aspects = aspects
         self.fuzzer = fuzzer
@@ -114,7 +117,10 @@ class MinimizationHelper {
 
     /// Test a reduction and returns true if the reduction was Ok, false otherwise.
     @discardableResult
-    func testAndCommit(_ newCode: Code, expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions, allowRemoving: Instruction.Flags = .empty) -> Bool {
+    func testAndCommit(
+        _ newCode: Code, expectCodeToBeValid: Bool = true,
+        numExecutions: Int = defaultNumExecutions, allowRemoving: Instruction.Flags = .empty
+    ) -> Bool {
         assert(!self.finalized)
         assert(numExecutions > 0)
         assert(!expectCodeToBeValid || newCode.isStaticallyValid())
@@ -144,7 +150,9 @@ class MinimizationHelper {
         var stillHasAspects = false
         performOnFuzzerQueue {
             for _ in 0..<numExecutions {
-                let execution = fuzzer.execute(Program(with: newCode), withTimeout: fuzzer.config.timeout * 2, purpose: .minimization)
+                let execution = fuzzer.execute(
+                    Program(with: newCode), withTimeout: fuzzer.config.timeout * 2,
+                    purpose: .minimization)
                 stillHasAspects = fuzzer.evaluator.hasAspects(execution, aspects)
                 guard stillHasAspects else { break }
             }
@@ -165,16 +173,24 @@ class MinimizationHelper {
     /// Replace the instruction at the given index with the provided replacement if it does not negatively influence the programs previous behaviour.
     /// The replacement instruction must produce the same output variables as the original instruction.
     @discardableResult
-    func tryReplacing(instructionAt index: Int, with newInstr: Instruction, expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions, allowRemoving flags: Instruction.Flags = .empty) -> Bool {
+    func tryReplacing(
+        instructionAt index: Int, with newInstr: Instruction, expectCodeToBeValid: Bool = true,
+        numExecutions: Int = defaultNumExecutions, allowRemoving flags: Instruction.Flags = .empty
+    ) -> Bool {
         var newCode = self.code
         assert(newCode[index].allOutputs == newInstr.allOutputs)
         newCode[index] = newInstr
 
-        return testAndCommit(newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions, allowRemoving: flags)
+        return testAndCommit(
+            newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions,
+            allowRemoving: flags)
     }
 
     @discardableResult
-    func tryInserting(_ newInstr: Instruction, at index: Int, expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions) -> Bool {
+    func tryInserting(
+        _ newInstr: Instruction, at index: Int, expectCodeToBeValid: Bool = true,
+        numExecutions: Int = defaultNumExecutions
+    ) -> Bool {
         // Right now we don't expect to see any flags here on the new instruction.
         assert(newInstr.flags.isEmpty)
 
@@ -187,18 +203,28 @@ class MinimizationHelper {
             newCode.append(instr)
         }
 
-        return testAndCommit(newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions)
+        return testAndCommit(
+            newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions)
     }
 
     /// Remove the instruction at the given index if it does not negatively influence the programs previous behaviour.
     @discardableResult
-    func tryNopping(instructionAt index: Int, numExecutions: Int = defaultNumExecutions, allowRemoving flags: Instruction.Flags = .empty) -> Bool {
-        return tryReplacing(instructionAt: index, with: nop(for: code[index]), expectCodeToBeValid: false, numExecutions: numExecutions, allowRemoving: flags)
+    func tryNopping(
+        instructionAt index: Int, numExecutions: Int = defaultNumExecutions,
+        allowRemoving flags: Instruction.Flags = .empty
+    ) -> Bool {
+        return tryReplacing(
+            instructionAt: index, with: nop(for: code[index]), expectCodeToBeValid: false,
+            numExecutions: numExecutions, allowRemoving: flags)
     }
 
     /// Attempt multiple replacements at once.
     @discardableResult
-    func tryReplacements(_ replacements: [(Int, Instruction)], renumberVariables: Bool = false, expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions, allowRemoving flags: Instruction.Flags = .empty) -> Bool {
+    func tryReplacements(
+        _ replacements: [(Int, Instruction)], renumberVariables: Bool = false,
+        expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions,
+        allowRemoving flags: Instruction.Flags = .empty
+    ) -> Bool {
         var newCode = self.code
 
         for (index, newInstr) in replacements {
@@ -210,11 +236,17 @@ class MinimizationHelper {
         }
         assert(newCode.variablesAreNumberedContinuously())
 
-        return testAndCommit(newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions, allowRemoving: flags)
+        return testAndCommit(
+            newCode, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions,
+            allowRemoving: flags)
     }
 
     @discardableResult
-    func tryReplacing(range: ClosedRange<Int>, with newCode: [Instruction], renumberVariables: Bool = false, expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions, allowRemoving flags: Instruction.Flags = .empty) -> Bool {
+    func tryReplacing(
+        range: ClosedRange<Int>, with newCode: [Instruction], renumberVariables: Bool = false,
+        expectCodeToBeValid: Bool = true, numExecutions: Int = defaultNumExecutions,
+        allowRemoving flags: Instruction.Flags = .empty
+    ) -> Bool {
         assert(range.count >= newCode.count)
 
         var replacements = [(Int, Instruction)]()
@@ -230,12 +262,18 @@ class MinimizationHelper {
             replacements.append((indexOfInstructionToReplace, replacement))
         }
 
-        return tryReplacements(replacements, renumberVariables: renumberVariables, expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions, allowRemoving: flags)
+        return tryReplacements(
+            replacements, renumberVariables: renumberVariables,
+            expectCodeToBeValid: expectCodeToBeValid, numExecutions: numExecutions,
+            allowRemoving: flags)
     }
 
     /// Attempt the removal of multiple instructions at once.
     @discardableResult
-    func tryNopping(_ indices: [Int], expectCodeToBeValid: Bool = false, allowRemoving flags: Instruction.Flags = .empty) -> Bool {
+    func tryNopping(
+        _ indices: [Int], expectCodeToBeValid: Bool = false,
+        allowRemoving flags: Instruction.Flags = .empty
+    ) -> Bool {
         var replacements = [(Int, Instruction)]()
         for index in indices {
             replacements.append((index, nop(for: code[index])))
@@ -246,7 +284,9 @@ class MinimizationHelper {
     /// Create a Nop instruction for replacing the given instruction with.
     func nop(for instr: Instruction) -> Instruction {
         // We must preserve outputs here to keep variable number contiguous.
-        return Instruction(Nop(numOutputs: instr.numOutputs + instr.numInnerOutputs), inouts: instr.allOutputs, flags: .empty)
+        return Instruction(
+            Nop(numOutputs: instr.numOutputs + instr.numInnerOutputs), inouts: instr.allOutputs,
+            flags: .empty)
     }
 }
 

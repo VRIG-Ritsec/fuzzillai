@@ -64,10 +64,20 @@ public class FixupMutator: RuntimeAssistedMutator {
         // Helper functions to emit the Fixup operations.
         var numInstrumentedInstructions = 0
         let actionEncoder = JSONEncoder()
-        func fixup(_ instr: Instruction, performing op: ActionOperation, guarded: Bool, withInputs inputs: [Action.Input], with b: ProgramBuilder) {
+        func fixup(
+            _ instr: Instruction, performing op: ActionOperation, guarded: Bool,
+            withInputs inputs: [Action.Input], with b: ProgramBuilder
+        ) {
             assert(instr.numOutputs == 0 || instr.numOutputs == 1)
             assert(instr.numInnerOutputs == 0)
-            assert(inputs.allSatisfy({ if case .argument(let index) = $0 { return index < instr.numInputs } else { return true }}))
+            assert(
+                inputs.allSatisfy({
+                    if case .argument(let index) = $0 {
+                        return index < instr.numInputs
+                    } else {
+                        return true
+                    }
+                }))
 
             numInstrumentedInstructions += 1
 
@@ -75,19 +85,26 @@ public class FixupMutator: RuntimeAssistedMutator {
             let action = Action(id: id, operation: op, inputs: inputs, isGuarded: guarded)
             let encodedData = try! actionEncoder.encode(action)
             let encodedAction = String(data: encodedData, encoding: .utf8)!
-            let maybeOutput = b.fixup(id: id, action: encodedAction, originalOperation: instr.op.name, arguments: Array(instr.inputs), hasOutput: instr.hasOneOutput)
+            let maybeOutput = b.fixup(
+                id: id, action: encodedAction, originalOperation: instr.op.name,
+                arguments: Array(instr.inputs), hasOutput: instr.hasOneOutput)
             // The fixup instruction must create the same output variable, as that may be used by subsequent code.
             assert(!instr.hasOutputs || instr.output == maybeOutput)
 
             if verbose {
-                instrumentedOperations[instr.op.name] = (instrumentedOperations[instr.op.name] ?? 0) + 1
+                instrumentedOperations[instr.op.name] =
+                    (instrumentedOperations[instr.op.name] ?? 0) + 1
                 if instr.isGuarded {
-                    instrumentedGuardedOperations[instr.op.name] = (instrumentedGuardedOperations[instr.op.name] ?? 0) + 1
+                    instrumentedGuardedOperations[instr.op.name] =
+                        (instrumentedGuardedOperations[instr.op.name] ?? 0) + 1
                 }
             }
         }
 
-        func maybeFixup(_ instr: Instruction, performing op: ActionOperation, guarded: Bool, withInputs inputs: [Action.Input], with b: ProgramBuilder) {
+        func maybeFixup(
+            _ instr: Instruction, performing op: ActionOperation, guarded: Bool,
+            withInputs inputs: [Action.Input], with b: ProgramBuilder
+        ) {
             // Only instrument some percentage of unguarded instructions but do still instrument all guarded instructions (to attempt to remove the guards).
             if !guarded {
                 if !probability(probabilityOfFixingUnguardedInstruction) {
@@ -99,7 +116,10 @@ public class FixupMutator: RuntimeAssistedMutator {
             fixup(instr, performing: op, guarded: guarded, withInputs: inputs, with: b)
         }
 
-        func fixupIfGuarded(_ instr: Instruction, performing op: ActionOperation, guarded: Bool, withInputs inputs: [Action.Input], with b: ProgramBuilder) {
+        func fixupIfGuarded(
+            _ instr: Instruction, performing op: ActionOperation, guarded: Bool,
+            withInputs inputs: [Action.Input], with b: ProgramBuilder
+        ) {
             guard guarded else {
                 b.append(instr)
                 return
@@ -116,55 +136,80 @@ public class FixupMutator: RuntimeAssistedMutator {
             // exception would be raised.
             case .callFunction(let op):
                 let inputs = (0..<instr.numInputs).map({ Action.Input.argument(index: $0) })
-                fixupIfGuarded(instr, performing: .CallFunction, guarded: op.isGuarded, withInputs: inputs, with: b)
+                fixupIfGuarded(
+                    instr, performing: .CallFunction, guarded: op.isGuarded, withInputs: inputs,
+                    with: b)
 
             case .construct(let op):
                 let inputs = (0..<instr.numInputs).map({ Action.Input.argument(index: $0) })
-                fixupIfGuarded(instr, performing: .Construct, guarded: op.isGuarded, withInputs: inputs, with: b)
+                fixupIfGuarded(
+                    instr, performing: .Construct, guarded: op.isGuarded, withInputs: inputs,
+                    with: b)
 
             // For method calls, we also instrument some of the unguarded ones as we may be calling a "boring" method (e.g. one from the Object.prototype)
             // as we lacked knowledge of more interesting methods during static code generation.
             case .callMethod(let op):
                 let arguments = (1..<instr.numInputs).map({ Action.Input.argument(index: $0) })
-                maybeFixup(instr, performing: .CallMethod, guarded: op.isGuarded, withInputs: [.argument(index: 0), .string(value: op.methodName)] + arguments, with: b)
+                maybeFixup(
+                    instr, performing: .CallMethod, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .string(value: op.methodName)] + arguments,
+                    with: b)
 
             case .callComputedMethod(let op):
                 let arguments = (2..<instr.numInputs).map({ Action.Input.argument(index: $0) })
-                maybeFixup(instr, performing: .CallMethod, guarded: op.isGuarded, withInputs: [.argument(index: 0), .argument(index: 1)] + arguments, with: b)
+                maybeFixup(
+                    instr, performing: .CallMethod, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .argument(index: 1)] + arguments, with: b)
 
             // TODO: We cannot currently convert spread calls into Actions.
             case .callFunctionWithSpread,
-                 .constructWithSpread,
-                 .callMethodWithSpread,
-                 .callComputedMethodWithSpread:
+                .constructWithSpread,
+                .callMethodWithSpread,
+                .callComputedMethodWithSpread:
                 b.append(instr)
 
             // We attempt to fix all guarded property operations and some percentage of the unguarded since as "meaningless" property accesses (such as
             // loads of non-existent properties) will not raise an exception.
             case .getProperty(let op):
-                maybeFixup(instr, performing: .GetProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
+                maybeFixup(
+                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
 
             case .deleteProperty(let op):
-                maybeFixup(instr, performing: .DeleteProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
+                maybeFixup(
+                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
 
             case .setProperty(let op):
-                maybeFixup(instr, performing: .SetProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
+                maybeFixup(
+                    instr, performing: .SetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
 
             case .getElement(let op):
-                maybeFixup(instr, performing: .GetProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
+                maybeFixup(
+                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
 
             case .deleteElement(let op):
-                maybeFixup(instr, performing: .DeleteProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
+                maybeFixup(
+                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
 
             case .getComputedProperty(let op):
-                maybeFixup(instr, performing: .GetProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
+                maybeFixup(
+                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
             case .deleteComputedProperty(let op):
-                maybeFixup(instr, performing: .DeleteProperty, guarded: op.isGuarded, withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
+                maybeFixup(
+                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
             default:
                 // At least all guardable operations should be handled by this mutator.
-                assert(!(instr.op is GuardableOperation), "FixupMutator should handle guardable operation \(instr.op)")
+                assert(
+                    !(instr.op is GuardableOperation),
+                    "FixupMutator should handle guardable operation \(instr.op)")
 
                 b.append(instr)
             }
@@ -183,7 +228,10 @@ public class FixupMutator: RuntimeAssistedMutator {
         return instrumentedProgram
     }
 
-    override func process(_ output: String, ofInstrumentedProgram instrumentedProgram: Program, using b: ProgramBuilder) -> (Program?, RuntimeAssistedMutator.Outcome) {
+    override func process(
+        _ output: String, ofInstrumentedProgram instrumentedProgram: Program,
+        using b: ProgramBuilder
+    ) -> (Program?, RuntimeAssistedMutator.Outcome) {
         // For each Fixup operation (identified by its Id), this dict contains the (potentially modified) action that was performed by it.
         var actions = [String: Action]()
 
@@ -191,7 +239,10 @@ public class FixupMutator: RuntimeAssistedMutator {
         // Populate the actions map with the original actions. This way, we can verify that the received (updated) actions all belong to a Fixup operation.
         for instr in instrumentedProgram.code {
             if let op = instr.op as? Fixup {
-                guard let originalAction = try? actionDecoder.decode(Action.self, from: op.action.data(using: .utf8)!) else {
+                guard
+                    let originalAction = try? actionDecoder.decode(
+                        Action.self, from: op.action.data(using: .utf8)!)
+                else {
                     logger.error("Failed to decode original action \"\(op.action)\"")
                     return (nil, .unexpectedError)
                 }
@@ -233,7 +284,9 @@ public class FixupMutator: RuntimeAssistedMutator {
                 }
                 seenFailures.insert(id)
                 // We could also drop this action or replace it with a different one, but for now, simply add the guard back if we observe a failure.
-                actions[id] = Action(id: action.id, operation: action.operation, inputs: action.inputs, isGuarded: true)
+                actions[id] = Action(
+                    id: action.id, operation: action.operation, inputs: action.inputs,
+                    isGuarded: true)
             } else if line.hasPrefix(actionMarker) {
                 let payload = Data(line.dropFirst(actionMarker.count).utf8)
                 guard let action = try? actionDecoder.decode(Action.self, from: payload) else {
@@ -283,17 +336,28 @@ public class FixupMutator: RuntimeAssistedMutator {
                 let args = Array(instr.inputs)
                 b.trace("Fixing next instruction")
                 do {
-                    try action.translateToFuzzIL(withContext: (arguments: args, specialValues: [:]), using: b)
+                    try action.translateToFuzzIL(
+                        withContext: (arguments: args, specialValues: [:]), using: b)
                     assert(!op.hasOutput || b.visibleVariables.last == instr.output)
-                    assert(op.originalOperation == b.lastInstruction().op.name)         // We expect the old and new operations to be the same (but potentially performed on different inputs)
+                    assert(op.originalOperation == b.lastInstruction().op.name)  // We expect the old and new operations to be the same (but potentially performed on different inputs)
                 } catch ActionError.actionTranslationError(let msg) {
+                    // In case of an error we won't have emitted an instruction. As such, we need
+                    // to abort the mutation here (unfortunately), as we might now have an
+                    // inconsistent program (we essentially dropped a random instruction that e.g.
+                    // may have produced an output variable used later on).
+                    // This is mostly unexpected (so we log an error), but can legitimately happen
+                    // during V8 sandbox fuzzing as we will randomly corrupt heap memory there.
                     logger.error("Failed to process action: \(msg)")
+                    return (nil, .unexpectedError)
                 } catch {
                     logger.error("Unexpected error during action processing \(error)")
+                    // Same as above, we need to abort the mutation here.
+                    return (nil, .unexpectedError)
                 }
                 b.trace("Fixup done")
                 if verbose && modifiedActions.contains(action.id) {
-                    modifiedOperations[op.originalOperation] = (modifiedOperations[op.originalOperation] ?? 0) + 1
+                    modifiedOperations[op.originalOperation] =
+                        (modifiedOperations[op.originalOperation] ?? 0) + 1
                 }
             } else {
                 b.append(instr)
@@ -305,13 +369,19 @@ public class FixupMutator: RuntimeAssistedMutator {
     }
 
     override func logAdditionalStatistics() {
-        logger.verbose("Average success rate (percentage of removed guards) during recent mutations: \(String(format: "%.2f", averageSuccesRate.currentValue * 100))%")
-        logger.verbose("Average percentage of instrumented instructions: \(String(format: "%.2f", averageInstrumentationRatio.currentValue * 100))%")
+        logger.verbose(
+            "Average success rate (percentage of removed guards) during recent mutations: \(String(format: "%.2f", averageSuccesRate.currentValue * 100))%"
+        )
+        logger.verbose(
+            "Average percentage of instrumented instructions: \(String(format: "%.2f", averageInstrumentationRatio.currentValue * 100))%"
+        )
         logger.verbose("Per-operation statistics:")
         for (opName, count) in instrumentedOperations {
             let guardedRatio = Double(instrumentedGuardedOperations[opName] ?? 0) / Double(count)
             let modificationRate = Double(modifiedOperations[opName] ?? 0) / Double(count)
-            logger.verbose("    \(opName.rightPadded(toLength: 30)): instrumented \(count) times (of which \(String(format: "%.2f", guardedRatio * 100))% were guarded), modification rate: \(String(format: "%.2f", modificationRate * 100))%")
+            logger.verbose(
+                "    \(opName.rightPadded(toLength: 30)): instrumented \(count) times (of which \(String(format: "%.2f", guardedRatio * 100))% were guarded), modification rate: \(String(format: "%.2f", modificationRate * 100))%"
+            )
         }
     }
 }

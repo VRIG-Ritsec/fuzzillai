@@ -30,11 +30,14 @@ struct InstructionSimplifier: Reducer {
             if begin is BeginPlainFunction { continue }
 
             let functionName = (begin as? BeginAnyNamedFunction)?.functionName ?? nil
-            let newBegin = Instruction(BeginPlainFunction(parameters: begin.parameters, functionName: functionName), inouts: helper.code[group.head].inouts, flags: .empty)
+            let newBegin = Instruction(
+                BeginPlainFunction(parameters: begin.parameters, functionName: functionName),
+                inouts: helper.code[group.head].inouts, flags: .empty)
             let newEnd = Instruction(EndPlainFunction())
 
             // The resulting code may be invalid as we may be changing the context inside the body (e.g. turning an async function into a plain one).
-            helper.tryReplacements([(group.head, newBegin), (group.tail, newEnd)], expectCodeToBeValid: false)
+            helper.tryReplacements(
+                [(group.head, newBegin), (group.tail, newEnd)], expectCodeToBeValid: false)
         }
     }
 
@@ -56,7 +59,9 @@ struct InstructionSimplifier: Reducer {
             }
 
             if let op = newOp {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(op, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(op, inouts: instr.inouts, flags: .empty))
             }
         }
     }
@@ -78,7 +83,9 @@ struct InstructionSimplifier: Reducer {
             case .constructWithSpread(let op):
                 newOp = Construct(numArguments: op.numArguments, isGuarded: op.isGuarded)
             case .callMethodWithSpread(let op):
-                newOp = CallMethod(methodName: op.methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                newOp = CallMethod(
+                    methodName: op.methodName, numArguments: op.numArguments,
+                    isGuarded: op.isGuarded)
             case .callComputedMethodWithSpread(let op):
                 newOp = CallComputedMethod(numArguments: op.numArguments, isGuarded: op.isGuarded)
 
@@ -91,7 +98,9 @@ struct InstructionSimplifier: Reducer {
             }
 
             if let op = newOp {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(op, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(op, inouts: instr.inouts, flags: .empty))
             }
         }
     }
@@ -103,7 +112,9 @@ struct InstructionSimplifier: Reducer {
             guard let op = instr.op as? GuardableOperation else { continue }
             let newOp = GuardableOperation.disableGuard(of: op)
             if newOp !== op {
-                helper.tryReplacing(instructionAt: instr.index, with: Instruction(newOp, inouts: instr.inouts, flags: .empty))
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(newOp, inouts: instr.inouts, flags: .empty))
             }
         }
     }
@@ -129,10 +140,16 @@ struct InstructionSimplifier: Reducer {
 
                 let outputs = Array(instr.outputs)
                 for (i, propertyName) in op.properties.enumerated() {
-                    newCode.append(Instruction(GetProperty(propertyName: propertyName, isGuarded: false), output: outputs[i], inputs: [instr.input(0)]))
+                    newCode.append(
+                        Instruction(
+                            GetProperty(propertyName: propertyName, isGuarded: false),
+                            output: outputs[i], inputs: [instr.input(0)]))
                 }
                 if op.hasRestElement {
-                    newCode.append(Instruction(DestructObject(properties: [], hasRestElement: true), output: outputs.last!, inputs: [instr.input(0)]))
+                    newCode.append(
+                        Instruction(
+                            DestructObject(properties: [], hasRestElement: true),
+                            output: outputs.last!, inputs: [instr.input(0)]))
                 }
                 keepInstruction = false
             case .destructArray(let op):
@@ -143,10 +160,16 @@ struct InstructionSimplifier: Reducer {
 
                 let outputs = Array(instr.outputs)
                 for (i, idx) in op.indices.enumerated() {
-                    if i == op.indices.last! && op.lastIsRest {
-                        newCode.append(Instruction(DestructArray(indices: [idx], lastIsRest: true), output: outputs.last!, inputs: [instr.input(0)]))
+                    if i == op.indices.count - 1 && op.lastIsRest {
+                        newCode.append(
+                            Instruction(
+                                DestructArray(indices: [idx], lastIsRest: true),
+                                output: outputs.last!, inputs: [instr.input(0)]))
                     } else {
-                        newCode.append(Instruction(GetElement(index: idx, isGuarded: false), output: outputs[i], inputs: [instr.input(0)]))
+                        newCode.append(
+                            Instruction(
+                                GetElement(index: idx, isGuarded: false), output: outputs[i],
+                                inputs: [instr.input(0)]))
                     }
                 }
                 keepInstruction = false

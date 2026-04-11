@@ -19,6 +19,7 @@ public class Storage: Module {
     private let storageDir: String
     private let crashesDir: String
     private let duplicateCrashesDir: String
+    private let differentialsDir: String
     private let corpusDir: String
     private let statisticsDir: String
     private let stateFile: String
@@ -37,6 +38,7 @@ public class Storage: Module {
         self.storageDir = storageDir
         self.crashesDir = storageDir + "/crashes"
         self.duplicateCrashesDir = storageDir + "/crashes/duplicates"
+        self.differentialsDir = storageDir + "/differentials"
         self.corpusDir = storageDir + "/corpus"
         self.failedDir = storageDir + "/failed"
         self.timeOutDir = storageDir + "/timeouts"
@@ -66,7 +68,9 @@ public class Storage: Module {
                 try FileManager.default.createDirectory(atPath: logsDir, withIntermediateDirectories: true)
             }
         } catch {
-            logger.fatal("Failed to create storage directories. Is \(storageDir) writable by the current user?")
+            logger.fatal(
+                "Failed to create storage directories. Is \(storageDir) writable by the current user?"
+            )
         }
 
         struct Settings: Codable {
@@ -75,7 +79,8 @@ public class Storage: Module {
         }
 
         // Write the current settings to disk.
-        let settings = Settings(processArguments: Array(fuzzer.runner.processArguments[1...]), tag: fuzzer.config.tag)
+        let settings = Settings(
+            processArguments: Array(fuzzer.runner.processArguments[1...]), tag: fuzzer.config.tag)
         var settingsData: Data?
         do {
             let encoder = JSONEncoder()
@@ -89,7 +94,8 @@ public class Storage: Module {
             let settingsUrl = URL(fileURLWithPath: "\(self.storageDir)/settings.json")
             try settingsData!.write(to: settingsUrl)
         } catch {
-            logger.fatal("Failed to write settings to disk. Is \(storageDir) writable by the current user?")
+            logger.fatal(
+                "Failed to write settings to disk. Is \(storageDir) writable by the current user?")
         }
 
         fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
@@ -99,6 +105,11 @@ public class Storage: Module {
             } else {
                 self.storeProgram(ev.program, as: filename, in: self.duplicateCrashesDir)
             }
+        }
+
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { ev in
+            let filename = "program_\(self.formatDate())_\(ev.program.id)_\(ev.behaviour.rawValue)"
+            self.storeProgram(ev.program, as: filename, in: self.differentialsDir)
         }
 
         fuzzer.registerEventListener(for: fuzzer.events.InterestingProgramFound) { ev in
@@ -209,7 +220,9 @@ public class Storage: Module {
                 logger.fatal("Requested stats export but no Statistics module is active")
             }
             fuzzer.timers.scheduleTask(every: interval) { self.saveStatistics(stats) }
-            fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in self.saveStatistics(stats) }
+            fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
+                self.saveStatistics(stats)
+            }
         }
     }
 
@@ -302,7 +315,8 @@ public class Storage: Module {
             let date = formatDate()
             let statsUrl = URL(fileURLWithPath: "\(self.statisticsDir)/\(date).json")
             try statsData.write(to: statsUrl)
-            let evaluatorStateUrl = URL(fileURLWithPath: "\(self.statisticsDir)/\(date)_evaluator_state.bin")
+            let evaluatorStateUrl = URL(
+                fileURLWithPath: "\(self.statisticsDir)/\(date)_evaluator_state.bin")
             try evaluatorStateData.write(to: evaluatorStateUrl)
 
         } catch {

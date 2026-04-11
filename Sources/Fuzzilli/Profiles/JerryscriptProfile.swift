@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
-let qjsProfile = Profile(
+let jerryscriptProfile = Profile(
     processArgs: { randomize in
-        ["--reprl"]
+        ["--reprl-fuzzilli"]
     },
+
+    processArgsReference: nil,
 
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
@@ -26,12 +26,12 @@ let qjsProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                """,
+        """,
 
-    ecmaVersion: ECMAScriptVersion.es6,
+    ecmaVersion: ECMAScriptVersion.es5,
 
     startupTests: [
         // Check that the fuzzilli integration is available.
@@ -40,7 +40,6 @@ let qjsProfile = Profile(
         // Check that common crash types are detected.
         ("fuzzilli('FUZZILLI_CRASH', 0)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
-        ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
     ],
 
     additionalCodeGenerators: [],
@@ -52,7 +51,10 @@ let qjsProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "placeholder"         : .function([] => .undefined)
+        "gc": .function([] => .undefined),
+        "print": .function([] => .undefined),
+        "resourceName": .function([] => .undefined),
+        "placeholder": .function([] => .undefined),
     ],
 
     additionalObjectGroups: [],

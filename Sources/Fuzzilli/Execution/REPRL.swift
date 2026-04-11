@@ -47,7 +47,10 @@ public class REPRL: ComponentBase, ScriptRunner {
     /// future executions. This is only used if diagnostics mode is enabled.
     private var scriptBuffer = String()
 
-    public init(executable: String, processArguments: [String], processEnvironment: [String: String], maxExecsBeforeRespawn: Int) {
+    public init(
+        executable: String, processArguments: [String], processEnvironment: [String: String],
+        maxExecsBeforeRespawn: Int
+    ) {
         self.processArguments = [executable] + processArguments
         self.maxExecsBeforeRespawn = maxExecsBeforeRespawn
         super.init(name: "REPRL")
@@ -66,8 +69,12 @@ public class REPRL: ComponentBase, ScriptRunner {
         let argv = convertToCArray(processArguments)
         let envp = convertToCArray(env.map({ $0 + "=" + $1 }))
 
-        if reprl_initialize_context(reprlContext, argv, envp, /* capture stdout */ 1, /* capture stderr: */ 1) != 0 {
-            logger.fatal("Failed to initialize REPRL context: \(String(cString: reprl_get_last_error(reprlContext)))")
+        if reprl_initialize_context(
+            reprlContext, argv, envp, /* capture stdout */ 1, /* capture stderr: */ 1) != 0
+        {
+            logger.fatal(
+                "Failed to initialize REPRL context: \(String(cString: reprl_get_last_error(reprlContext)))"
+            )
         }
 
         freeCArray(argv, numElems: processArguments.count)
@@ -113,25 +120,42 @@ public class REPRL: ComponentBase, ScriptRunner {
             }
         }
 
-        var execTime: UInt64 = 0        // In microseconds
-        let timeout = UInt64(timeout) * 1000        // In microseconds
+        var execTime: UInt64 = 0  // In microseconds
+        let timeout = UInt64(timeout) * 1000  // In microseconds
         var status: Int32 = 0
         script.withCString { ptr in
-            status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, freshInstance)
+            status = reprl_execute(
+                reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime,
+                freshInstance)
             // If we fail, we retry after a short timeout and with a fresh instance. If we still fail, we give up trying
             // to execute this program. If we repeatedly fail to execute any program, we abort.
             if status < 0 {
-                logger.warning("Script execution failed: \(String(cString: reprl_get_last_error(reprlContext))). Retrying in 1 second...")
+                let errorMsg = String(cString: reprl_get_last_error(reprlContext))
+                logger.warning("Script execution failed: \(errorMsg). Retrying in 1 second...")
                 if fuzzer.config.enableDiagnostics {
-                    fuzzer.dispatchEvent(fuzzer.events.DiagnosticsEvent, data: (name: "REPRLFail", content: scriptBuffer.data(using: .utf8)!))
+                    fuzzer.dispatchEvent(
+                        fuzzer.events.DiagnosticsEvent,
+                        data: (name: "REPRLFail", content: scriptBuffer.data(using: .utf8)!))
                 }
                 Thread.sleep(forTimeInterval: 1)
-                status = reprl_execute(reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, 1)
+                status = reprl_execute(
+                    reprlContext, ptr, UInt64(script.utf8.count), UInt64(timeout), &execTime, 1)
             }
         }
 
         if status < 0 {
-            logger.error("Script execution failed again: \(String(cString: reprl_get_last_error(reprlContext))). Giving up")
+            let errorMsg = String(cString: reprl_get_last_error(reprlContext))
+            let stderr = String(cString: reprl_fetch_stderr(reprlContext)).trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            let stdout = String(cString: reprl_fetch_stdout(reprlContext)).trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            let childOutput = """
+                stderr:
+                \(stderr.isEmpty ? "<no output>" : stderr)
+                stdout:
+                \(stdout.isEmpty ? "<no output>" : stdout)
+                """
+            logger.error("Script execution failed again: \(errorMsg). Giving up\n\(childOutput)")
             // If we weren't able to successfully execute a script in the last N attempts, abort now...
             recentlyFailedExecutions += 1
             if recentlyFailedExecutions >= 10 {

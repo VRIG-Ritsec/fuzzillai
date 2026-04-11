@@ -62,7 +62,7 @@ public struct VariableMap<Value>: Sequence {
     }
 
     public func hasHoles() -> Bool {
-        return elements.contains(where: {$0 == nil})
+        return elements.contains(where: { $0 == nil })
     }
 
     public mutating func removeValue(forKey variable: Variable) {

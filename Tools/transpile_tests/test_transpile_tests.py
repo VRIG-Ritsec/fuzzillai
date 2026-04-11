@@ -1,0 +1,316 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import contextlib
+import glob
+import io
+import json
+import os
+import unittest
+
+from collections import namedtuple
+from mock import patch
+from pathlib import Path
+from pyfakefs import fake_filesystem_unittest
+
+import transpile_tests
+
+
+TEST_DATA = Path(__file__).parent / 'testdata'
+
+
+# Mock out the FuzzIL tool, but mimick writing the desired output file.
+# Simulate one compilation failure for the test with "fail" in its name.
+Process = namedtuple('Process', 'returncode stdout')
+def fake_transpile(input_file, output_file):
+  if 'fail' in str(output_file):
+    return Process(1, 'Failed!'.encode('utf-8'))
+  with open(output_file, 'w') as f:
+    f.write('')
+  return Process(0, b'')
+
+
+# Replace the multiprocessing Pool with a fake that doesn't mess with the
+# fake file system.
+class FakePool:
+  def __init__(self, _):
+    pass
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *_):
+    pass
+
+  def imap_unordered(self, *args):
+    return map(*args)
+
+
+class TestTranspileTests(fake_filesystem_unittest.TestCase):
+
+  @fake_filesystem_unittest.patchfs(allow_root_user=True)
+  def test_full_run(self, fs):
+    base_dir = TEST_DATA / 'transpile_full_run' / 'v8'
+    fs.create_dir('/output')
+    fs.add_real_directory(base_dir)
+
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+      with patch(
+          'transpile_tests.run_transpile_tool', fake_transpile):
+        with patch(
+            'multiprocessing.Pool', FakePool):
+          transpile_tests.main([
+              '--config', 'test262',
+              '--base-dir', str(base_dir),
+              '--output-dir', '/output',
+              '--json-output', '/output.json',
+          ])
+
+    # Verify the output.
+    self.assertEqual(
+        'Successfully compiled 75.00% (3 of 4) test cases.',
+        f.getvalue().strip())
+
+    # Verify the written output files.
+    expected_files = [
+      '/output/test/test262/data/test/folder1/subfolder1/Test1.js',
+      '/output/test/test262/data/test/folder1/subfolder1/Test2.js',
+      '/output/test/test262/data/test/folder2/Test3.js',
+    ]
+    self.assertEqual(
+        expected_files, glob.glob('/output/**/*.*', recursive=True))
+
+    # Verify the results written to the json output file.
+    with open('/output.json') as f:
+      actual_results = json.load(f)
+
+    expected_results = {
+      'folder1/subfolder1': {
+        'failures': [],
+        'num_tests': 2,
+      },
+      'folder2': {
+        'failures': [{'output': 'Failed!', 'path': 'folder2/Test4_fail.js'}],
+        'num_tests': 2,
+      },
+    }
+    self.assertEqual(expected_results, actual_results)
+
+  @fake_filesystem_unittest.patchfs(allow_root_user=True)
+  def test_shard_run(self, fs):
+    base_dir = TEST_DATA / 'transpile_full_run' / 'v8'
+    fs.create_dir('/output')
+    fs.add_real_directory(base_dir)
+
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+      with patch(
+          'transpile_tests.run_transpile_tool', fake_transpile):
+        with patch(
+            'multiprocessing.Pool', FakePool):
+          transpile_tests.main([
+              '--config', 'test262',
+              '--base-dir', str(base_dir),
+              '--output-dir', '/output',
+              '--json-output', '/output.json',
+              '--num-shards', '2',
+              '--shard-index', '1',
+          ])
+
+    # Verify the output.
+    self.assertEqual(
+        'Successfully compiled 50.00% (1 of 2) test cases.',
+        f.getvalue().strip())
+
+    # Verify the written output files.
+    expected_files = [
+      '/output/test/test262/data/test/folder1/subfolder1/Test2.js',
+    ]
+    self.assertEqual(
+        expected_files, glob.glob('/output/**/*.*', recursive=True))
+
+    # Verify the results written to the json output file.
+    with open('/output.json') as f:
+      actual_results = json.load(f)
+
+    expected_results = {
+      'folder1/subfolder1': {
+        'failures': [],
+        'num_tests': 1,
+      },
+      'folder2': {
+        'failures': [{'output': 'Failed!', 'path': 'folder2/Test4_fail.js'}],
+        'num_tests': 1,
+      },
+    }
+    self.assertEqual(expected_results, actual_results)
+
+
+Options = namedtuple('Options', 'verbose')
+
+class UnitTests(unittest.TestCase):
+  def test_level_key_0(self):
+    counter = transpile_tests.TestCounter(0, [], Options(False))
+    self.assertEqual('', counter.level_key(Path('test.js')))
+    self.assertEqual('', counter.level_key(Path('level1/test.js')))
+
+  def test_level_key_2(self):
+    counter = transpile_tests.TestCounter(2, [], Options(False))
+    self.assertEqual(
+        '', counter.level_key(Path('test.js')))
+    self.assertEqual(
+        'level1', counter.level_key(Path('level1/test.js')))
+    self.assertEqual(
+        'level1/level2',
+        counter.level_key(Path('level1/level2/test.js')))
+    self.assertEqual(
+        'level1/level2',
+        counter.level_key(Path('level1/level2/level3/test.js')))
+
+  def test_level_key_expansion(self):
+    expand_level_paths = ['a']
+    counter = transpile_tests.TestCounter(
+        1, expand_level_paths, Options(False))
+    self.assertEqual(
+        '', counter.level_key(Path('test.js')))
+    self.assertEqual(
+        'a', counter.level_key(Path('a/test.js')))
+    self.assertEqual(
+        'a/b',
+        counter.level_key(Path('a/b/test.js')))
+    self.assertEqual(
+        'a/b',
+        counter.level_key(Path('a/b/c/test.js')))
+    self.assertEqual(
+        'b',
+        counter.level_key(Path('b/c/test.js')))
+
+  def test_level_key_deep_expansion(self):
+    expand_level_paths = ['a/b/c', 'c/d/e']
+    counter = transpile_tests.TestCounter(
+        1, expand_level_paths, Options(False))
+    self.assertEqual(
+        'a', counter.level_key(Path('a/c/test.js')))
+    self.assertEqual(
+        'a', counter.level_key(Path('a/b/x/test.js')))
+    self.assertEqual(
+        'c', counter.level_key(Path('c/a/test.js')))
+    self.assertEqual(
+        'a/b/c',
+        counter.level_key(Path('a/b/c/test.js')))
+    self.assertEqual(
+        'a/b/c/d',
+        counter.level_key(Path('a/b/c/d/test.js')))
+    self.assertEqual(
+        'a/b/c/d',
+        counter.level_key(Path('a/b/c/d/e/test.js')))
+    self.assertEqual(
+        'c/d/e/f',
+        counter.level_key(Path('c/d/e/f/g/test.js')))
+
+  def test_level_key_expansion_with_prefix(self):
+    expand_level_paths = ['a/b', 'a/b/c']
+    counter = transpile_tests.TestCounter(
+        0, expand_level_paths, Options(False))
+    self.assertEqual(
+        '',
+        counter.level_key(Path('a/test.js')))
+    self.assertEqual(
+        'a/b',
+        counter.level_key(Path('a/b/test.js')))
+    self.assertEqual(
+        'a/b/c',
+        counter.level_key(Path('a/b/c/test.js')))
+    self.assertEqual(
+        'a/b/c/d',
+        counter.level_key(Path('a/b/c/d/test.js')))
+    self.assertEqual(
+        'a/b/c/d',
+        counter.level_key(Path('a/b/c/d/e/test.js')))
+
+  def test_simple_counts(self):
+    counter = transpile_tests.TestCounter(1, [], Options(False))
+    self.assertEqual({}, counter.results())
+
+    counter.count(0, Path('pass1.js'), 'good')
+    self.assertEqual(
+        {
+          '': {'failures': [], 'num_tests': 1},
+        },
+        counter.results())
+
+    counter.count(0, Path('a/b/pass1.js'), 'good')
+    self.assertEqual(
+        {
+          '': {'failures': [], 'num_tests': 1},
+          'a': {'failures': [], 'num_tests': 1},
+        },
+        counter.results())
+
+    counter.count(1, Path('a/fail1.js'), 'bad')
+    self.assertEqual(
+        {
+          '': {'failures': [], 'num_tests': 1},
+          'a': {
+            'failures': [{'output': 'bad', 'path': 'a/fail1.js'}],
+            'num_tests': 2,
+          },
+        },
+        counter.results())
+
+  def test_complex_count(self):
+    # Path 'A1/B2/C3' will be expanded beyond the configured level 2.
+    expand_level_paths = ['A1/B2/C3']
+    counter = transpile_tests.TestCounter(
+        2, expand_level_paths, Options(False))
+    counter.count(0, Path('A1/A2/3/pass1.js'), 'good')
+    counter.count(0, Path('A1/B2/3/pass1.js'), 'good')
+    counter.count(1, Path('A1/B2/3/fail1.js'), 'bad')
+    counter.count(0, Path('A1/A2/3/pass2.js'), 'good')
+    counter.count(0, Path('A1/A2/3/pass3.js'), 'good')
+    counter.count(1, Path('fail4.js'), 'bad')
+    counter.count(0, Path('B1/A2/3/pass1.js'), 'good')
+    counter.count(1, Path('B1/A2/fail2.js'), 'bad')
+    counter.count(1, Path('B1/fail3.js'), 'bad')
+    counter.count(1, Path('fail5.js'), 'bad')
+    counter.count(1, Path('fail6.js'), 'bad')
+    counter.count(0, Path('A1/B2/3/pass4.js'), 'good')
+    counter.count(0, Path('A1/B2/C3/D4/pass5.js'), 'good')
+
+    self.assertEqual(
+        {
+          '': {'num_tests': 3, 'failures':[
+            {'output': 'bad', 'path': 'fail4.js'},
+            {'output': 'bad', 'path': 'fail5.js'},
+            {'output': 'bad', 'path': 'fail6.js'},
+          ]},
+          'B1': {'num_tests': 1, 'failures':[
+            {'output': 'bad', 'path': 'B1/fail3.js'},
+          ]},
+          'A1/A2': {'num_tests': 3, 'failures':[]},
+          'A1/B2': {'num_tests': 3, 'failures':[
+            {'output': 'bad', 'path': 'A1/B2/3/fail1.js'},
+          ]},
+          'A1/B2/C3/D4': {'num_tests': 1, 'failures': []},
+          'B1/A2': {'num_tests': 2, 'failures':[
+            {'output': 'bad', 'path': 'B1/A2/fail2.js'},
+          ]},
+        },
+        counter.results()
+    )
+
+
+if __name__ == '__main__':
+  unittest.main()

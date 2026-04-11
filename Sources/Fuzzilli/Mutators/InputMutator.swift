@@ -34,11 +34,13 @@ public class InputMutator: BaseInstructionMutator {
         // the mutator correctness rates, it can very roughly be twice as aggressive.
         switch self.typeAwareness {
         case .aware:
-                maxSimultaneousMutations *= 2
+            maxSimultaneousMutations *= 2
         default:
             break
         }
-        super.init(name: "InputMutator (\(String(describing: self.typeAwareness)))", maxSimultaneousMutations: maxSimultaneousMutations)
+        super.init(
+            name: "InputMutator (\(String(describing: self.typeAwareness)))",
+            maxSimultaneousMutations: maxSimultaneousMutations)
     }
 
     public override func canMutate(_ instr: Instruction) -> Bool {
@@ -62,11 +64,15 @@ public class InputMutator: BaseInstructionMutator {
         let replacement: Variable?
 
         // In wasm we need strict typing, so there is no notion of loose or aware.
-        if b.context.contains(.wasm) ||
-            b.context.contains(.wasmFunction) ||
-            b.context.contains(.wasmTypeGroup) {
+        if b.context.contains(.wasm) || b.context.contains(.wasmFunction)
+            || b.context.contains(.wasmTypeGroup)
+        {
             let type = b.type(of: inouts[selectedInput])
-            replacement = b.randomVariable(ofType: type)
+            // TODO(mliedtke): For type definitions we need a lot of consistency. E.g. the signature
+            // flowing into the block begin operation and the block end operation need to be in
+            // sync.
+            replacement =
+                type.Is(.wasmTypeDef()) ? inouts[selectedInput] : b.randomVariable(ofType: type)
         } else {
             switch self.typeAwareness {
             case .loose:
@@ -78,7 +84,8 @@ public class InputMutator: BaseInstructionMutator {
         }
 
         if let replacement = replacement {
-            b.trace("Replacing input \(selectedInput) (\(inouts[selectedInput])) with \(replacement)")
+            b.trace(
+                "Replacing input \(selectedInput) (\(inouts[selectedInput])) with \(replacement)")
             inouts[selectedInput] = replacement
 
             // This assert is here to prevent subtle bugs if we ever decide to add flags that are "alive" during program building / mutation.

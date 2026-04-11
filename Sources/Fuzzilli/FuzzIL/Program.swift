@@ -59,7 +59,10 @@ public final class Program: CustomStringConvertible {
     }
 
     /// Construct a program with the given code and type information.
-    public convenience init(code: Code, parent: Program? = nil, comments: ProgramComments = ProgramComments(), contributors: Contributors = Contributors()) {
+    public convenience init(
+        code: Code, parent: Program? = nil, comments: ProgramComments = ProgramComments(),
+        contributors: Contributors = Contributors()
+    ) {
         // We should never see instructions with set flags here, as Flags are currently only used temporarily (e.g. Minimizer)
         assert(code.allSatisfy { instr in instr.flags == Instruction.Flags.empty })
         self.init(with: code)
@@ -151,14 +154,16 @@ extension Program: ProtobufConvertible {
             do {
                 code.append(try Instruction(from: protoInstr, with: opCache))
             } catch FuzzilliError.instructionDecodingError(let reason) {
-                throw FuzzilliError.programDecodingError("could not decode instruction #\(i): \(reason)")
+                throw FuzzilliError.programDecodingError(
+                    "could not decode instruction #\(i): \(reason)")
             }
         }
 
         do {
             try code.check()
         } catch FuzzilliError.codeVerificationError(let reason) {
-            throw FuzzilliError.programDecodingError("decoded code is not statically valid: \(reason)")
+            throw FuzzilliError.programDecodingError(
+                "decoded code is not statically valid: \(reason)")
         }
 
         self.init(code: code)

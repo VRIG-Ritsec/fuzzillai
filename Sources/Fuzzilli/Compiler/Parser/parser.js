@@ -36,6 +36,17 @@ function tryReadFile(path) {
 function parse(script, proto) {
     let ast = Parser.parse(script, { plugins: ["explicitResourceManagement", "v8intrinsic"] });
 
+    // We assume leading comments (and whitespace) until the starting
+    // character of the first node of the program. This way
+    // is easier than rebuilding the comments from Babel's
+    // `leadingComments` AST nodes, which don't include whitespace and
+    // newlines.
+    const firstNode = ast.program.body[0];
+    let leadingComments = '';
+    if (firstNode) {
+        leadingComments = script.substring(0, firstNode.start);
+    }
+
     function assertNoError(err) {
         if (err) throw err;
     }
@@ -46,7 +57,7 @@ function parse(script, proto) {
 
     function visitProgram(node) {
         const AST = proto.lookupType('compiler.protobuf.AST');
-        let program = {statements: []};
+        let program = {leadingComments: leadingComments, statements: []};
         for (let child of node.body) {
             program.statements.push(visitStatement(child));
         }
@@ -72,14 +83,24 @@ function parse(script, proto) {
         return Statement.create(statement);
     }
 
+    // TODO(bettscheider): Add support for default parameters.
     function visitParameter(param) {
-        assert(param.type == 'Identifier', "Expected parameter type to have type 'Identifier', found " + param.type);
-        return make('Parameter', { name: param.name });
+        switch (param.type) {
+            case 'Identifier':
+                return make('Parameter', { name: param.name });
+            case 'RestElement':
+                return make('Parameter', { name: param.argument.name });
+            default:
+                assert(false, "Unknown parameter type: " + param.type);
+        }
     }
 
     function visitParameters(params) {
-        return params.map(visitParameter)
-    }
+        return make('Parameters', {
+            parameters: params.map(visitParameter),
+            hasRestElement: params.some(param => param.type === 'RestElement'),
+        });
+    };
 
     // Processes the body of a block statement node and returns a list of statements.
     function visitBody(node) {
@@ -144,7 +165,7 @@ function parse(script, proto) {
             } else if (member.key.type === 'StringLiteral') {
                 body.name = member.key.value;
             } else {
-                throw "Unknown member key type: " + member.key.type + " in class declaration";
+                throw "Unknown member key type: " + member.key.type + " in declaration";
             }
         }
         return make('PropertyKey', body);
@@ -460,19 +481,7 @@ function parse(script, proto) {
                         assert(!field.method, "Expected field.method to be false");
                         let property = {};
                         property.value = visitExpression(field.value);
-                        if (field.computed) {
-                            property.expression = visitExpression(field.key);
-                        } else {
-                            if (field.key.type === 'Identifier') {
-                                property.name = field.key.name;
-                            } else if (field.key.type === 'NumericLiteral') {
-                                property.index = field.key.value;
-                            } else if (field.key.type === 'StringLiteral') {
-                                property.name = field.key.value;
-                            } else {
-                                throw "Unknown property key type: " + field.key.type;
-                            }
-                        }
+                        property.key = visitMemberKey(field);
                         fields.push(make('ObjectField', { property: make('ObjectProperty', property) }));
                     } else {
                         assert(field.type === 'ObjectMethod', "Expected field.type to be exactly 'ObjectMethod'");
@@ -481,12 +490,7 @@ function parse(script, proto) {
                         let method = field;
 
                         let out = {};
-                        if (method.computed) {
-                            out.expression = visitExpression(method.key);
-                        } else {
-                            assert(method.key.type === 'Identifier', "Expected method.key.type to be exactly 'Identifier'")
-                            out.name = method.key.name;
-                        }
+                        out.key = visitMemberKey(method);
 
                         field = {};
                         if (method.kind === 'method') {
@@ -679,7 +683,7 @@ protobuf.load(astProtobufDefinitionPath, function(err, root) {
     if (err)
         throw err;
 
-    let ast = parse(script, root);
+    const ast = parse(script, root);
 
     // Uncomment this to print the AST to stdout (will be very verbose).
     //console.log(JSON.stringify(ast, null, 2));

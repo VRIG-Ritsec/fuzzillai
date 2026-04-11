@@ -85,14 +85,14 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
 
     /// Whether per-edge hit counts should be tracked as well.
     /// These are expensive to compute, so this need to be enabled explicitly.
-    private var shouldTrackEdgeCounts : Bool
+    private var shouldTrackEdgeCounts: Bool
 
     /// Keep track of how often an edge has been reset. Frequently set/cleared edges will be ignored
-    private var resetCounts : [UInt32:UInt64] = [:]
+    private var resetCounts: [UInt32: UInt64] = [:]
 
     /// How often an edge may be reset at most before it is considered non-deterministic.
     /// In that case, the edge is marked as found, but will not be considered an aspect of any program.
-    private let maxResetCount : UInt64 = 1000
+    private let maxResetCount: UInt64 = 1000
 
     /// The current edge coverage percentage.
     public var currentScore: Double {
@@ -116,19 +116,18 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         guard libcoverage.cov_initialize(&context) == 0 else {
             fatalError("Could not initialize libcoverage")
         }
-#if os(Windows)
-        runner.setEnvironmentVariable("SHM_ID", to: "shm_id_\(GetCurrentProcessId())_\(id)")
-#else
-        runner.setEnvironmentVariable("SHM_ID", to: "shm_id_\(getpid())_\(id)")
-#endif
+        #if os(Windows)
+            runner.setEnvironmentVariable("SHM_ID", to: "shm_id_\(GetCurrentProcessId())_\(id)")
+        #else
+            runner.setEnvironmentVariable("SHM_ID", to: "shm_id_\(getpid())_\(id)")
+        #endif
 
     }
 
     public func enableEdgeTracking() {
-        assert(!isInitialized) // This should only be called prior to initialization
+        assert(!isInitialized)  // This should only be called prior to initialization
         shouldTrackEdgeCounts = true
     }
-
 
     public func getEdgeHitCounts() -> [UInt32] {
         var edgeCounts = libcoverage.edge_counts()
@@ -137,7 +136,8 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
             logger.error("Error retrifying smallest hit count edges")
             return []
         }
-        var edgeArray = Array(UnsafeBufferPointer(start: edgeCounts.edge_hit_count, count: Int(edgeCounts.count)))
+        var edgeArray = Array(
+            UnsafeBufferPointer(start: edgeCounts.edge_hit_count, count: Int(edgeCounts.count)))
 
         // Clear all edges that have hit their reset limits
         for (edge, count) in resetCounts {
@@ -240,8 +240,8 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
             return false
         }
 
-        if execution.outcome.isCrash() {
-            // For crashes, we don't care about the edges that were triggered, just about the outcome itself.
+        if execution.outcome.isCrash() || execution.outcome.isDifferential() {
+            // For crashes and differentials, we don't care about the edges that were triggered, just about the outcome itself.
             return true
         }
 
@@ -258,7 +258,9 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         }
     }
 
-    public func computeAspectIntersection(of program: Program, with aspects: ProgramAspects) -> ProgramAspects? {
+    public func computeAspectIntersection(of program: Program, with aspects: ProgramAspects)
+        -> ProgramAspects?
+    {
         guard let firstCovEdgeSet = aspects as? CovEdgeSet else {
             logger.fatal("Coverage Evaluator received non coverage aspects")
         }
@@ -271,8 +273,10 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         guard execution.outcome == .succeeded else { return nil }
         guard let secondCovEdgeSet = evaluate(execution) as? CovEdgeSet else { return nil }
 
-        let firstEdgeSet = Set(UnsafeBufferPointer(start: firstCovEdgeSet.edges, count: Int(firstCovEdgeSet.count)))
-        let secondEdgeSet = Set(UnsafeBufferPointer(start: secondCovEdgeSet.edges, count: Int(secondCovEdgeSet.count)))
+        let firstEdgeSet = Set(
+            UnsafeBufferPointer(start: firstCovEdgeSet.edges, count: Int(firstCovEdgeSet.count)))
+        let secondEdgeSet = Set(
+            UnsafeBufferPointer(start: secondCovEdgeSet.edges, count: Int(secondCovEdgeSet.count)))
 
         // Reset all edges that were only triggered by the 2nd execution (those only triggered by the 1st execution were already reset earlier).
         for edge in secondEdgeSet.subtracting(firstEdgeSet) {
@@ -302,10 +306,12 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
 
     public func importState(_ state: Data) throws {
         assert(isInitialized)
-        let headerSize = 12     // 3 x 4 bytes: num_edges, bitmap_size, found_edges. See exportState() above
+        let headerSize = 12  // 3 x 4 bytes: num_edges, bitmap_size, found_edges. See exportState() above
 
         guard state.count == headerSize + Int(context.bitmap_size) * 2 else {
-            throw FuzzilliError.evaluatorStateImportError("Cannot import coverage state as it has an unexpected size. Ensure all instances use the same build of the target")
+            throw FuzzilliError.evaluatorStateImportError(
+                "Cannot import coverage state as it has an unexpected size. Ensure all instances use the same build of the target"
+            )
         }
 
         let numEdges = state.withUnsafeBytes { $0.load(fromByteOffset: 0, as: UInt32.self) }
@@ -313,7 +319,9 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         let foundEdges = state.withUnsafeBytes { $0.load(fromByteOffset: 8, as: UInt32.self) }
 
         guard bitmapSize == context.bitmap_size && numEdges == context.num_edges else {
-            throw FuzzilliError.evaluatorStateImportError("Cannot import coverage state due to different bitmap sizes. Ensure all instances use the same build of the target")
+            throw FuzzilliError.evaluatorStateImportError(
+                "Cannot import coverage state due to different bitmap sizes. Ensure all instances use the same build of the target"
+            )
         }
 
         context.found_edges = foundEdges
@@ -330,7 +338,6 @@ public class ProgramCoverageEvaluator: ComponentBase, ProgramEvaluator {
         resetCounts = [:]
         libcoverage.cov_reset_state(&context)
     }
-
 
     // TODO See if we want to count the number of non-deterministic edges and expose them through the fuzzer statistics (if deterministic mode is enabled)
     private func resetEdge(_ edge: UInt32) {

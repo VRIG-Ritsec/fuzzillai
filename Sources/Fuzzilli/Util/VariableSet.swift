@@ -222,7 +222,7 @@ public struct VariableSet: Hashable, Codable, Sequence {
     }
 
     /// Returns true if the two given sets are equal.
-    public static func ==(lhs: VariableSet, rhs: VariableSet) -> Bool {
+    public static func == (lhs: VariableSet, rhs: VariableSet) -> Bool {
         return lhs.words == rhs.words
     }
 

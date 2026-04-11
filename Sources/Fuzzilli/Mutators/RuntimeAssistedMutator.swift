@@ -32,6 +32,7 @@ public class RuntimeAssistedMutator: Mutator {
     enum Outcome: String, CaseIterable {
         case success = "Success"
         case cannotInstrument = "Cannot instrument input"
+        case instrumentedProgramCrashed = "Instrumented program crashed"
         case instrumentedProgramFailed = "Instrumented program failed"
         case instrumentedProgramTimedOut = "Instrumented program timed out"
         case noResults = "No results received"
@@ -59,13 +60,18 @@ public class RuntimeAssistedMutator: Mutator {
     }
 
     // Process the runtime output of the instrumented program and build the final program from that.
-    func process(_ output: String, ofInstrumentedProgram instrumentedProgram: Program, using b: ProgramBuilder) -> (Program?, Outcome) {
+    func process(
+        _ output: String, ofInstrumentedProgram instrumentedProgram: Program,
+        using b: ProgramBuilder
+    ) -> (Program?, Outcome) {
         fatalError("Must be overwritten by child classes")
     }
 
     // Helper function for use by child classes. This detects known types of runtime errors that are expected to some degree (e.g. stack exhaustion or OOM).
     func isKnownRuntimeError(_ message: Substring) -> Bool {
-        let ignoredErrors = ["maximum call stack size exceeded", "out of memory", "too much recursion"]
+        let ignoredErrors = [
+            "maximum call stack size exceeded", "out of memory", "too much recursion",
+        ]
         for error in ignoredErrors {
             if message.lowercased().contains(error) {
                 return true
@@ -79,7 +85,9 @@ public class RuntimeAssistedMutator: Mutator {
         // May be overwritten by child classes
     }
 
-    override final func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer) -> Program? {
+    override final func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer)
+        -> Program?
+    {
         // Build the instrumented program.
         guard let instrumentedProgram = instrument(program, for: fuzzer) else {
             return failure(.cannotInstrument)
@@ -89,7 +97,13 @@ public class RuntimeAssistedMutator: Mutator {
         assert(instrumentedProgram.code.contains(where: { $0.op is JsInternalOperation }))
 
         // Execute the instrumented program (with a higher timeout) and collect the output.
-        let execution = fuzzer.execute(instrumentedProgram, withTimeout: fuzzer.config.timeout * 4, purpose: .runtimeAssistedMutation)
+        let execution = fuzzer.execute(
+            instrumentedProgram, withTimeout: fuzzer.config.timeout * 4,
+            purpose: .runtimeAssistedMutation)
+        // We need to cache these because they're invalidated the next time we call execute().
+        let oldStdout = execution.stdout
+        let oldStderr = execution.stderr
+        let oldFuzzout = execution.fuzzout
         switch execution.outcome {
         case .failed(_):
             // We generally do not expect the instrumentation code itself to cause runtime exceptions. Even if it performs new actions those should be guarded with try-catch.
@@ -109,15 +123,82 @@ public class RuntimeAssistedMutator: Mutator {
             // In this case we still try to process the instrumentation output (if any) and produce the final, uninstrumented program
             // so that we obtain reliable testcase for crashes due to (1). However, to not loose crashes due to (2), we also
             // report the instrumented program as crashing here. We may therefore end up with two crashes from one mutation.
-            let stdout = execution.fuzzout + "\n" + execution.stdout
-            fuzzer.processCrash(instrumentedProgram, withSignal: signal, withStderr: execution.stderr, withStdout: stdout, origin: .local, withExectime: execution.execTime)
+
+            let stdout = oldFuzzout + "\n" + oldStdout
+
+            // We log the crash here in case something goes wrong.
+            let crashInfoText = fuzzer.collectCrashInfo(
+                for: program, withSignal: signal, withStderr: oldStderr, withStdout: oldStdout,
+                withExectime: execution.execTime)
+            logger.error(
+                "Instrumented program crashed: \(fuzzer.lifter.lift(program))\n\(crashInfoText.joined(separator: "\n"))"
+            )
+
+            // Check if the process()'d program also crashes. If yes, we report that crash instead.
+            // This allows to use Fuzzilli's input minimization, which wouldn't work for the instrumented program.
+            let (mutatedProgram, outcome) = process(
+                execution.fuzzout, ofInstrumentedProgram: instrumentedProgram, using: b)
+            if let mutatedProgram {
+                assert(outcome == .success)
+
+                let execution = fuzzer.execute(
+                    mutatedProgram, withTimeout: fuzzer.config.timeout,
+                    purpose: .runtimeAssistedMutation)
+                if case .crashed(let signal) = execution.outcome {
+                    logger.warning(
+                        "Mutated program crashed as well, reporting mutated program instead")
+                    let stdout = execution.fuzzout + "\n" + execution.stdout
+                    fuzzer.processCrash(
+                        mutatedProgram, withSignal: signal, withStderr: execution.stderr,
+                        withStdout: stdout, origin: .local, withExectime: execution.execTime)
+                    return failure(.instrumentedProgramCrashed)
+                }
+            }
+
+            // If we reach here, the process()'d program did not crash, so we need to report the instrumented program.
+            // First, get the instrumented JS program and try to compile it back to FuzzIL, so it can be minimized more effectively.
+            // We need this because instrumentation adds boilerplate JS code.
+            let instrumentedJavaScriptProgram = fuzzer.lifter.lift(instrumentedProgram)
+            var maybeProgramToMinimize: Program? = nil
+            let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+                UUID().uuidString + ".js")
+            if let nodejs = JavaScriptExecutor(
+                type: .nodejs, withArguments: ["--allow-natives-syntax"]),
+                let parser = JavaScriptParser(executor: nodejs)
+            {
+                do {
+                    try instrumentedJavaScriptProgram.write(
+                        to: tempFile, atomically: true, encoding: .utf8)
+                    let ast = try parser.parse(tempFile.path)
+                    maybeProgramToMinimize = try JavaScriptCompiler().compile(ast)
+                    logger.warning("Successfully compiled instrumented JS program to FuzzIL")
+                } catch {
+                    logger.warning("Failed to compile instrumented JS program to FuzzIL: \(error)")
+                }
+                try? FileManager.default.removeItem(at: tempFile)
+            } else {
+                logger.warning(
+                    "Unable to compile instrumented JS program to FuzzIL because node.js is not available"
+                )
+            }
+
+            logger.warning(
+                "Mutated program did not crash, reporting original crash of the instrumented program"
+            )
+            fuzzer.processCrash(
+                maybeProgramToMinimize ?? instrumentedProgram, withSignal: signal,
+                withStderr: oldStderr, withStdout: stdout, origin: .local,
+                withExectime: execution.execTime)
         case .succeeded:
             // The expected case.
             break
+        case .differential:
+            fatalError("Differential result impossible")
         }
 
         // Process the output to build the mutated program.
-        let (maybeMutatedProgram, outcome) = process(execution.fuzzout, ofInstrumentedProgram: instrumentedProgram, using: b)
+        let (maybeMutatedProgram, outcome) = process(
+            oldFuzzout, ofInstrumentedProgram: instrumentedProgram, using: b)
         guard let mutatedProgram = maybeMutatedProgram else {
             assert(outcome != .success)
             return failure(outcome)
@@ -132,7 +213,9 @@ public class RuntimeAssistedMutator: Mutator {
             for outcome in Outcome.allCases {
                 let count = outcomeCounts[outcome]!
                 let frequency = (Double(count) / Double(totalOutcomes)) * 100.0
-                logger.verbose("    \(outcome.rawValue.rightPadded(toLength: 30)): \(String(format: "%.2f%%", frequency))")
+                logger.verbose(
+                    "    \(outcome.rawValue.rightPadded(toLength: 30)): \(String(format: "%.2f%%", frequency))"
+                )
             }
 
             logAdditionalStatistics()
@@ -230,11 +313,15 @@ public class RuntimeAssistedMutator: Mutator {
 }
 
 extension RuntimeAssistedMutator.Action.Input {
-    func translateToFuzzIL(withContext context: (arguments: [Variable], specialValues: [String: Variable]), using b: ProgramBuilder) throws -> Variable {
+    func translateToFuzzIL(
+        withContext context: (arguments: [Variable], specialValues: [String: Variable]),
+        using b: ProgramBuilder
+    ) throws -> Variable {
         switch self {
         case .argument(let index):
             guard context.arguments.indices.contains(index) else {
-                throw RuntimeAssistedMutator.ActionError.actionTranslationError("Invalid argument index: \(index), have \(context.arguments.count) arguments")
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Invalid argument index: \(index), have \(context.arguments.count) arguments")
             }
             return context.arguments[index]
         case .int(let value):
@@ -243,7 +330,8 @@ extension RuntimeAssistedMutator.Action.Input {
             return b.loadFloat(value)
         case .bigint(let value):
             guard value.allSatisfy({ $0.isNumber || $0 == "-" }) else {
-                throw RuntimeAssistedMutator.ActionError.actionTranslationError("Malformed bigint value: \(value)")
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Malformed bigint value: \(value)")
             }
             if let intValue = Int64(value) {
                 return b.loadBigInt(intValue)
@@ -256,17 +344,26 @@ extension RuntimeAssistedMutator.Action.Input {
         case .string(let value):
             return b.loadString(value)
         case .special(let name):
-            guard let v = context.specialValues[name] else { throw RuntimeAssistedMutator.ActionError.actionTranslationError("Unknown special input value \(name)") }
+            guard let v = context.specialValues[name] else {
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Unknown special input value \(name)")
+            }
             return v
         }
     }
 }
 
 extension RuntimeAssistedMutator.Action {
-    func translateToFuzzIL(withContext context: (arguments: [Variable], specialValues: [String: Variable]), using b: ProgramBuilder) throws {
+    func translateToFuzzIL(
+        withContext context: (arguments: [Variable], specialValues: [String: Variable]),
+        using b: ProgramBuilder
+    ) throws {
         // Helper function to fetch an input of this Action.
         func getInput(_ i: Int) throws -> Input {
-            guard inputs.indices.contains(i) else { throw RuntimeAssistedMutator.ActionError.actionTranslationError("Missing input \(i) for operation \(operation)") }
+            guard inputs.indices.contains(i) else {
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Missing input \(i) for operation \(operation)")
+            }
             return inputs[i]
         }
         // Helper function to fetch an input of this Action and translate it to a FuzzIL variable.
@@ -275,7 +372,10 @@ extension RuntimeAssistedMutator.Action {
         }
         // Helper function to translate a range of inputs of this Action into FuzzIL variables.
         func translateInputs(_ r: PartialRangeFrom<Int>) throws -> [Variable] {
-            guard inputs.indices.upperBound >= r.lowerBound else { throw RuntimeAssistedMutator.ActionError.actionTranslationError("Missing inputs in range \(r) for operation \(operation)") }
+            guard inputs.indices.upperBound >= r.lowerBound else {
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Missing inputs in range \(r) for operation \(operation)")
+            }
             return try inputs[r].map({ try $0.translateToFuzzIL(withContext: context, using: b) })
         }
         // Helper functions to translate actions to binary/unary operations or comparisons.
@@ -386,7 +486,7 @@ extension RuntimeAssistedMutator.Action {
         case .BitwiseXor:
             try translateBinaryOperation(.Xor)
         case .NullCoalesce:
-            try translateBinaryOperation(.NullCoalesce)    
+            try translateBinaryOperation(.NullCoalesce)
         case .LeftShift:
             try translateBinaryOperation(.LShift)
         case .SignedRightShift:

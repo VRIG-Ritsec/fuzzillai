@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class VariableMapTests: XCTestCase {
@@ -105,7 +106,7 @@ class VariableMapTests: XCTestCase {
 
         for i in 0..<1000 {
             withProbability(0.75) {
-                map[v(i)] = Int.random(in: 0..<1000000)
+                map[v(i)] = Int.random(in: 0..<1_000_000)
             }
         }
 
@@ -124,7 +125,7 @@ class VariableMapTests: XCTestCase {
 
         for i in 0..<1000 {
             withProbability(0.75) {
-                let value = Int.random(in: 0..<1000000)
+                let value = Int.random(in: 0..<1_000_000)
                 map1[v(i)] = value
                 map2[v(i)] = value
             }
@@ -138,7 +139,7 @@ class VariableMapTests: XCTestCase {
         var map = VariableMap<Int>()
         for i in 0..<1000 {
             withProbability(0.5) {
-                map[v(i)] = Int.random(in: 0..<1000000)
+                map[v(i)] = Int.random(in: 0..<1_000_000)
             }
         }
 
@@ -172,7 +173,7 @@ class VariableMapTests: XCTestCase {
         for i in 0..<mapSize {
             m[v(i)] = Int.random(in: 0..<20)
         }
-        m.removeValue(forKey: v(mapSize-1))
+        m.removeValue(forKey: v(mapSize - 1))
 
         XCTAssertEqual(m.hasHoles(), false)
     }
@@ -196,7 +197,7 @@ class VariableMapTests: XCTestCase {
         for i in 0..<mapSize {
             m[v(i)] = Int.random(in: 0..<20)
         }
-        m.removeValue(forKey: v(Int.random(in: 0..<mapSize-1)))
+        m.removeValue(forKey: v(Int.random(in: 0..<mapSize - 1)))
 
         XCTAssertEqual(m.hasHoles(), true)
     }

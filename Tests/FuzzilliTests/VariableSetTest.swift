@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class VariableSetTests: XCTestCase {
@@ -90,7 +91,6 @@ class VariableSetTests: XCTestCase {
             s1.remove(v(i))
         }
         XCTAssertEqual(s1, s3)
-
 
         // Add 128 variables to s3, should then be equal to s2
         for i in 128..<256 {

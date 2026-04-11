@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class AnalyzerTests: XCTestCase {
@@ -105,7 +106,8 @@ class AnalyzerTests: XCTestCase {
             XCTAssertEqual(b.context, [.javascript, .subroutine, .asyncFunction])
             b.await(v3)
             b.buildAsyncGeneratorFunction(with: .parameters(n: 2)) { _ in
-                XCTAssertEqual(b.context, [.javascript, .subroutine, .asyncFunction, .generatorFunction])
+                XCTAssertEqual(
+                    b.context, [.javascript, .subroutine, .asyncFunction, .generatorFunction])
             }
             XCTAssertEqual(b.context, [.javascript, .subroutine, .asyncFunction])
         }
@@ -139,12 +141,14 @@ class AnalyzerTests: XCTestCase {
         let b = fuzzer.makeBuilder()
 
         XCTAssertEqual(b.context, .javascript)
-        let superclass = b.buildClassDefinition() { cls in
+        let superclass = b.buildClassDefinition { cls in
             cls.addConstructor(with: .parameters(n: 1)) { params in
                 XCTAssertEqual(b.context, [.javascript, .subroutine, .method, .classMethod])
-                b.buildDoWhileLoop(do: {
-                    XCTAssertEqual(b.context, [.javascript, .subroutine, .method, .classMethod, .loop])
-                }, while: { b.loadBool(false) })
+                b.buildDoWhileLoop(
+                    do: {
+                        XCTAssertEqual(
+                            b.context, [.javascript, .subroutine, .method, .classMethod, .loop])
+                    }, while: { b.loadBool(false) })
                 XCTAssertEqual(b.context, [.javascript, .subroutine, .method, .classMethod])
             }
         }
@@ -201,12 +205,12 @@ class AnalyzerTests: XCTestCase {
         let b = fuzzer.makeBuilder()
 
         XCTAssertEqual(b.context, .javascript)
-        let _ = b.buildCodeString() {
+        let _ = b.buildCodeString {
             XCTAssertEqual(b.context, .javascript)
             b.buildRepeatLoop(n: 10) { _ in
                 b.loadInt(1337)
                 XCTAssertEqual(b.context, [.javascript, .loop])
-                let _ = b.buildCodeString() {
+                let _ = b.buildCodeString {
                     b.loadString("hello world")
                     XCTAssertEqual(b.context, [.javascript])
                 }
@@ -226,11 +230,14 @@ class AnalyzerTests: XCTestCase {
         let _ = b.buildPlainFunction(with: .parameters(n: 5)) { args in
             XCTAssertEqual(b.context, [.javascript, .subroutine])
 
-            b.buildIfElse(args[0], ifBody: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            }, elseBody: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            })
+            b.buildIfElse(
+                args[0],
+                ifBody: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                },
+                elseBody: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                })
 
             b.buildWhileLoop({
                 XCTAssertEqual(b.context, [.javascript, .subroutine])
@@ -239,21 +246,27 @@ class AnalyzerTests: XCTestCase {
                 XCTAssertEqual(b.context, [.javascript, .subroutine, .loop])
             }
 
-            b.buildDoWhileLoop(do: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine, .loop])
-            }, while: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-                return b.loadBool(false)
-            })
+            b.buildDoWhileLoop(
+                do: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine, .loop])
+                },
+                while: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                    return b.loadBool(false)
+                })
 
-            b.buildForLoop({
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            }, {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-                return b.loadBool(false)
-            }, {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            }) {
+            b.buildForLoop(
+                {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                },
+                {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                    return b.loadBool(false)
+                },
+                {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                }
+            ) {
                 XCTAssertEqual(b.context, [.javascript, .subroutine, .loop])
             }
 
@@ -288,13 +301,16 @@ class AnalyzerTests: XCTestCase {
                 }
             }
 
-            b.buildTryCatchFinally(tryBody: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            }, catchBody: { _ in
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            }, finallyBody: {
-                XCTAssertEqual(b.context, [.javascript, .subroutine])
-            })
+            b.buildTryCatchFinally(
+                tryBody: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                },
+                catchBody: { _ in
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                },
+                finallyBody: {
+                    XCTAssertEqual(b.context, [.javascript, .subroutine])
+                })
 
             b.blockStatement {
                 XCTAssertEqual(b.context, [.javascript, .subroutine])
@@ -302,10 +318,10 @@ class AnalyzerTests: XCTestCase {
         }
         XCTAssertEqual(b.context, .javascript)
 
-        let _  = b.finalize()
+        let _ = b.finalize()
     }
 
-    // Tests if the context is correctly identified in nested loops and switches. 
+    // Tests if the context is correctly identified in nested loops and switches.
     // Needs to work to distinguish when to emit LoopBreak and SwitchBreak.
     func testBreakContext() {
         let fuzzer = makeMockFuzzer()
@@ -313,13 +329,13 @@ class AnalyzerTests: XCTestCase {
 
         let case1 = b.loadInt(1337)
         let case2 = b.loadInt(9001)
-        
+
         // Test case 1: switch -> loop -> switch
         b.buildSwitch(on: case1) { outer_switch in
             XCTAssertEqual(b.context, .switchBlock)
             outer_switch.addCase(case1) {
                 XCTAssertEqual(b.context, [.javascript, .switchCase])
-                b.buildWhileLoop({ b.loadBool(true) }) {        
+                b.buildWhileLoop({ b.loadBool(true) }) {
                     XCTAssertEqual(b.context, [.javascript, .loop])
                     b.buildSwitch(on: case2) { inner_switch in
                         XCTAssertEqual(b.context, .switchBlock)
@@ -327,7 +343,7 @@ class AnalyzerTests: XCTestCase {
                             XCTAssertEqual(b.context, [.javascript, .switchCase])
                         }
                     }
-                } 
+                }
             }
         }
         XCTAssertEqual(b.context, .javascript)
@@ -346,7 +362,7 @@ class AnalyzerTests: XCTestCase {
             }
         }
         XCTAssertEqual(b.context, .javascript)
-        
+
         let _ = b.finalize()
     }
 }

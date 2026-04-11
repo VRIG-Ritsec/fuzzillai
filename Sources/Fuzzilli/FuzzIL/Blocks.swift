@@ -56,7 +56,6 @@ public struct Block {
         self.tail = tail
     }
 
-
 }
 
 /// A block group is a sequence of blocks (and thus instructions) that is started by an opening instruction

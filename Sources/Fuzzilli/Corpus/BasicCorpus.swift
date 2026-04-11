@@ -75,7 +75,7 @@ public class BasicCorpus: ComponentBase, Collection, Corpus {
         return true
     }
 
-    public func add(_ program: Program, _ : ProgramAspects) {
+    public func add(_ program: Program, _: ProgramAspects) {
         addInternal(program)
     }
 

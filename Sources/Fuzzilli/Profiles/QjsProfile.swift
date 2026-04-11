@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC
+// Copyright 2020 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
+let qjsProfile = Profile(
+    processArgs: { randomize in
+        ["--reprl"]
+    },
 
-let serenityProfile = Profile(
-    processArgs: { randomize in return [""] },
-    processEnv: [
-        "UBSAN_OPTIONS": "handle_segv=0 handle_abrt=0",
-        "ASAN_OPTIONS": "abort_on_error=1",
-    ],
+    processArgsReference: nil,
+
+    processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
+
     maxExecsBeforeRespawn: 1000,
+
     timeout: Timeout.value(250),
+
     codePrefix: """
-                 function main() {
-                 """,
-     codeSuffix: """
-                 }
-                 main();
-                 """,
+        """,
+
+    codeSuffix: """
+        """,
+
     ecmaVersion: ECMAScriptVersion.es6,
 
     startupTests: [
@@ -38,16 +40,19 @@ let serenityProfile = Profile(
         // Check that common crash types are detected.
         ("fuzzilli('FUZZILLI_CRASH', 0)", .shouldCrash),
         ("fuzzilli('FUZZILLI_CRASH', 1)", .shouldCrash),
+        ("fuzzilli('FUZZILLI_CRASH', 2)", .shouldCrash),
     ],
 
     additionalCodeGenerators: [],
+
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
 
     disabledCodeGenerators: [],
+
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc": .function([] => .undefined)
+        "placeholder": .function([] => .undefined)
     ],
 
     additionalObjectGroups: [],

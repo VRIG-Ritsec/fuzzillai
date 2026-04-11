@@ -59,7 +59,9 @@ public struct Code: Collection {
             return instructions[i]
         }
         set {
-            return instructions[i] = Instruction(newValue.op, inouts: newValue.inouts, index: i, flags: newValue.flags)
+            instructions[i] = Instruction(
+                newValue.op, inouts: newValue.inouts, index: i, flags: newValue.flags)
+            return
         }
     }
 
@@ -93,12 +95,12 @@ public struct Code: Collection {
     }
 
     /// Returns the instructions in this code in reversed order.
-    public func reversed() -> ReversedCollection<Array<Instruction>> {
+    public func reversed() -> ReversedCollection<[Instruction]> {
         return instructions.reversed()
     }
 
     /// Enumerates the instructions in this code.
-    public func enumerated() -> EnumeratedSequence<Array<Instruction>> {
+    public func enumerated() -> EnumeratedSequence<[Instruction]> {
         return instructions.enumerated()
     }
 
@@ -182,7 +184,9 @@ public struct Code: Collection {
             for v in instr.allOutputs {
                 guard !definedVariables.contains(v) else { return false }
                 if v.number > 0 {
-                    guard definedVariables.contains(Variable(number: v.number - 1)) else { return false }
+                    guard definedVariables.contains(Variable(number: v.number - 1)) else {
+                        return false
+                    }
                 }
                 definedVariables.insert(v)
             }
@@ -219,7 +223,8 @@ public struct Code: Collection {
             if v.number != 0 {
                 let prev = Variable(number: v.number - 1)
                 guard definedVariables.contains(prev) else {
-                    throw FuzzilliError.codeVerificationError("variable definitions are not contiguous: \(v) is defined before \(prev)")
+                    throw FuzzilliError.codeVerificationError(
+                        "variable definitions are not contiguous: \(v) is defined before \(prev)")
                 }
             }
             definedVariables[v] = scope
@@ -227,7 +232,8 @@ public struct Code: Collection {
 
         for (idx, instr) in instructions.enumerated() {
             guard idx == instr.index else {
-                throw FuzzilliError.codeVerificationError("instruction \(idx) has wrong index \(String(describing: instr.index))")
+                throw FuzzilliError.codeVerificationError(
+                    "instruction \(idx) has wrong index \(String(describing: instr.index))")
             }
 
             // Ensure all input variables are valid and have been defined
@@ -236,12 +242,14 @@ public struct Code: Collection {
                     throw FuzzilliError.codeVerificationError("variable \(input) was never defined")
                 }
                 guard activeBlocks.contains(where: { $0.scopeId == definingScope }) else {
-                    throw FuzzilliError.codeVerificationError("variable \(input) is not visible anymore")
+                    throw FuzzilliError.codeVerificationError(
+                        "variable \(input) is not visible anymore")
                 }
             }
 
             guard instr.op.requiredContext.isSubset(of: contextAnalyzer.context) else {
-                throw FuzzilliError.codeVerificationError("operation \(instr.op.name) inside an invalid context")
+                throw FuzzilliError.codeVerificationError(
+                    "operation \(instr.op.name) inside an invalid context")
             }
 
             // Ensure that the instruction exists in the right context
@@ -254,7 +262,8 @@ public struct Code: Collection {
                 }
                 let block = activeBlocks.pop()
                 guard block.head?.isMatchingStart(for: instr.op) ?? false else {
-                    throw FuzzilliError.codeVerificationError("block end does not match block start")
+                    throw FuzzilliError.codeVerificationError(
+                        "block end does not match block start")
                 }
             }
 
@@ -485,6 +494,8 @@ public struct Code: Collection {
 
     /// Check that the given block object describes a block in this code.
     private func isValidBlock(_ block: Block) -> Bool {
-        return block.tail <= endIndex && self[block.head].isBlockStart && self[block.tail].isBlockEnd && self[block.tail].op.isMatchingEnd(for: self[block.head].op)
+        return block.tail <= endIndex && self[block.head].isBlockStart
+            && self[block.tail].isBlockEnd
+            && self[block.tail].op.isMatchingEnd(for: self[block.head].op)
     }
 }

@@ -16,10 +16,10 @@ import Foundation
 
 public enum LogLevel: Int {
     case verbose = 0
-    case info    = 1
+    case info = 1
     case warning = 2
-    case error   = 3
-    case fatal   = 4
+    case error = 3
+    case fatal = 4
 
     public func isAtLeast(_ level: LogLevel) -> Bool {
         return self.rawValue <= level.rawValue
@@ -28,6 +28,7 @@ public enum LogLevel: Int {
 
 /// Logs messages to the active fuzzer instance or prints them to stdout if no fuzzer is active.
 public class Logger {
+    public static var defaultLogLevelWithoutFuzzer = LogLevel.verbose
     private let label: String
 
     public init(withLabel label: String) {
@@ -39,7 +40,7 @@ public class Logger {
             if fuzzer.config.logLevel.isAtLeast(level) {
                 fuzzer.dispatchEvent(fuzzer.events.Log, data: (fuzzer.id, level, label, message))
             }
-        } else {
+        } else if Logger.defaultLogLevelWithoutFuzzer.isAtLeast(level) {
             print("[\(label)] \(message)")
         }
     }

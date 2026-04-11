@@ -41,7 +41,8 @@ public protocol ProgramEvaluator: Component {
 
     /// Executes the program, evaluates the execution, and computes the intersection with the given aspects from a previous execution.
     /// This will also reset the internal state of the evaluator so that only the aspects common to both program executions are considered already discovered afterwards.
-    func computeAspectIntersection(of program: Program, with aspects: ProgramAspects) -> ProgramAspects?
+    func computeAspectIntersection(of program: Program, with aspects: ProgramAspects)
+        -> ProgramAspects?
 
     /// Resets the internal state
     func resetState()

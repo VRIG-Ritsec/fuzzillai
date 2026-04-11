@@ -136,6 +136,9 @@ public class Statistics: Module {
         fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { _ in
             self.ownData.crashingSamples += 1
         }
+        fuzzer.registerEventListener(for: fuzzer.events.DifferentialFound) { _ in
+            self.ownData.differentialSamples += 1
+        }
         fuzzer.registerEventListener(for: fuzzer.events.TimeOutFound) { _ in
             self.ownData.timedOutSamples += 1
             self.correctnessRate.add(0.0)
@@ -198,7 +201,7 @@ public class Statistics: Module {
             let now = Date()
             let interval = Double(now.timeIntervalSince(self.lastEpsUpdate))
             guard interval >= 1.0 else {
-                return // This can happen due to delays in queue processing
+                return  // This can happen due to delays in queue processing
             }
 
             let execsPerSecond = self.currentExecs / interval
@@ -214,17 +217,25 @@ public class Statistics: Module {
             fuzzer.timers.scheduleTask(every: 15 * Minutes) {
                 self.logger.info("Mutator Statistics:")
                 let nameMaxLength = fuzzer.mutators.map({ $0.name.count }).max()!
-                let maxSamplesGeneratedStringLength = fuzzer.mutators.map({ String($0.totalSamples).count }).max()!
+                let maxSamplesGeneratedStringLength = fuzzer.mutators.map({
+                    String($0.totalSamples).count
+                }).max()!
                 for mutator in fuzzer.mutators {
                     let name = mutator.name.rightPadded(toLength: nameMaxLength)
                     let correctnessRate = Self.percentageOrNa(mutator.correctnessRate, 7)
                     let failureRate = Self.percentageOrNa(mutator.failureRate, 7)
                     let timeoutRate = Self.percentageOrNa(mutator.timeoutRate, 6)
-                    let interestingSamplesRate = Self.percentageOrNa(mutator.interestingSamplesRate, 7)
-                    let avgInstructionsAdded = String(format: "%.2f", mutator.avgNumberOfInstructionsGenerated).leftPadded(toLength: 5)
-                    let samplesGenerated = String(mutator.totalSamples).leftPadded(toLength: maxSamplesGeneratedStringLength)
+                    let interestingSamplesRate = Self.percentageOrNa(
+                        mutator.interestingSamplesRate, 7)
+                    let avgInstructionsAdded = String(
+                        format: "%.2f", mutator.avgNumberOfInstructionsGenerated
+                    ).leftPadded(toLength: 5)
+                    let samplesGenerated = String(mutator.totalSamples).leftPadded(
+                        toLength: maxSamplesGeneratedStringLength)
                     let crashesFound = mutator.crashesFound
-                    self.logger.info("    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)")
+                    self.logger.info(
+                        "    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)"
+                    )
                 }
             }
         }
@@ -237,12 +248,18 @@ public class Statistics: Module {
                     for stub in generator.parts {
                         let name = stub.name.rightPadded(toLength: nameMaxLength)
                         let correctnessRate = Self.percentageOrNa(stub.correctnessRate, 7)
-                        let interestingSamplesRate = Self.percentageOrNa(stub.interestingSamplesRate, 7)
+                        let interestingSamplesRate = Self.percentageOrNa(
+                            stub.interestingSamplesRate, 7)
                         let timeoutRate = Self.percentageOrNa(stub.timeoutRate, 6)
-                        let avgInstructionsAdded = String(format: "%.2f", stub.avgNumberOfInstructionsGenerated).leftPadded(toLength: 5)
-                        let invocationSuccessRate = Self.percentageOrNa(stub.invocationSuccessRate, 6)
+                        let avgInstructionsAdded = String(
+                            format: "%.2f", stub.avgNumberOfInstructionsGenerated
+                        ).leftPadded(toLength: 5)
+                        let invocationSuccessRate = Self.percentageOrNa(
+                            stub.invocationSuccessRate, 6)
                         let samplesGenerated = stub.totalSamples
-                        self.logger.verbose("    \(name) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)")
+                        self.logger.verbose(
+                            "    \(name) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"
+                        )
                     }
                 }
             }

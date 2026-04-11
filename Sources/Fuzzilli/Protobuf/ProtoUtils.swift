@@ -71,7 +71,8 @@ class ProtoCache<T: AnyObject> {
 
 typealias OperationCache = ProtoCache<Operation>
 
-public func encodeProtobufCorpus<T: Collection>(_ programs: T) throws -> Data where T.Element == Program  {
+public func encodeProtobufCorpus<T: Collection>(_ programs: T) throws -> Data
+where T.Element == Program {
     // This does streaming serialization to keep memory usage as low as possible.
     // Also, this uses the operation compression feature of our protobuf representation:
     // when the same operation occurs multiple times in the corpus, every subsequent
@@ -99,19 +100,21 @@ public func encodeProtobufCorpus<T: Collection>(_ programs: T) throws -> Data wh
     return buf
 }
 
-public func decodeProtobufCorpus(_ buffer: Data) throws -> [Program]{
+public func decodeProtobufCorpus(_ buffer: Data) throws -> [Program] {
     let opCache = OperationCache.forDecoding()
     var offset = buffer.startIndex
 
     var newPrograms = [Program]()
     while offset + 4 <= buffer.endIndex {
-        let value = buffer.withUnsafeBytes { $0.load(fromByteOffset: offset - buffer.startIndex, as: UInt32.self) }
+        let value = buffer.withUnsafeBytes {
+            $0.load(fromByteOffset: offset - buffer.startIndex, as: UInt32.self)
+        }
         let size = Int(UInt32(littleEndian: value))
         offset += 4
         guard offset + size <= buffer.endIndex else {
             throw FuzzilliError.corpusImportError("Serialized corpus appears to be corrupted")
         }
-        let data = buffer.subdata(in: offset..<offset+size)
+        let data = buffer.subdata(in: offset..<offset + size)
         offset += size + align(size, to: 4)
         let proto = try Fuzzilli_Protobuf_Program(serializedBytes: data)
         let program = try Program(from: proto, opCache: opCache)
@@ -133,7 +136,7 @@ extension UUID {
             return nil
         }
 
-        var uuid: uuid_t = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+        var uuid: uuid_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         withUnsafeMutableBytes(of: &uuid) {
             $0.copyBytes(from: uuidData)
         }

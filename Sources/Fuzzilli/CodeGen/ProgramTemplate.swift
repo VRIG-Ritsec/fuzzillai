@@ -13,9 +13,9 @@
 // limitations under the License.
 
 public class ProgramTemplate: Contributor {
-    private let f: (ProgramBuilder) -> ()
+    private let f: (ProgramBuilder) -> Void
 
-    public init(_ name: String, _ f: @escaping (_: ProgramBuilder) -> ()) {
+    public init(_ name: String, _ f: @escaping (_: ProgramBuilder) -> Void) {
         self.f = f
         super.init(name: name)
     }
@@ -28,4 +28,3 @@ public class ProgramTemplate: Contributor {
 /// Strongly typed ProgramTemplate that can be used to differentiate templates that make use of Wasm.
 public class WasmProgramTemplate: ProgramTemplate {
 }
-

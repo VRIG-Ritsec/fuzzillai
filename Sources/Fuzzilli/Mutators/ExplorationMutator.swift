@@ -83,7 +83,8 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         let numUntypedVariablesToExplore = Int((Double(untypedVariables.count) * 0.5).rounded(.up))
         // TODO probably we only rarely want to explore known variables (e.g. only 10% of them or even fewer). But currently, the JSTyper and JavaScriptEnvironment still often set the type to something like .object() or so, which isn't very useful (it's basically a "unknownObject" type). We should maybe stop doing that...
         let numTypedVariablesToExplore = Int((Double(typedVariables.count) * 0.25).rounded(.up))
-        let untypedVariablesToExplore = untypedVariables.shuffled().prefix(numUntypedVariablesToExplore)
+        let untypedVariablesToExplore = untypedVariables.shuffled().prefix(
+            numUntypedVariablesToExplore)
         let typedVariablesToExplore = typedVariables.shuffled().prefix(numTypedVariablesToExplore)
         let variablesToExplore = VariableSet(untypedVariablesToExplore + typedVariablesToExplore)
         guard !variablesToExplore.isEmpty else {
@@ -106,7 +107,7 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         // For that reason, we keep a stack of variables that still need to be explored. A variable in that stack is explored
         // when its entry is popped from the stack, which happens when the block end instruction is emitted.
         var pendingExploreStack = Stack<Variable?>()
-        b.adopting(from: program) {
+        b.adopting {
             for instr in program.code {
                 b.adopt(instr)
 
@@ -145,7 +146,10 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         return instrumentedProgram
     }
 
-    override func process(_ output: String, ofInstrumentedProgram instrumentedProgram: Program, using b: ProgramBuilder) -> (Program?, Outcome) {
+    override func process(
+        _ output: String, ofInstrumentedProgram instrumentedProgram: Program,
+        using b: ProgramBuilder
+    ) -> (Program?, Outcome) {
         // Initialize the actions dictionary that will contain the processed results.
         // This way, we can detect if something went wrong on the JS side: if we get results for IDs
         // for which there is no Explore operation, then there's probably a bug in the JS code.
@@ -205,20 +209,25 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         }
 
         // Now build the real program by replacing every Explore operation with the operation(s) that it actually performed at runtime.
-        b.adopting(from: instrumentedProgram) {
+        b.adopting {
             for instr in instrumentedProgram.code {
                 if let op = instr.op as? Explore {
                     if let entry = actions[op.id], let action = entry {
                         if verbose { actionUsageCounts[action.operation]! += 1 }
                         let exploredValue = b.adopt(instr.input(0))
                         let args = instr.inputs.suffix(from: 1).map(b.adopt)
-                        guard case .special(let name) = action.inputs.first, name == "exploredValue" else {
-                            logger.error("Unexpected first input, expected the explored value, got \(String(describing: action.inputs.first)) for operation \(action.operation)")
+                        guard case .special(let name) = action.inputs.first, name == "exploredValue"
+                        else {
+                            logger.error(
+                                "Unexpected first input, expected the explored value, got \(String(describing: action.inputs.first)) for operation \(action.operation)"
+                            )
                             continue
                         }
                         b.trace("Exploring value \(exploredValue)")
                         do {
-                            let context = (arguments: args, specialValues: ["exploredValue": exploredValue])
+                            let context = (
+                                arguments: args, specialValues: ["exploredValue": exploredValue]
+                            )
                             try action.translateToFuzzIL(withContext: context, using: b)
                         } catch ActionError.actionTranslationError(let msg) {
                             logger.error("Failed to process action: \(msg)")
@@ -238,12 +247,16 @@ public class ExplorationMutator: RuntimeAssistedMutator {
     }
 
     override func logAdditionalStatistics() {
-        logger.verbose("Average number of inserted explore operations: \(String(format: "%.2f", averageNumberOfInsertedExploreOps.currentValue))")
+        logger.verbose(
+            "Average number of inserted explore operations: \(String(format: "%.2f", averageNumberOfInsertedExploreOps.currentValue))"
+        )
         let totalHandlerInvocations = actionUsageCounts.values.reduce(0, +)
         logger.verbose("Frequencies of generated operations:")
         for (op, count) in actionUsageCounts {
             let frequency = (Double(count) / Double(totalHandlerInvocations)) * 100.0
-            logger.verbose("    \(op.rawValue.rightPadded(toLength: 30)): \(String(format: "%.2f", frequency))%")
+            logger.verbose(
+                "    \(op.rawValue.rightPadded(toLength: 30)): \(String(format: "%.2f", frequency))%"
+            )
         }
     }
 }

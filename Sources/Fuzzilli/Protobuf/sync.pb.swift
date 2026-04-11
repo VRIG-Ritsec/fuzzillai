@@ -77,104 +77,110 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
 
   //// The total number of samples produced.
   public var totalSamples: UInt64 {
-    get {return _storage._totalSamples}
+    get {_storage._totalSamples}
     set {_uniqueStorage()._totalSamples = newValue}
   }
 
   //// The number of valid samples produced.
   public var validSamples: UInt64 {
-    get {return _storage._validSamples}
+    get {_storage._validSamples}
     set {_uniqueStorage()._validSamples = newValue}
   }
 
   //// The number of intersting samples produced.
   public var interestingSamples: UInt64 {
-    get {return _storage._interestingSamples}
+    get {_storage._interestingSamples}
     set {_uniqueStorage()._interestingSamples = newValue}
   }
 
   //// The number of timed-out samples produced.
   public var timedOutSamples: UInt64 {
-    get {return _storage._timedOutSamples}
+    get {_storage._timedOutSamples}
     set {_uniqueStorage()._timedOutSamples = newValue}
   }
 
   //// The number of crashes found.
   public var crashingSamples: UInt64 {
-    get {return _storage._crashingSamples}
+    get {_storage._crashingSamples}
     set {_uniqueStorage()._crashingSamples = newValue}
   }
 
   //// The total number of program executions.
   public var totalExecs: UInt64 {
-    get {return _storage._totalExecs}
+    get {_storage._totalExecs}
     set {_uniqueStorage()._totalExecs = newValue}
   }
 
   //// The average size of the corpus of this node and its child nodes.
   public var avgCorpusSize: Double {
-    get {return _storage._avgCorpusSize}
+    get {_storage._avgCorpusSize}
     set {_uniqueStorage()._avgCorpusSize = newValue}
   }
 
   //// The average size of recently generated programs.
   public var avgProgramSize: Double {
-    get {return _storage._avgProgramSize}
+    get {_storage._avgProgramSize}
     set {_uniqueStorage()._avgProgramSize = newValue}
   }
 
   //// The average size of programs recently added to the corpus.
   public var avgCorpusProgramSize: Double {
-    get {return _storage._avgCorpusProgramSize}
+    get {_storage._avgCorpusProgramSize}
     set {_uniqueStorage()._avgCorpusProgramSize = newValue}
   }
 
   //// The average execution time of recently generated and successfully executed programs in seconds.
   public var avgExecutionTime: Double {
-    get {return _storage._avgExecutionTime}
+    get {_storage._avgExecutionTime}
     set {_uniqueStorage()._avgExecutionTime = newValue}
   }
 
   //// The current number of executions per second.
   public var execsPerSecond: Double {
-    get {return _storage._execsPerSecond}
+    get {_storage._execsPerSecond}
     set {_uniqueStorage()._execsPerSecond = newValue}
   }
 
   //// The average fraction of the total time that is not spent executing programs in the target engine.
   public var fuzzerOverhead: Double {
-    get {return _storage._fuzzerOverhead}
+    get {_storage._fuzzerOverhead}
     set {_uniqueStorage()._fuzzerOverhead = newValue}
   }
 
   //// The average fraction of recent executions spent on minimization.
   public var minimizationOverhead: Double {
-    get {return _storage._minimizationOverhead}
+    get {_storage._minimizationOverhead}
     set {_uniqueStorage()._minimizationOverhead = newValue}
   }
 
   //// The number of child nodes connected directly or indirectly to this instance, i.e. the size of the (sub-)tree rooted at this instance.
   public var numChildNodes: UInt64 {
-    get {return _storage._numChildNodes}
+    get {_storage._numChildNodes}
     set {_uniqueStorage()._numChildNodes = newValue}
   }
 
   //// The percentage of edges covered if doing coverage-guided fuzzing.
   public var coverage: Double {
-    get {return _storage._coverage}
+    get {_storage._coverage}
     set {_uniqueStorage()._coverage = newValue}
   }
 
   //// The correctness rate of recently generated programs (number of valid programs divided by number of generated programs).
   public var correctnessRate: Double {
-    get {return _storage._correctnessRate}
+    get {_storage._correctnessRate}
     set {_uniqueStorage()._correctnessRate = newValue}
   }
 
   //// The timeout rate of recently generated programs (number of timeouts divided by number of generated programs).
   public var timeoutRate: Double {
-    get {return _storage._timeoutRate}
+    get {_storage._timeoutRate}
     set {_uniqueStorage()._timeoutRate = newValue}
+  }
+
+  //// The number of programs resulting in valid differential produced.
+  public var differentialSamples: UInt64 {
+    get {_storage._differentialSamples}
+    set {_uniqueStorage()._differentialSamples = newValue}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -275,7 +281,7 @@ extension Fuzzilli_Protobuf_FuzzerState: SwiftProtobuf.Message, SwiftProtobuf._M
 
 extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Statistics"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}totalSamples\0\u{1}validSamples\0\u{1}interestingSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}totalExecs\0\u{1}avgCorpusSize\0\u{1}avgProgramSize\0\u{1}avgCorpusProgramSize\0\u{1}avgExecutionTime\0\u{1}execsPerSecond\0\u{1}fuzzerOverhead\0\u{1}minimizationOverhead\0\u{1}numChildNodes\0\u{1}coverage\0\u{1}correctnessRate\0\u{1}timeoutRate\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}totalSamples\0\u{1}validSamples\0\u{1}interestingSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}totalExecs\0\u{1}avgCorpusSize\0\u{1}avgProgramSize\0\u{1}avgCorpusProgramSize\0\u{1}avgExecutionTime\0\u{1}execsPerSecond\0\u{1}fuzzerOverhead\0\u{1}minimizationOverhead\0\u{1}numChildNodes\0\u{1}coverage\0\u{1}correctnessRate\0\u{1}timeoutRate\0\u{1}differentialSamples\0")
 
   fileprivate class _StorageClass {
     var _totalSamples: UInt64 = 0
@@ -295,6 +301,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
     var _coverage: Double = 0
     var _correctnessRate: Double = 0
     var _timeoutRate: Double = 0
+    var _differentialSamples: UInt64 = 0
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -322,6 +329,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       _coverage = source._coverage
       _correctnessRate = source._correctnessRate
       _timeoutRate = source._timeoutRate
+      _differentialSamples = source._differentialSamples
     }
   }
 
@@ -357,6 +365,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
         case 15: try { try decoder.decodeSingularDoubleField(value: &_storage._coverage) }()
         case 16: try { try decoder.decodeSingularDoubleField(value: &_storage._correctnessRate) }()
         case 17: try { try decoder.decodeSingularDoubleField(value: &_storage._timeoutRate) }()
+        case 18: try { try decoder.decodeSingularUInt64Field(value: &_storage._differentialSamples) }()
         default: break
         }
       }
@@ -416,6 +425,9 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
       if _storage._timeoutRate.bitPattern != 0 {
         try visitor.visitSingularDoubleField(value: _storage._timeoutRate, fieldNumber: 17)
       }
+      if _storage._differentialSamples != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._differentialSamples, fieldNumber: 18)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -442,6 +454,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
         if _storage._coverage != rhs_storage._coverage {return false}
         if _storage._correctnessRate != rhs_storage._correctnessRate {return false}
         if _storage._timeoutRate != rhs_storage._timeoutRate {return false}
+        if _storage._differentialSamples != rhs_storage._differentialSamples {return false}
         return true
       }
       if !storagesAreEqual {return false}

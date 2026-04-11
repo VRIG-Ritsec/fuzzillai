@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import Testing
+import XCTest
+
 @testable import Fuzzilli
 
 class MutatorTests: XCTestCase {
@@ -109,7 +110,7 @@ class MutatorTests: XCTestCase {
                 return "originalValue"
             }
         }
-        let mockNamedString = ILType.namedString(ofName: "NamedString");
+        let mockNamedString = ILType.namedString(ofName: "NamedString")
 
         let env = JavaScriptEnvironment()
         env.addNamedStringGenerator(forType: mockNamedString, with: generateString)
@@ -140,7 +141,7 @@ class MutatorTests: XCTestCase {
         let mutator = OperationMutator()
         for _ in 1...10 {
             let newBuilder = fuzzer.makeBuilder()
-            newBuilder.adopting(from: prog) {
+            newBuilder.adopting {
                 mutator.mutate(originalLoadInstruction[0], newBuilder)
             }
 
@@ -153,7 +154,7 @@ class MutatorTests: XCTestCase {
             XCTAssertEqual(newLoadInstruction.count, 1)
             let newLoad = newLoadInstruction[0].op as! LoadString
             if newLoad.value == "newValue" {
-                return;
+                return
             }
         }
         XCTFail("Mutator ran 10 times without rerunning custom string generator")

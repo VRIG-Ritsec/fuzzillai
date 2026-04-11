@@ -107,7 +107,9 @@ public class Arguments {
             optionalArguments[name] = value
         }
 
-        return Arguments(programName: args[0], positionalArguments: positionalArguments, optionalArguments: optionalArguments)
+        return Arguments(
+            programName: args[0], positionalArguments: positionalArguments,
+            optionalArguments: optionalArguments)
     }
 
     /// Parses a hostname and port from a string of the format "hostname:port".

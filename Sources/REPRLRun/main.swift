@@ -29,7 +29,6 @@ if CommandLine.arguments.count < 2 {
     exit(0)
 }
 
-
 let ctx = libreprl.reprl_create_context()
 if ctx == nil {
     print("Failed to create REPRL context??")
@@ -38,7 +37,8 @@ if ctx == nil {
 
 let argv = convertToCArray(Array(CommandLine.arguments[1...]))
 let envp = convertToCArray([])
-if reprl_initialize_context(ctx, argv, envp, /* capture_stdout: */ 1, /* capture stderr: */ 1) != 0 {
+if reprl_initialize_context(ctx, argv, envp, /* capture_stdout: */ 1, /* capture stderr: */ 1) != 0
+{
     print("Failed to initialize REPRL context: \(String(cString: reprl_get_last_error(ctx)))")
 }
 
@@ -89,7 +89,9 @@ func runREPRLTests() {
     if numFailures == 0 {
         print("All tests passed!")
     } else {
-        print("Not all tests passed. That means REPRL support likely isn't properly implemented in the target engine")
+        print(
+            "Not all tests passed. That means REPRL support likely isn't properly implemented in the target engine"
+        )
     }
 }
 
@@ -113,11 +115,15 @@ while true {
     let (status, exec_time) = execute(code)
 
     if status < 0 {
-        print("Error during script execution: \(String(cString: reprl_get_last_error(ctx))). REPRL support in the target probably isn't working correctly...")
+        print(
+            "Error during script execution: \(String(cString: reprl_get_last_error(ctx))). REPRL support in the target probably isn't working correctly..."
+        )
         continue
     }
 
-    print("Execution finished with status \(status) (signaled: \(RIFSIGNALED(status) != 0), timed out: \(RIFTIMEDOUT(status) != 0)) and took \(exec_time / 1000)ms")
+    print(
+        "Execution finished with status \(status) (signaled: \(RIFSIGNALED(status) != 0), timed out: \(RIFTIMEDOUT(status) != 0)) and took \(exec_time / 1000)ms"
+    )
     print("========== Fuzzout ==========\n\(String(cString: reprl_fetch_fuzzout(ctx)))")
     print("========== Stdout ==========\n\(String(cString: reprl_fetch_stdout(ctx)))")
     print("========== Stderr ==========\n\(String(cString: reprl_fetch_stderr(ctx)))")

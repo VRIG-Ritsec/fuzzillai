@@ -13,11 +13,12 @@
 // limitations under the License.
 
 import XCTest
+
 @testable import Fuzzilli
 
 class Leb128Tests: XCTestCase {
     func testUnsignedEncode() {
-        let encoded = Leb128.unsignedEncode(624485);
-        XCTAssertEqual(encoded.map({ String(format: "%02hhx", $0)}).joined(), "e58e26")
+        let encoded = Leb128.unsignedEncode(624485)
+        XCTAssertEqual(encoded.map({ String(format: "%02hhx", $0) }).joined(), "e58e26")
     }
 }

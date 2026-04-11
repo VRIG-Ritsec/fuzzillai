@@ -23,7 +23,9 @@ public class ThreadParent: DistributedFuzzingParentNode {
 
     public init(for fuzzer: Fuzzer) {
         self.transport = Transport(for: fuzzer)
-        super.init(for: fuzzer, name: "ThreadParent", corpusSynchronizationMode: .full, transport: transport)
+        super.init(
+            for: fuzzer, name: "ThreadParent", corpusSynchronizationMode: .full,
+            transport: transport)
     }
 
     fileprivate class Transport: DistributedFuzzingParentNodeTransport {
@@ -70,12 +72,17 @@ public class ThreadParent: DistributedFuzzingParentNode {
                 fatalError("Unknown child node \(child)")
             }
             client.async {
-                guard let module = ThreadChild.instance(for: client) else { fatalError("No active ThreadChild module on client instance") }
+                guard let module = ThreadChild.instance(for: client) else {
+                    fatalError("No active ThreadChild module on client instance")
+                }
                 module.transport.onMessageCallback?(messageType, contents)
             }
         }
 
-        func send(_ messageType: MessageType, to child: UUID, contents: Data, synchronizeWith synchronizationGroup: DispatchGroup) {
+        func send(
+            _ messageType: MessageType, to child: UUID, contents: Data,
+            synchronizeWith synchronizationGroup: DispatchGroup
+        ) {
             send(messageType, to: child, contents: contents)
         }
 
@@ -106,7 +113,9 @@ public class ThreadChild: DistributedFuzzingChildNode {
 
     public init(for fuzzer: Fuzzer, parent: Fuzzer) {
         self.transport = Transport(child: fuzzer, parent: parent)
-        super.init(for: fuzzer, name: "ThreadChild", corpusSynchronizationMode: .full, transport: transport)
+        super.init(
+            for: fuzzer, name: "ThreadChild", corpusSynchronizationMode: .full, transport: transport
+        )
     }
 
     fileprivate class Transport: DistributedFuzzingChildNodeTransport {

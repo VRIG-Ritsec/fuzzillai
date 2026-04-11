@@ -21,9 +21,10 @@ import Fuzzilli
 let args = Arguments.parse(from: CommandLine.arguments)
 
 if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 1 {
-    print("""
-Usage:
-\(args.programName) [options] --profile=<profile> /path/to/jsshell
+    print(
+        """
+        Usage:
+        \(args.programName) [options] --profile=<profile> /path/to/jsshell
 
 Options:
     --profile=name               : Select one of several preconfigured profiles.
@@ -112,7 +113,7 @@ Options:
     --execution-history-size=n   : Number of recent executions to keep in memory for PostgreSQL corpus (default: 10).
     --postgres-logging           : Enable PostgreSQL database operation logging.
 
-""")
+        """)
     exit(0)
 }
 
@@ -135,7 +136,9 @@ if let val = args["--profile"], let p = profiles[val] {
     profileName = val
 }
 if profile == nil || profileName == nil {
-    configError("Please provide a valid profile with --profile=profile_name. Available profiles: \(profiles.keys)")
+    configError(
+        "Please provide a valid profile with --profile=profile_name. Available profiles: \(profiles.keys)"
+    )
 }
 
 let numJobs = args.int(for: "--jobs") ?? 1
@@ -174,12 +177,13 @@ let disablePostgresSync = args.has("--disablePostgresSync")
 let postgresPushOnly = args.has("--postgresPushOnly")
 let postgresSyncModeName = args["--postgresSyncMode"] ?? (postgresPushOnly ? "push" : "generated")
 
-var timeout : Timeout
+var timeout: Timeout
 if let raw_timeout = args.string(for: "--timeout") {
     if raw_timeout.contains(",") {
         let parts = raw_timeout.split(separator: ",")
         guard parts.count == 2 else {
-            configError("Timeout intervals must be specified by two boundaries, e.g. --timeout=200,400")
+            configError(
+                "Timeout intervals must be specified by two boundaries, e.g. --timeout=200,400")
         }
         guard let lower = UInt32(parts[0]) else {
             configError("The lower bound for --timeout must be an integer")
@@ -215,7 +219,9 @@ if maxIterations != -1 {
     exitCondition = .timeFuzzed(Double(maxRuntimeInHours) * Hours)
 }
 
-let logLevelByName: [String: LogLevel] = ["verbose": .verbose, "info": .info, "warning": .warning, "error": .error, "fatal": .fatal]
+let logLevelByName: [String: LogLevel] = [
+    "verbose": .verbose, "info": .info, "warning": .warning, "error": .error, "fatal": .fatal,
+]
 guard let logLevel = logLevelByName[logLevelName] else {
     configError("Invalid log level \(logLevelName)")
 }
@@ -238,9 +244,13 @@ if markovDropoutRate < 0 || markovDropoutRate > 1 {
     print("The markovDropoutRate must be between 0 and 1")
 }
 
-if corpusName == "markov" && (args.int(for: "--maxCorpusSize") != nil || args.int(for: "--minCorpusSize") != nil
-    || args.int(for: "--minMutationsPerSample") != nil ) {
-    configError("--maxCorpusSize, --minCorpusSize, --minMutationsPerSample are not compatible with the Markov corpus")
+if corpusName == "markov"
+    && (args.int(for: "--maxCorpusSize") != nil || args.int(for: "--minCorpusSize") != nil
+        || args.int(for: "--minMutationsPerSample") != nil)
+{
+    configError(
+        "--maxCorpusSize, --minCorpusSize, --minMutationsPerSample are not compatible with the Markov corpus"
+    )
 }
 
 if (resume || overwrite) && storagePath == nil && corpusName != "postgresql" {
@@ -270,7 +280,9 @@ if corpusName == "postgresql" {
 if let path = storagePath {
     let directory = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
     if !directory.isEmpty && !resume && !overwrite {
-        configError("Storage path \(path) exists and is not empty. Please specify either --resume or --overwrite or delete the directory manually")
+        configError(
+            "Storage path \(path) exists and is not empty. Please specify either --resume or --overwrite or delete the directory manually"
+        )
     }
 }
 
@@ -286,7 +298,7 @@ if statisticsExportInterval <= 0 {
     configError("statisticsExportInterval needs to be > 0")
 }
 
-if args.has("--statisticsExportInterval") && !exportStatistics  {
+if args.has("--statisticsExportInterval") && !exportStatistics {
     configError("statisticsExportInterval requires --exportStatistics")
 }
 
@@ -302,7 +314,10 @@ if minimizationLimit < 0 || minimizationLimit > 1 {
     configError("--minimizationLimit must be between 0 and 1")
 }
 
-let corpusImportModeByName: [String: CorpusImportMode] = ["default": .interestingOnly(shouldMinimize: true), "full": .full, "unminimized": .interestingOnly(shouldMinimize: false)]
+let corpusImportModeByName: [String: CorpusImportMode] = [
+    "default": .interestingOnly(shouldMinimize: true), "full": .full,
+    "unminimized": .interestingOnly(shouldMinimize: false),
+]
 guard let corpusImportMode = corpusImportModeByName[corpusImportModeName] else {
     configError("Invalid corpus import mode \(corpusImportModeName)")
 }
@@ -345,18 +360,26 @@ func parseAddress(_ argName: String) -> (String, UInt16) {
 var addressToBindTo: (ip: String, port: UInt16) = parseAddress("--bindTo")
 var addressToConnectTo: (ip: String, port: UInt16) = parseAddress("--connectTo")
 
-let corpusSyncModeByName: [String: CorpusSynchronizationMode] = ["up": .up, "down": .down, "full": .full, "none": .none]
+let corpusSyncModeByName: [String: CorpusSynchronizationMode] = [
+    "up": .up, "down": .down, "full": .full, "none": .none,
+]
 guard let corpusSyncMode = corpusSyncModeByName[corpusSyncMode] else {
     configError("Invalid corpus synchronization mode \(corpusSyncMode)")
 }
 
 if staticCorpus && !(resume || isNetworkChildNode || corpusImportPath != nil) {
-    configError("Static corpus requires this instance to import a corpus or to participate in distributed fuzzing as a child node")
+    configError(
+        "Static corpus requires this instance to import a corpus or to participate in distributed fuzzing as a child node"
+    )
 }
 
 // Make it easy to detect typos etc. in command line arguments
 if args.unusedOptionals.count > 0 {
     configError("Invalid arguments: \(args.unusedOptionals)")
+}
+
+if profile.isDifferential && storagePath == nil {
+    configError("Differential fuzzing mode requires storage path")
 }
 
 // Initialize the logger such that we can print to the screen.
@@ -374,12 +397,12 @@ if swarmTesting {
 let disableCodeGenerators = Set(profile.disabledCodeGenerators)
 let additionalCodeGenerators = profile.additionalCodeGenerators
 
-let codeGeneratorsToUse = if enableWasm {
-    CodeGenerators + WasmCodeGenerators
-} else {
-    CodeGenerators
-}
-
+let codeGeneratorsToUse =
+    if enableWasm {
+        CodeGenerators + WasmCodeGenerators
+    } else {
+        CodeGenerators
+    }
 
 let standardCodeGenerators: [(CodeGenerator, Int)] = codeGeneratorsToUse.map {
     guard let weight = codeGeneratorWeights[$0.name] else {
@@ -408,7 +431,8 @@ for (generator, var weight) in (additionalCodeGenerators + standardCodeGenerator
 
 func loadCorpus(from dirPath: String) -> [Program] {
     var isDir: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: dirPath, isDirectory: &isDir) && isDir.boolValue else {
+    guard FileManager.default.fileExists(atPath: dirPath, isDirectory: &isDir) && isDir.boolValue
+    else {
         logger.fatal("Cannot import programs from \(dirPath), it is not a directory!")
     }
 
@@ -435,12 +459,34 @@ func loadCorpus(from dirPath: String) -> [Program] {
 // When using multiple jobs, all Fuzzilli instances should use the same arguments for the JS shell, even if
 // argument randomization is enabled. This way, their corpora are "compatible" and crashes that require
 // (a subset of) the randomly chosen flags can be reproduced on the main instance.
-let jsShellArguments = profile.processArgs(argumentRandomization) + additionalArguments.split(separator: ",").map(String.init)
+let jsShellArguments =
+    profile.processArgs(argumentRandomization)
+    + additionalArguments.split(separator: ",").map(String.init)
 logger.info("Using the following arguments for the target engine: \(jsShellArguments)")
 
 func makeFuzzer(with configuration: Configuration) -> Fuzzer {
+    let createRunner = { (baseArgs: [String], forReferenceRunner: Bool) -> REPRL in
+        let finalArgs =
+            baseArgs
+            + configuration.getInstanceSpecificArguments(forReferenceRunner: forReferenceRunner)
+        return REPRL(
+            executable: jsShellPath,
+            processArguments: finalArgs,
+            processEnvironment: profile.processEnv,
+            maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn
+        )
+    }
+
     // A script runner to execute JavaScript code in an instrumented JS engine.
-    let runner = REPRL(executable: jsShellPath, processArguments: jsShellArguments, processEnvironment: profile.processEnv, maxExecsBeforeRespawn: profile.maxExecsBeforeRespawn)
+    let runner = createRunner(jsShellArguments, false)
+
+    // A script runner used to verify that the samples are indeed differential samples.
+    let referenceRunner: REPRL? = {
+        guard profile.isDifferential, let refArgs = profile.processArgsReference else {
+            return nil
+        }
+        return createRunner(refArgs, true)
+    }()
 
     /// The mutation fuzzer responsible for mutating programs from the corpus and evaluating the outcome.
     let disabledMutators = Set(profile.disabledMutators)
@@ -460,14 +506,17 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     ])
     let mutatorsSet = Set(mutators.map { $0.name })
     if !disabledMutators.isSubset(of: mutatorsSet) {
-        configError("The following mutators in \(profileName!) profile's disabledMutators do not exist: \(disabledMutators.subtracting(mutatorsSet)). Please check and remove them from your profile configuration.")
+        configError(
+            "The following mutators in \(profileName!) profile's disabledMutators do not exist: \(disabledMutators.subtracting(mutatorsSet)). Please check and remove them from your profile configuration."
+        )
     }
     if !disabledMutators.isEmpty {
         mutators = mutators.filter({ !disabledMutators.contains($0.name) })
     }
     logger.info("Enabled mutators: \(mutators.map { $0.name })")
     if mutators.isEmpty {
-        configError("List of enabled mutators is empty. There needs to be at least one mutator available.")
+        configError(
+            "List of enabled mutators is empty. There needs to be at least one mutator available.")
     }
 
     // Engines to execute programs.
@@ -513,7 +562,9 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
 
     for template in ProgramTemplates {
         guard let weight = programTemplateWeights[template.name] else {
-            print("Missing weight for program template \(template.name) in ProgramTemplateWeights.swift")
+            print(
+                "Missing weight for program template \(template.name) in ProgramTemplateWeights.swift"
+            )
             exit(-1)
         }
 
@@ -528,23 +579,32 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     }
 
     // The environment containing available builtins, property names, and method names.
-    let environment = JavaScriptEnvironment(additionalBuiltins: profile.additionalBuiltins, additionalObjectGroups: profile.additionalObjectGroups, additionalEnumerations: profile.additionalEnumerations)
+    let environment = JavaScriptEnvironment(
+        additionalBuiltins: profile.additionalBuiltins,
+        additionalObjectGroups: profile.additionalObjectGroups,
+        additionalEnumerations: profile.additionalEnumerations)
     if !profile.additionalBuiltins.isEmpty {
-        logger.verbose("Loaded additional builtins from profile: \(profile.additionalBuiltins.map { $0.key })")
+        logger.verbose(
+            "Loaded additional builtins from profile: \(profile.additionalBuiltins.map { $0.key })")
     }
     if !profile.additionalObjectGroups.isEmpty {
-        logger.verbose("Loaded additional ObjectGroups from profile: \(profile.additionalObjectGroups.map { $0.name })")
+        logger.verbose(
+            "Loaded additional ObjectGroups from profile: \(profile.additionalObjectGroups.map { $0.name })"
+        )
     }
     if !profile.additionalEnumerations.isEmpty {
-        logger.verbose("Loaded additional Enumerations from profile: \(profile.additionalEnumerations.map { $0.group! })")
+        logger.verbose(
+            "Loaded additional Enumerations from profile: \(profile.additionalEnumerations.map { $0.group! })"
+        )
     }
 
     // A lifter to translate FuzzIL programs to JavaScript.
-    let lifter = JavaScriptLifter(prefix: profile.codePrefix,
-                                  suffix: profile.codeSuffix,
-                                  ecmaVersion: profile.ecmaVersion,
-                                  environment: environment,
-                                  alwaysEmitVariables: configuration.forDifferentialFuzzing)
+    let lifter = JavaScriptLifter(
+        prefix: profile.codePrefix,
+        suffix: profile.codeSuffix,
+        ecmaVersion: profile.ecmaVersion,
+        environment: environment,
+        alwaysEmitVariables: configuration.forDifferentialFuzzing)
 
     // The evaluator to score produced samples.
     let evaluator = ProgramCoverageEvaluator(runner: runner)
@@ -553,7 +613,9 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     let corpus: Corpus
     switch corpusName {
     case "basic":
-        corpus = BasicCorpus(minSize: minCorpusSize, maxSize: maxCorpusSize, minMutationsPerSample: minMutationsPerSample)
+        corpus = BasicCorpus(
+            minSize: minCorpusSize, maxSize: maxCorpusSize,
+            minMutationsPerSample: minMutationsPerSample)
     case "markov":
         corpus = MarkovCorpus(covEvaluator: evaluator as ProgramCoverageEvaluator, dropoutRate: markovDropoutRate)
     case "postgresql":
@@ -570,31 +632,37 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
     let minimizer = Minimizer()
 
     // Construct the fuzzer instance.
-    return Fuzzer(configuration: configuration,
-                  scriptRunner: runner,
-                  engine: engine,
-                  mutators: mutators,
-                  codeGenerators: codeGenerators,
-                  programTemplates: programTemplates,
-                  evaluator: evaluator,
-                  environment: environment,
-                  lifter: lifter,
-                  corpus: corpus,
-                  minimizer: minimizer)
+    return Fuzzer(
+        configuration: configuration,
+        scriptRunner: runner,
+        referenceScriptRunner: referenceRunner,
+        engine: engine,
+        mutators: mutators,
+        codeGenerators: codeGenerators,
+        programTemplates: programTemplates,
+        evaluator: evaluator,
+        environment: environment,
+        lifter: lifter,
+        corpus: corpus,
+        minimizer: minimizer)
 }
 
 // The configuration of the main fuzzer instance.
-let mainConfig = Configuration(arguments: CommandLine.arguments,
-                               timeout: timeout.maxTimeout(),
-                               logLevel: logLevel,
-                               startupTests: profile.startupTests,
-                               minimizationLimit: minimizationLimit,
-                               enableDiagnostics: diagnostics,
-                               enableInspection: inspect,
-                               staticCorpus: staticCorpus,
-                               tag: tag,
-                               isWasmEnabled: enableWasm,
-                               storagePath: storagePath)
+let mainConfig = Configuration(
+    arguments: CommandLine.arguments,
+    timeout: timeout.maxTimeout(),
+    logLevel: logLevel,
+    startupTests: profile.startupTests,
+    minimizationLimit: minimizationLimit,
+    enableDiagnostics: diagnostics,
+    enableInspection: inspect,
+    staticCorpus: staticCorpus,
+    tag: tag,
+    isWasmEnabled: enableWasm,
+    storagePath: storagePath,
+    forDifferentialFuzzing: forDifferentialFuzzing,
+    instanceId: 0,
+    dumplingEnabled: profile.isDifferential)
 
 let fuzzer = makeFuzzer(with: mainConfig)
 
@@ -628,12 +696,13 @@ fuzzer.sync {
         if resume, let path = storagePath {
             // Check if we have an old_corpus directory on disk, this can happen if the user Ctrl-C's during an import.
             if FileManager.default.fileExists(atPath: path + "/old_corpus") {
-                logger.info("Corpus import aborted. The old corpus is now in \(path + "/old_corpus").")
+                logger.info(
+                    "Corpus import aborted. The old corpus is now in \(path + "/old_corpus").")
                 logger.info("You can recover the old corpus by moving it to \(path + "/corpus").")
             }
         }
         let code = reason.toExitCode()
-        if (code != 0) {
+        if code != 0 {
             print("Aborting execution after a fatal error.")
         }
         exit(code)
@@ -645,10 +714,13 @@ fuzzer.sync {
             // Move the old corpus to a new directory from which the files will be imported afterwards
             // before the directory is deleted.
             if FileManager.default.fileExists(atPath: path + "/old_corpus") {
-                logger.fatal("Unexpected /old_corpus directory found! Was a previous import aborted? Please check if you need to recover the old corpus manually by moving to to /corpus or deleting it.")
+                logger.fatal(
+                    "Unexpected /old_corpus directory found! Was a previous import aborted? Please check if you need to recover the old corpus manually by moving to to /corpus or deleting it."
+                )
             }
             do {
-                try FileManager.default.moveItem(atPath: path + "/corpus", toPath: path + "/old_corpus")
+                try FileManager.default.moveItem(
+                    atPath: path + "/corpus", toPath: path + "/old_corpus")
             } catch {
                 logger.info("Nothing to resume from: \(path)/corpus does not exist")
                 resume = false
@@ -658,22 +730,32 @@ fuzzer.sync {
             try? FileManager.default.removeItem(atPath: path)
         } else {
             // The corpus directory must be empty. We already checked this above, so just assert here
-            let directory = (try? FileManager.default.contentsOfDirectory(atPath: path + "/corpus")) ?? []
+            let directory =
+                (try? FileManager.default.contentsOfDirectory(atPath: path + "/corpus")) ?? []
             assert(directory.isEmpty)
         }
 
-        fuzzer.addModule(Storage(for: fuzzer,
-                                 storageDir: path,
-                                 statisticsExportInterval: exportStatistics ? Double(statisticsExportInterval) * Minutes : nil
-        ))
+        fuzzer.addModule(
+            Storage(
+                for: fuzzer,
+                storageDir: path,
+                statisticsExportInterval: exportStatistics
+                    ? Double(statisticsExportInterval) * Minutes : nil
+            ))
     }
 
     // Synchronize over the network if requested.
     if isNetworkParentNode {
-        fuzzer.addModule(NetworkParent(for: fuzzer, address: addressToBindTo.ip, port: addressToBindTo.port, corpusSynchronizationMode: corpusSyncMode))
+        fuzzer.addModule(
+            NetworkParent(
+                for: fuzzer, address: addressToBindTo.ip, port: addressToBindTo.port,
+                corpusSynchronizationMode: corpusSyncMode))
     }
     if isNetworkChildNode {
-        fuzzer.addModule(NetworkChild(for: fuzzer, hostname: addressToConnectTo.ip, port: addressToConnectTo.port, corpusSynchronizationMode: corpusSyncMode))
+        fuzzer.addModule(
+            NetworkChild(
+                for: fuzzer, hostname: addressToConnectTo.ip, port: addressToConnectTo.port,
+                corpusSynchronizationMode: corpusSyncMode))
     }
 
     // Synchronize with thread workers if requested.
@@ -725,6 +807,7 @@ fuzzer.sync {
 
     // Resume a previous fuzzing session ...
     if resume, let path = storagePath {
+        let start = Date()
         var corpus = loadCorpus(from: path + "/old_corpus")
         logger.info("Scheduling import of \(corpus.count) programs from previous fuzzing run.")
 
@@ -734,6 +817,13 @@ fuzzer.sync {
         fuzzer.registerEventListener(for: fuzzer.events.CorpusImportComplete) {
             // Delete the old corpus directory as soon as the corpus import is complete.
             try? FileManager.default.removeItem(atPath: path + "/old_corpus")
+
+            let duration = Date().timeIntervalSince(start)
+            let humanReadableDuration = Duration.seconds(duration).formatted(
+                .time(pattern: .hourMinuteSecond))
+            logger.info(
+                "Corpus import after resume took \((String(format: "%.0f", duration)))s (\(humanReadableDuration))."
+            )
         }
 
         fuzzer.scheduleCorpusImport(corpus, importMode: .interestingOnly(shouldMinimize: false))  // We assume that the programs are already minimized
@@ -742,11 +832,24 @@ fuzzer.sync {
     // ... or import an existing corpus.
     if let path = corpusImportPath {
         assert(!resume)
+        let start = Date()
         let corpus = loadCorpus(from: path)
         guard !corpus.isEmpty else {
             logger.fatal("Cannot import an empty corpus.")
         }
-        logger.info("Scheduling corpus import of \(corpus.count) programs with mode \(corpusImportModeName).")
+        logger.info(
+            "Scheduling corpus import of \(corpus.count) programs with mode \(corpusImportModeName)."
+        )
+
+        fuzzer.registerEventListener(for: fuzzer.events.CorpusImportComplete) {
+            let duration = Date().timeIntervalSince(start)
+            let humanReadableDuration = Duration.seconds(duration).formatted(
+                .time(pattern: .hourMinuteSecond))
+            logger.info(
+                "Existing corpus import took \((String(format: "%.0f", duration)))s (\(humanReadableDuration))."
+            )
+        }
+
         fuzzer.scheduleCorpusImport(corpus, importMode: corpusImportMode)
     }
 
@@ -758,21 +861,25 @@ fuzzer.sync {
     fuzzer.start(runUntil: exitCondition)
 }
 
-// Add thread worker instances if requested
-// Worker instances use a slightly different configuration, mostly just a lower log level.
-let workerConfig = Configuration(arguments: CommandLine.arguments,
-                                 timeout: timeout.maxTimeout(),
-                                 logLevel: .warning,
-                                 startupTests: profile.startupTests,
-                                 minimizationLimit: minimizationLimit,
-                                 enableDiagnostics: false,
-                                 enableInspection: inspect,
-                                 staticCorpus: staticCorpus,
-                                 tag: tag,
-                                 isWasmEnabled: enableWasm,
-                                 storagePath: storagePath)
+for i in 1..<numJobs {
+    // Add thread worker instances if requested
+    // Worker instances use a slightly different configuration, mostly just a lower log level.
+    let workerConfig = Configuration(
+        arguments: CommandLine.arguments,
+        timeout: timeout.maxTimeout(),
+        logLevel: .warning,
+        startupTests: profile.startupTests,
+        minimizationLimit: minimizationLimit,
+        enableDiagnostics: false,
+        enableInspection: inspect,
+        staticCorpus: staticCorpus,
+        tag: tag,
+        isWasmEnabled: enableWasm,
+        storagePath: storagePath,
+        forDifferentialFuzzing: forDifferentialFuzzing,
+        instanceId: i,
+        dumplingEnabled: profile.isDifferential)
 
-for _ in 1..<numJobs {
     let worker = makeFuzzer(with: workerConfig)
     worker.async {
         // Wait some time between starting workers to reduce the load on the main instance.

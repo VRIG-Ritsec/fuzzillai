@@ -19,32 +19,35 @@ import PackageDescription
 let package = Package(
     name: "Fuzzilli",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v13)
     ],
     products: [
-        .library(name: "Fuzzilli",targets: ["Fuzzilli"]),
+        .library(name: "Fuzzilli", targets: ["Fuzzilli"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.32.0"),
         .package(
-          url: "https://github.com/apple/swift-collections.git",
-          .upToNextMinor(from: "1.2.0")
+            url: "https://github.com/apple/swift-collections.git",
+            .upToNextMinor(from: "1.2.0")
         ),
         .package(url: "https://github.com/vapor/postgres-nio.git", from: "1.20.0"),
         .package(url: "https://github.com/vapor/postgres-kit.git", from: "2.9.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     ],
     targets: [
-        .target(name: "libsocket",
-                dependencies: []),
+        .target(
+            name: "libsocket",
+            dependencies: []),
 
-        .target(name: "libreprl",
-                dependencies: []),
+        .target(
+            name: "libreprl",
+            dependencies: []),
 
-        .target(name: "libcoverage",
-                dependencies: [],
-                cSettings: [.unsafeFlags(["-O3"])],     // Using '-c release' when building uses '-O2', so '-O3' provides a performance gain
-                linkerSettings: [.linkedLibrary("rt", .when(platforms: [.linux]))]),
+        .target(
+            name: "libcoverage",
+            dependencies: [],
+            cSettings: [.unsafeFlags(["-O3"])],  // Using '-c release' when building uses '-O2', so '-O3' provides a performance gain
+            linkerSettings: [.linkedLibrary("rt", .when(platforms: [.linux]))]),
 
         .target(name: "Fuzzilli",
                 dependencies: [
@@ -66,18 +69,33 @@ let package = Package(
                     .copy("Protobuf/ast.proto"),
                     .copy("Compiler/Parser")]),
 
-        .executableTarget(name: "REPRLRun",
-                dependencies: ["libreprl"]),
+        .executableTarget(
+            name: "REPRLRun",
+            dependencies: ["libreprl"]),
 
-        .executableTarget(name: "FuzzilliCli",
-                dependencies: ["Fuzzilli"]),
+        .executableTarget(
+            name: "FuzzilliCli",
+            dependencies: ["Fuzzilli"]),
 
-        .executableTarget(name: "FuzzILTool",
-                dependencies: ["Fuzzilli"]),
+        .executableTarget(
+            name: "FuzzILTool",
+            dependencies: ["Fuzzilli"]),
 
-        .testTarget(name: "FuzzilliTests",
-                    dependencies: ["Fuzzilli"],
-                    resources: [.copy("CompilerTests")]),
+        // Tool that runs d8 in Dumpling mode. First time it runs with Maglev
+        // and Turbofan. Second time without. In both runs frames are dumped
+        // in certain points to the files. The dumps are later compared for
+        // equality. If they are not equal, it means that there's likely a bug
+        // in V8.
+        .executableTarget(
+            name: "RelateTool",
+            dependencies: ["Fuzzilli"]),
+
+        .executableTarget(name: "FuzzilliDetectMissingBuiltins", dependencies: ["Fuzzilli"]),
+
+        .testTarget(
+            name: "FuzzilliTests",
+            dependencies: ["Fuzzilli"],
+            resources: [.copy("CompilerTests")]),
     ],
     swiftLanguageVersions: [.v5]
 )

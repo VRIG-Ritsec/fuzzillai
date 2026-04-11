@@ -14,6 +14,7 @@
 
 import Foundation
 import libsocket
+
 // Explicitly import `Foundation.UUID` to avoid the conflict with `WinSDK.UUID`
 import struct Foundation.UUID
 
@@ -34,11 +35,11 @@ import struct Foundation.UUID
 // | 4 byte little endian | 4 byte little endian | length - 8 bytes |           |
 // +----------------------+----------------------+------------------+-----------+
 
-fileprivate let messageHeaderSize = 8
-fileprivate let maxMessageSize = 1024 * 1024 * 1024
+private let messageHeaderSize = 8
+private let maxMessageSize = 1024 * 1024 * 1024
 
 /// Protocol for an object capable of receiving messages.
-fileprivate protocol MessageHandler {
+private protocol MessageHandler {
     func handleMessage(_ payload: Data, ofType type: MessageType, from connection: Connection)
     func handleError(_ err: String, on connection: Connection)
     // The fuzzer instance on which to schedule the handler calls
@@ -46,7 +47,7 @@ fileprivate protocol MessageHandler {
 }
 
 /// A connection to a network peer that speaks the above protocol.
-fileprivate class Connection {
+private class Connection {
     /// The file descriptor on POSIX or SOCKET handle on Windows of the socket.
     let socket: libsocket.libsocket_t
 
@@ -73,7 +74,7 @@ fileprivate class Connection {
     private var currentMessageData = Data()
 
     /// Buffer to receive incoming data into. Must only be accessed on this connection's dispatch queue.
-    private var receiveBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: 1024*1024)
+    private var receiveBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: 1024 * 1024)
 
     /// Pending outgoing data. Must only be accessed on this connection's dispatch queue.
     private var sendQueue: [Data] = []
@@ -86,11 +87,13 @@ fileprivate class Connection {
 
         guard performHandshake() else { return nil }
 
-#if os(Windows)
-        self.readSource = DispatchSource.makeReadSource(handle: HANDLE(bitPattern: UInt(socket))!, queue: self.queue)
-#else
-        self.readSource = DispatchSource.makeReadSource(fileDescriptor: socket, queue: self.queue)
-#endif
+        #if os(Windows)
+            self.readSource = DispatchSource.makeReadSource(
+                handle: HANDLE(bitPattern: UInt(socket))!, queue: self.queue)
+        #else
+            self.readSource = DispatchSource.makeReadSource(
+                fileDescriptor: socket, queue: self.queue)
+        #endif
         self.readSource?.setEventHandler { [weak self] in
             self?.handleDataAvailable()
         }
@@ -119,7 +122,8 @@ fileprivate class Connection {
         // Send our id.
         let message = localId.uuidData
         let rv = message.withUnsafeBytes { data in
-            return libsocket.socket_send(socket, data.bindMemory(to: UInt8.self).baseAddress, message.count)
+            return libsocket.socket_send(
+                socket, data.bindMemory(to: UInt8.self).baseAddress, message.count)
         }
         guard rv == message.count else { return false }
 
@@ -202,7 +206,8 @@ fileprivate class Connection {
             let startIndex = chunk.startIndex
 
             let rv = chunk.withUnsafeBytes { content -> Int in
-                return libsocket.socket_send(socket, content.bindMemory(to: UInt8.self).baseAddress, length)
+                return libsocket.socket_send(
+                    socket, content.bindMemory(to: UInt8.self).baseAddress, length)
             }
 
             if rv < 0 {
@@ -227,11 +232,13 @@ fileprivate class Connection {
             writeSource = nil
         } else if writeSource == nil {
             // Otherwise ensure we have an active write source to notify us when the next chunk can be sent
-#if os(Windows)
-            writeSource = DispatchSource.makeWriteSource(handle: HANDLE(bitPattern: UInt(socket))!, queue: self.queue)
-#else
-            writeSource = DispatchSource.makeWriteSource(fileDescriptor: socket, queue: self.queue)
-#endif
+            #if os(Windows)
+                writeSource = DispatchSource.makeWriteSource(
+                    handle: HANDLE(bitPattern: UInt(socket))!, queue: self.queue)
+            #else
+                writeSource = DispatchSource.makeWriteSource(
+                    fileDescriptor: socket, queue: self.queue)
+            #endif
             writeSource?.setEventHandler { [weak self] in
                 self?.sendPendingData()
             }
@@ -279,7 +286,8 @@ fileprivate class Connection {
 
             let message = Data(currentMessageData.prefix(length))
             // Explicitely make a copy of the data here so the discarded data is also freed from memory
-            currentMessageData = currentMessageData.subdata(in: totalMessageLength..<currentMessageData.count)
+            currentMessageData = currentMessageData.subdata(
+                in: totalMessageLength..<currentMessageData.count)
 
             let type = readUint32(from: message, atOffset: 4)
             if let type = MessageType(rawValue: type) {
@@ -321,9 +329,14 @@ fileprivate class Connection {
 
 /// A parent node for distributed fuzzing over a network.
 public class NetworkParent: DistributedFuzzingParentNode {
-    public init(for fuzzer: Fuzzer, address: String, port: UInt16, corpusSynchronizationMode: CorpusSynchronizationMode) {
+    public init(
+        for fuzzer: Fuzzer, address: String, port: UInt16,
+        corpusSynchronizationMode: CorpusSynchronizationMode
+    ) {
         let transport = Transport(for: fuzzer, address: address, port: port)
-        super.init(for: fuzzer, name: "NetworkParent", corpusSynchronizationMode: corpusSynchronizationMode, transport: transport)
+        super.init(
+            for: fuzzer, name: "NetworkParent",
+            corpusSynchronizationMode: corpusSynchronizationMode, transport: transport)
     }
 
     private class Transport: DistributedFuzzingParentNodeTransport, MessageHandler {
@@ -370,11 +383,13 @@ public class NetworkParent: DistributedFuzzingParentNode {
             }
 
             self.serverQueue = DispatchQueue(label: "Server Queue \(serverFd)")
-    #if os(Windows)
-            self.connectionSource = DispatchSource.makeReadSource(handle: HANDLE(bitPattern: UInt(serverFd))!, queue: serverQueue)
-    #else
-            self.connectionSource = DispatchSource.makeReadSource(fileDescriptor: serverFd, queue: serverQueue)
-    #endif
+            #if os(Windows)
+                self.connectionSource = DispatchSource.makeReadSource(
+                    handle: HANDLE(bitPattern: UInt(serverFd))!, queue: serverQueue)
+            #else
+                self.connectionSource = DispatchSource.makeReadSource(
+                    fileDescriptor: serverFd, queue: serverQueue)
+            #endif
             self.connectionSource?.setEventHandler {
                 let socket = libsocket.socket_accept(self.serverFd)
                 self.fuzzer.async {
@@ -394,7 +409,10 @@ public class NetworkParent: DistributedFuzzingParentNode {
             client.conn.sendMessage(contents, ofType: messageType)
         }
 
-        func send(_ messageType: MessageType, to child: UUID, contents: Data, synchronizeWith synchronizationGroup: DispatchGroup) {
+        func send(
+            _ messageType: MessageType, to child: UUID, contents: Data,
+            synchronizeWith synchronizationGroup: DispatchGroup
+        ) {
             guard let client = clientsById[child] else {
                 return logger.error("Unknown child node: \(child)")
             }
@@ -413,11 +431,14 @@ public class NetworkParent: DistributedFuzzingParentNode {
         func handleError(_ err: String, on connection: Connection) {
             // In case the worker isn't known, we probably already disconnected it, so there's nothing to do.
             if let worker = clientsBySocket[connection.socket] {
-                logger.warning("Error on connection \(connection.socket): \(err). Disconnecting client.")
+                logger.warning(
+                    "Error on connection \(connection.socket): \(err). Disconnecting client.")
                 let activeSeconds = Int(-worker.connectionTime.timeIntervalSinceNow)
                 let activeMinutes = activeSeconds / 60
                 let activeHours = activeMinutes / 60
-                logger.warning("Lost connection to worker \(worker.id). Worker was active for \(activeHours)h \(activeMinutes % 60)m \(activeSeconds % 60)s")
+                logger.warning(
+                    "Lost connection to worker \(worker.id). Worker was active for \(activeHours)h \(activeMinutes % 60)m \(activeSeconds % 60)s"
+                )
 
                 disconnect(worker)
             }
@@ -493,9 +514,14 @@ public class NetworkParent: DistributedFuzzingParentNode {
 
 /// A child node for distributed fuzzing over a network.
 public class NetworkChild: DistributedFuzzingChildNode {
-    public init(for fuzzer: Fuzzer, hostname: String, port: UInt16, corpusSynchronizationMode: CorpusSynchronizationMode) {
+    public init(
+        for fuzzer: Fuzzer, hostname: String, port: UInt16,
+        corpusSynchronizationMode: CorpusSynchronizationMode
+    ) {
         let transport = Transport(for: fuzzer, parentHostname: hostname, parentPort: port)
-        super.init(for: fuzzer, name: "NetworkChild", corpusSynchronizationMode: corpusSynchronizationMode, transport: transport)
+        super.init(
+            for: fuzzer, name: "NetworkChild", corpusSynchronizationMode: corpusSynchronizationMode,
+            transport: transport)
     }
 
     private class Transport: DistributedFuzzingChildNodeTransport, MessageHandler {
@@ -530,7 +556,10 @@ public class NetworkChild: DistributedFuzzingChildNode {
             conn.sendMessage(contents, ofType: messageType)
         }
 
-        func send(_ messageType: MessageType, contents: Data = Data(), synchronizeWith synchronizationGroup: DispatchGroup) {
+        func send(
+            _ messageType: MessageType, contents: Data = Data(),
+            synchronizeWith synchronizationGroup: DispatchGroup
+        ) {
             conn.sendMessage(contents, ofType: messageType, syncWith: synchronizationGroup)
         }
 
@@ -558,13 +587,17 @@ public class NetworkChild: DistributedFuzzingChildNode {
                     continue
                 }
 
-                guard let connection = Connection(socket: fd, localId: fuzzer.id, handler: self) else {
-                    logger.error("Failed to initialize connection to parent node. Retrying in 30 seconds")
+                guard let connection = Connection(socket: fd, localId: fuzzer.id, handler: self)
+                else {
+                    logger.error(
+                        "Failed to initialize connection to parent node. Retrying in 30 seconds")
                     Thread.sleep(forTimeInterval: 30 * Seconds)
                     continue
                 }
 
-                logger.info("Connected to parent node, our id: \(fuzzer.id), remote id: \(connection.remoteId!)")
+                logger.info(
+                    "Connected to parent node, our id: \(fuzzer.id), remote id: \(connection.remoteId!)"
+                )
                 conn = connection
                 return
             }

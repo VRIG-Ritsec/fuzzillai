@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
-fileprivate let ForceSpidermonkeyIonGenerator = CodeGenerator("ForceSpidermonkeyIonGenerator", inputs: .required(.function())) { b, f in
+private let ForceSpidermonkeyIonGenerator = CodeGenerator(
+    "ForceSpidermonkeyIonGenerator", inputs: .required(.function())
+) { b, f in
     assert(b.type(of: f).Is(.function()))
     let arguments = b.randomArguments(forCalling: f)
 
@@ -23,7 +23,7 @@ fileprivate let ForceSpidermonkeyIonGenerator = CodeGenerator("ForceSpidermonkey
     }
 }
 
-fileprivate let GcGenerator = CodeGenerator("GcGenerator") { b in
+private let GcGenerator = CodeGenerator("GcGenerator") { b in
     b.callFunction(b.createNamedVariable(forBuiltin: "gc"))
 }
 
@@ -36,7 +36,8 @@ let spidermonkeyProfile = Profile(
             "--ion-extra-checks",
             "--fuzzing-safe",
             "--disable-oom-functions",
-            "--reprl"]
+            "--reprl",
+        ]
 
         guard randomize else { return args }
 
@@ -61,14 +62,19 @@ let spidermonkeyProfile = Profile(
         args.append("--ion-licm=\(probability(0.9) ? "on": "off")")
         args.append("--ion-instruction-reordering=\(probability(0.9) ? "on": "off")")
         args.append("--cache-ir-stubs=\(probability(0.9) ? "on": "off")")
-        args.append(chooseUniform(from: ["--no-sse3", "--no-ssse3", "--no-sse41", "--no-sse42", "--enable-avx"]))
+        args.append(
+            chooseUniform(from: [
+                "--no-sse3", "--no-ssse3", "--no-sse41", "--no-sse42", "--enable-avx",
+            ]))
         if probability(0.1) {
             args.append("--ion-regalloc=testbed")
         }
         args.append(probability(0.9) ? "--enable-watchtower" : "--disable-watchtower")
-        args.append("--ion-sink=\(probability(0.0) ? "on": "off")") // disabled
+        args.append("--ion-sink=\(probability(0.0) ? "on": "off")")  // disabled
         return args
     },
+
+    processArgsReference: nil,
 
     processEnv: ["UBSAN_OPTIONS": "handle_segv=0"],
 
@@ -77,11 +83,11 @@ let spidermonkeyProfile = Profile(
     timeout: Timeout.value(250),
 
     codePrefix: """
-                """,
+        """,
 
     codeSuffix: """
-                gc();
-                """,
+        gc();
+        """,
 
     ecmaVersion: ECMAScriptVersion.es6,
 
@@ -99,7 +105,7 @@ let spidermonkeyProfile = Profile(
 
     additionalCodeGenerators: [
         (ForceSpidermonkeyIonGenerator, 10),
-        (GcGenerator,                   10),
+        (GcGenerator, 10),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([]),
@@ -109,10 +115,10 @@ let spidermonkeyProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc"            : .function([] => .undefined),
-        "enqueueJob"    : .function([.function()] => .undefined),
-        "drainJobQueue" : .function([] => .undefined),
-        "bailout"       : .function([] => .undefined),
+        "gc": .function([] => .undefined),
+        "enqueueJob": .function([.function()] => .undefined),
+        "drainJobQueue": .function([] => .undefined),
+        "bailout": .function([] => .undefined),
 
     ],
 

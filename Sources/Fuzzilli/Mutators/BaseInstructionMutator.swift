@@ -21,7 +21,9 @@ public class BaseInstructionMutator: Mutator {
         super.init(name: name)
     }
 
-    override final func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer) -> Program? {
+    override final func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer)
+        -> Program?
+    {
         beginMutation(of: program)
 
         var candidates = [Int]()
@@ -40,7 +42,7 @@ public class BaseInstructionMutator: Mutator {
             toMutate.insert(chooseUniform(from: candidates))
         }
 
-        b.adopting(from: program) {
+        b.adopting {
             for instr in program.code {
                 if toMutate.contains(instr.index) {
                     mutate(instr, b)
@@ -68,4 +70,3 @@ public class BaseInstructionMutator: Mutator {
         fatalError("This method must be overridden")
     }
 }
-

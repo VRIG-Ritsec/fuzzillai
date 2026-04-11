@@ -17,13 +17,23 @@ if str(_ikacore_src) not in sys.path:
     sys.path.insert(0, str(_ikacore_src))
 
 from IkaCore.tools import IkaTools
+from config_loader import (
+    apply_runtime_paths,
+    get_d8_path,
+    get_fuzzilli_path,
+    get_fuzzilli_tool_bin,
+    get_v8_path,
+)
 
-V8_PATH = os.getenv("V8_PATH", "")
-D8_PATH = os.getenv("D8_PATH", "/mnt/vdc/v8_vrig/v8/out/fuzzbuild/d8")
-FUZZILLI_PATH = os.getenv("FUZZILLI_PATH", "")
-FUZZILLI_TOOL_BIN = os.getenv("FUZZILLI_TOOL_BIN", "")
+apply_runtime_paths()
+V8_PATH = get_v8_path()
+D8_PATH = get_d8_path()
+FUZZILLI_PATH = get_fuzzilli_path()
+FUZZILLI_TOOL_BIN = get_fuzzilli_tool_bin()
 SWIFT_PATH = os.path.join(FUZZILLI_PATH, "Sources", "Fuzzilli") if FUZZILLI_PATH else ""
 D8_COMMON_FLAGS = "--allow-natives-syntax --experimental-fuzzing --expose-gc"
+_RUNTIME_DATA_DIR = _agentic_dir / "runtime_data"
+_DEFAULT_D8_OUTPUT_DIR = _RUNTIME_DATA_DIR / "d8_artifacts"
 
 try:
     from pygdbmi.gdbcontroller import GdbController as PygdbmiController
@@ -231,6 +241,31 @@ def _prepare_js_path(js_path: str):
     return resolved_js_path, None
 
 
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _runtime_artifact_dir(js_path: str | None = None) -> str:
+    runtime_root = _RUNTIME_DATA_DIR.resolve()
+    default_dir = _DEFAULT_D8_OUTPUT_DIR.resolve()
+
+    if js_path:
+        try:
+            candidate = Path(js_path).expanduser().resolve().parent
+            if _is_relative_to(candidate, runtime_root):
+                candidate.mkdir(parents=True, exist_ok=True)
+                return str(candidate)
+        except Exception:
+            pass
+
+    default_dir.mkdir(parents=True, exist_ok=True)
+    return str(default_dir)
+
+
 def _format_args(js_path, d8_args):
     user = (d8_args or "").strip()
     if js_path:
@@ -238,18 +273,22 @@ def _format_args(js_path, d8_args):
     return f"{D8_COMMON_FLAGS} {user}".strip()
 
 
-def run_d8_command(extra_args: list[str], timeout: int = 90):
+def run_d8_command(extra_args: list[str], timeout: int = 90, cwd: str | None = None):
     err = _check_v8_binary()
     if err:
         return _error_process([D8_PATH, *extra_args], err)
-    return run_process([D8_PATH, *extra_args], timeout=timeout)
+    return run_process([D8_PATH, *extra_args], timeout=timeout, cwd=cwd or _runtime_artifact_dir())
 
 
 def run_d8(js_path: str, flags: list[str] | None = None, timeout: int = 90):
     resolved_js_path, err = _prepare_js_path(js_path)
     if err:
         return _error_process([D8_PATH, *(flags or []), js_path], err)
-    return run_d8_command([*(flags or []), resolved_js_path], timeout=timeout)
+    return run_d8_command(
+        [*(flags or []), resolved_js_path],
+        timeout=timeout,
+        cwd=_runtime_artifact_dir(resolved_js_path),
+    )
 
 
 def run_fuzzilli_tool(extra_args: list[str], timeout: int = 90, cwd: str | None = None, env: dict | None = None):
@@ -288,7 +327,7 @@ def _resolve_break_location(source_file: str, line: int) -> tuple[str, list[str]
         return f"{norm_sf}:{line}", notes
 
     dwarf_p = _gdb_dwarf_src_prefix().rstrip("/")
-    vp = os.getenv("V8_PATH", "").strip()
+    vp = get_v8_path().strip()
     if not vp:
         notes.append(
             "V8_PATH is not set: cannot rewrite to ../../src/...; use a DWARF path "
@@ -343,10 +382,12 @@ def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
         MI_CONTROLLER = None
     try:
         MI_CONTROLLER = PygdbmiController(command=["gdb", "--interpreter=mi4", "--quiet"])
+        session_cwd = _runtime_artifact_dir(resolved_js_path)
         init_cmds = [
             "-gdb-set pagination off",
             "-gdb-set confirm off",
             "-gdb-set mi-async on",
+            f"-environment-cd {session_cwd}",
             f"-file-exec-and-symbols {D8_PATH}",
         ]
         args = _format_args(resolved_js_path, d8_args)
@@ -356,7 +397,7 @@ def start_mi_debug_session(js_path: str, d8_args: str = "") -> str:
             res = MI_CONTROLLER.write(cmd, timeout_sec=7.0)
             results.append({"cmd": cmd, "resp": res})
 
-        vp = os.getenv("V8_PATH", "").strip()
+        vp = get_v8_path().strip()
         if vp:
             vp_abs = str(Path(vp).expanduser().resolve())
             if os.path.isdir(vp_abs):

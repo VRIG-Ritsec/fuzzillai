@@ -28,6 +28,7 @@ from ._shared import (
     TEMPLATE_BACKUP_DIR,
     _init_session,
     _next_attempt,
+    _runtime_artifact_dir,
     get_output,
     run_command,
     run_d8_command,
@@ -447,7 +448,10 @@ def _execute_javascript_program_executor(params: dict) -> str:
             requested_flags.append(flag)
             requested_flag_names.add(flag)
 
-    result = run_d8_command(requested_flags + [resolved_js_path])
+    result = run_d8_command(
+        requested_flags + [resolved_js_path],
+        cwd=_runtime_artifact_dir(resolved_js_path),
+    )
     used_flags = " ".join(requested_flags)
     notes = ""
     if dropped_flags:

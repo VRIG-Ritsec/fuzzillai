@@ -17,6 +17,14 @@ _tools_dir = Path(__file__).resolve().parent.parent
 _agentic_dir = _tools_dir.parent
 _runtime_data_dir = _agentic_dir / "runtime_data"
 
+from config_loader import (
+    apply_runtime_paths,
+    get_d8_path,
+    get_fuzzilli_path,
+    get_fuzzilli_tool_bin,
+    get_v8_path,
+)
+
 
 def _default_fuzzilli_root() -> Path:
     try:
@@ -107,10 +115,11 @@ def _build_regressions_from_filesystem(root: Path) -> dict:
         }
     return data
 
-V8_PATH = os.getenv("V8_PATH", "")
-D8_PATH = os.getenv("D8_PATH", "")
-FUZZILLI_PATH = _normalize_fuzzilli_root(os.getenv("FUZZILLI_PATH"))
-FUZZILLI_TOOL_BIN = os.getenv("FUZZILLI_TOOL_BIN", "")
+apply_runtime_paths()
+V8_PATH = get_v8_path()
+D8_PATH = get_d8_path()
+FUZZILLI_PATH = _normalize_fuzzilli_root(get_fuzzilli_path())
+FUZZILLI_TOOL_BIN = get_fuzzilli_tool_bin()
 SWIFT_PATH = os.path.join(FUZZILLI_PATH, "Sources", "Fuzzilli") if FUZZILLI_PATH else ""
 OUTPUT_DIRECTORY = str(_runtime_data_dir / "fog-d8-records")
 
@@ -147,6 +156,31 @@ _TEMPLATES_CACHE = None
 
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 os.makedirs(GENERATED_TEMPLATE_DIR, exist_ok=True)
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _runtime_artifact_dir(js_path: str | None = None) -> str:
+    runtime_root = _runtime_data_dir.resolve()
+    default_dir = Path(OUTPUT_DIRECTORY).expanduser().resolve()
+
+    if js_path:
+        try:
+            candidate = Path(js_path).expanduser().resolve().parent
+            if _is_relative_to(candidate, runtime_root):
+                candidate.mkdir(parents=True, exist_ok=True)
+                return str(candidate)
+        except Exception:
+            pass
+
+    default_dir.mkdir(parents=True, exist_ok=True)
+    return str(default_dir)
 
 # ── Session initialisation ─────────────────────────────────────────────────────
 
@@ -275,11 +309,11 @@ def _check_fuzzilli_tool_bin() -> str | None:
     return None
 
 
-def run_d8_command(extra_args: list[str], timeout: int = 90):
+def run_d8_command(extra_args: list[str], timeout: int = 90, cwd: str | None = None):
     err = _check_v8_binary()
     if err:
         return _error_process([D8_PATH, *extra_args], err)
-    return run_process([D8_PATH, *extra_args], timeout=timeout)
+    return run_process([D8_PATH, *extra_args], timeout=timeout, cwd=cwd or _runtime_artifact_dir())
 
 
 def run_fuzzilli_tool(extra_args: list[str], timeout: int = 90, cwd: str | None = None):

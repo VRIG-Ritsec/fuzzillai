@@ -10,6 +10,7 @@ from pathlib import Path
 
 import tools._shared as shared_tools
 from IkaCore.tools import IkaTools
+from config_loader import get_fuzzilli_path
 
 from ._shared import (
     POSTGRES_HOST,
@@ -56,7 +57,7 @@ def _build_fuzzilli_compile_env() -> dict | None:
     candidates = []
 
     # Prefer an explicit FUZZILLI_PATH if provided by runtime env.
-    fuzzilli_root = os.getenv("FUZZILLI_PATH", "").strip()
+    fuzzilli_root = get_fuzzilli_path().strip()
     if fuzzilli_root:
         candidates.append(Path(fuzzilli_root) / "Sources" / "Fuzzilli" / "Compiler" / "Parser" / "node_modules")
 
@@ -96,6 +97,7 @@ def _looks_like_javascript_text(decoded: bytes) -> bool:
 
 
 def _lift_program_bytes_to_js(decoded: bytes) -> str:
+    Path(TEMP_FUZZIL_PATH).parent.mkdir(parents=True, exist_ok=True)
     with open(TEMP_FUZZIL_PATH, "wb") as f:
         f.write(decoded)
 
@@ -109,7 +111,9 @@ def _lift_program_bytes_to_js(decoded: bytes) -> str:
 
 
 def _compile_js_to_fuzzil_bytes(js_program: str) -> tuple[bytes | None, str | None]:
-    with tempfile.TemporaryDirectory(prefix="ebg_js_compile_") as tmpdir:
+    tmp_root = Path(TEMP_FUZZIL_PATH).parent
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="ebg_js_compile_", dir=tmp_root) as tmpdir:
         js_path = os.path.join(tmpdir, "generated.js")
         with open(js_path, "w", encoding="utf-8") as f:
             f.write(js_program)

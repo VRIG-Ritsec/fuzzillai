@@ -17,6 +17,7 @@ if str(_agentic_dir) not in sys.path:
     sys.path.insert(0, str(_agentic_dir))
 
 from RAG.paths import metadata_root
+from config_loader import get_v8_path
 
 try:
     import numpy as np
@@ -160,7 +161,7 @@ def _resolve_doc_content(doc: Dict[str, object], bm25_db_path: Path | None = Non
             return _strip_embedded_context(doc, content)
 
     rel_path = str(doc.get("path") or doc.get("parent_file") or "")
-    v8_root = os.getenv("V8_PATH", "").strip()
+    v8_root = get_v8_path().strip()
     if rel_path and v8_root and str(doc.get("source") or "").lower() == "v8_source":
         file_path = Path(v8_root).expanduser() / rel_path
         try:

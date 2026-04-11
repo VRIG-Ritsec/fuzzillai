@@ -15,6 +15,7 @@
 #ifndef LIBCOVERAGE_H
 #define LIBCOVERAGE_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
 #if defined(_WIN32)
@@ -49,7 +50,6 @@ struct feedback_nexus_set {
 // coverage edges that can be tracked. When bumping this number, please also
 // update Target/coverage.c.
 #define SHM_SIZE 0x202000
-#define MAX_EDGES ((SHM_SIZE - 4) * 8)
 #define MAX_FEEDBACK_NEXUS 100000
 
 // Structure of the shared memory region.
@@ -63,6 +63,8 @@ struct shmem_data {
     struct feedback_nexus_data feedback_nexus_data[MAX_FEEDBACK_NEXUS];
     unsigned char edges[];
 };
+
+#define MAX_EDGES ((SHM_SIZE - offsetof(struct shmem_data, edges)) * 8)
 
 // Optimization bitmap bit indices (matches V8's OptimizedCompilationInfo::OptimizationBit)
 // Update bitmap if ordering changes.

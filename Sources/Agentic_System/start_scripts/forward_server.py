@@ -1,38 +1,32 @@
 #!/usr/bin/env python3
 """
-Forward Server - Monitors PostgreSQL for crashes and coverage stagnation,
+Forward Server - monitors PostgreSQL for crashes and coverage stagnation,
 then dispatches EBG agents accordingly.
 
-API endpoints:
-  GET  /health           - liveness check
-  GET  /status           - monitor state, recent detections, active agents
-  GET  /fuzzers          - active fuzzer list from DB
-  POST /trigger/crash    - {"fuzzer_id": <int>, "program_hash": "<hash>"}
-  POST /trigger/plateau  - {"fuzzer_id": <int>}
+This module no longer serves HTTP. The dashboard and control API live in
+start_scripts/web-ui/server.py.
 """
 
 import sys
 import os
-import json
 import time
 import threading
 import logging
 import argparse
-from datetime import datetime
+import subprocess
+import re
+from datetime import datetime, timezone
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
 
-# ── path setup ─────────────────────────────────────────────────────────────────
 _agentic_root = Path(__file__).resolve().parents[1]
 if str(_agentic_root) not in sys.path:
     sys.path.insert(0, str(_agentic_root))
 
-import site
-_root = Path(__file__).resolve().parents[3]
-_venv_site = _root / ".venv" / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-if _venv_site.exists():
-    site.addsitedir(str(_venv_site))
+from venv_site_packages import add_fuzzillai_repo_venv_site_packages, preferred_python_executable
+
+add_fuzzillai_repo_venv_site_packages()
+
+from agent_logging import get_system_log_dir
 
 import psycopg2
 import psycopg2.extras
@@ -40,23 +34,38 @@ import psycopg2.extras
 from tools.EBG_tools._shared import (
     POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD,
 )
-from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key, get_openrouter_api_key
+from config_loader import apply_runtime_paths, get_openai_api_key, get_anthropic_api_key
 
-# ── constants ──────────────────────────────────────────────────────────────────
-STAGNATION_WINDOW_MINUTES = 30          # coverage unchanged for this long → plateau
-POLL_INTERVAL_SECONDS     = 60          # how often to poll the DB
-CRASH_LOOKBACK_MINUTES    = 10          # window to scan for new crashes
-PLATEAU_COOLDOWN_SECONDS  = 7_200       # 2 h minimum between plateau triggers per fuzzer
-COVERAGE_STAGNATION_DELTA = 0.01        # % change threshold considered "no progress"
+apply_runtime_paths()
+
+# -- constants -----------------------------------------------------------------
+STAGNATION_WINDOW_MINUTES = 30
+POLL_INTERVAL_SECONDS = 60
+CRASH_LOOKBACK_MINUTES = 10
+PLATEAU_COOLDOWN_SECONDS = 7_200
+COVERAGE_STAGNATION_DELTA = 0.01
 
 logger = logging.getLogger("forward_server")
+_service_log_dir = get_system_log_dir("services")
+_agent_spawn_log_dir = _service_log_dir / "agent_spawns"
+_agent_spawn_log_dir.mkdir(parents=True, exist_ok=True)
+_AGENT_PYTHON = preferred_python_executable()
 
-# ── DB helpers ─────────────────────────────────────────────────────────────────
+
+def _safe_agent_log_stem(label: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", label).strip("_")
+    return cleaned[:120] if cleaned else "agent"
+
+
+# -- DB helpers ----------------------------------------------------------------
 
 def _connect() -> psycopg2.extensions.connection:
     return psycopg2.connect(
-        host=POSTGRES_HOST, port=POSTGRES_PORT,
-        dbname=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD,
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        dbname=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
         connect_timeout=10,
     )
 
@@ -67,41 +76,46 @@ def _query(conn, sql: str, params=()) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
-# ── Monitor ────────────────────────────────────────────────────────────────────
+def _query_one(conn, sql: str, params=()) -> dict:
+    rows = _query(conn, sql, params)
+    return rows[0] if rows else {}
+
+
+# -- monitor -------------------------------------------------------------------
 
 class FuzzerMonitor:
     """
     Background thread that polls the DB and fires agents for crashes / plateau.
     """
 
-    def __init__(self):
+    def __init__(self, auto_dispatch_agents: bool = True):
+        logger.info("Agent subprocess interpreter: %s", _AGENT_PYTHON)
+        self._auto_dispatch_agents = auto_dispatch_agents
         self._lock = threading.Lock()
-
-        # tracking state
-        self._triggered_crash_hashes: set[str]        = set()
-        self._plateau_last_trigger:   dict[int, float] = {}   # fuzzer_id → epoch
-
-        # public status (safe to read without lock for display; written under lock)
+        self._triggered_crash_hashes: set[str] = set()
+        self._plateau_last_trigger: dict[int, float] = {}
+        self._active_processes: dict[str, subprocess.Popen] = {}
         self.status: dict = {
-            "running":          False,
-            "last_poll":        None,
-            "polls_total":      0,
-            "crashes_detected": [],   # list of {fuzzer_id, program_hash, detected_at}
-            "plateaus_detected":[],   # list of {fuzzer_id, detected_at}
-            "active_agents":    [],   # list of {type, fuzzer_id, started_at, thread_id}
+            "running": False,
+            "auto_dispatch_agents": auto_dispatch_agents,
+            "last_poll": None,
+            "polls_total": 0,
+            "crashes_detected": [],
+            "plateaus_detected": [],
+            "active_agents": [],
         }
 
-    # ── DB checks ──────────────────────────────────────────────────────────────
-
     def _check_crashes(self, conn) -> list[dict]:
-        """Return new crashes not yet dispatched."""
-        rows = _query(conn, """
+        rows = _query(
+            conn,
+            """
             SELECT DISTINCT p.fuzzer_id, e.program_hash
-            FROM   execution e
-            JOIN   program   p ON e.program_hash = p.program_hash
-            WHERE  e.execution_outcome_id = 1
-            AND    e.created_at > NOW() - INTERVAL '%s minutes'
-        """ % CRASH_LOOKBACK_MINUTES)
+            FROM execution e
+            JOIN program p ON e.program_hash = p.program_hash
+            WHERE e.execution_outcome_id = 1
+            AND e.created_at > NOW() - INTERVAL '%s minutes'
+            """ % CRASH_LOOKBACK_MINUTES,
+        )
 
         new_crashes = []
         for row in rows:
@@ -111,145 +125,164 @@ class FuzzerMonitor:
         return new_crashes
 
     def _check_stagnation(self, conn) -> list[int]:
-        """
-        Return fuzzer_ids where max coverage over last STAGNATION_WINDOW_MINUTES
-        is ≤ COVERAGE_STAGNATION_DELTA more than the previous equal-length window.
-        """
-        recent_rows = _query(conn, """
+        recent_rows = _query(
+            conn,
+            """
             SELECT p.fuzzer_id, MAX(e.coverage_total) AS max_cov
-            FROM   execution e
-            JOIN   program   p ON e.program_hash = p.program_hash
-            WHERE  e.created_at > NOW() - INTERVAL '%s minutes'
-            AND    e.coverage_total IS NOT NULL
-            GROUP  BY p.fuzzer_id
-        """ % STAGNATION_WINDOW_MINUTES)
+            FROM execution e
+            JOIN program p ON e.program_hash = p.program_hash
+            WHERE e.created_at > NOW() - INTERVAL '%s minutes'
+            AND e.coverage_total IS NOT NULL
+            GROUP BY p.fuzzer_id
+            """ % STAGNATION_WINDOW_MINUTES,
+        )
 
-        older_rows = _query(conn, """
+        older_rows = _query(
+            conn,
+            """
             SELECT p.fuzzer_id, MAX(e.coverage_total) AS max_cov
-            FROM   execution e
-            JOIN   program   p ON e.program_hash = p.program_hash
-            WHERE  e.created_at >  NOW() - INTERVAL '%s minutes'
-            AND    e.created_at <= NOW() - INTERVAL '%s minutes'
-            AND    e.coverage_total IS NOT NULL
-            GROUP  BY p.fuzzer_id
-        """ % (STAGNATION_WINDOW_MINUTES * 2, STAGNATION_WINDOW_MINUTES))
+            FROM execution e
+            JOIN program p ON e.program_hash = p.program_hash
+            WHERE e.created_at > NOW() - INTERVAL '%s minutes'
+            AND e.created_at <= NOW() - INTERVAL '%s minutes'
+            AND e.coverage_total IS NOT NULL
+            GROUP BY p.fuzzer_id
+            """ % (STAGNATION_WINDOW_MINUTES * 2, STAGNATION_WINDOW_MINUTES),
+        )
 
         recent = {r["fuzzer_id"]: float(r["max_cov"]) for r in recent_rows}
-        older  = {r["fuzzer_id"]: float(r["max_cov"]) for r in older_rows}
+        older = {r["fuzzer_id"]: float(r["max_cov"]) for r in older_rows}
 
         stagnating = []
-        for fid, rcov in recent.items():
-            if fid not in older:
-                continue                          # not enough history yet
-            delta = rcov - older[fid]
+        for fuzzer_id, recent_cov in recent.items():
+            if fuzzer_id not in older:
+                continue
+            delta = recent_cov - older[fuzzer_id]
             if delta <= COVERAGE_STAGNATION_DELTA:
                 now = time.time()
-                last = self._plateau_last_trigger.get(fid, 0)
+                last = self._plateau_last_trigger.get(fuzzer_id, 0)
                 if (now - last) >= PLATEAU_COOLDOWN_SECONDS:
-                    stagnating.append(fid)
+                    stagnating.append(fuzzer_id)
         return stagnating
 
     def _active_fuzzers(self, conn) -> list[dict]:
         return _query(conn, "SELECT fuzzer_id, status, last_activity FROM main WHERE status = 'active'")
 
-    # ── agent dispatch ─────────────────────────────────────────────────────────
+    def _spawn_agent_process(self, label: str, command: list[str]) -> tuple[subprocess.Popen, Path]:
+        env = os.environ.copy()
+        apply_runtime_paths(env)
+        env["OPENAI_API_KEY"] = get_openai_api_key() or env.get("OPENAI_API_KEY", "")
+        anthropic_key = get_anthropic_api_key()
+        if anthropic_key:
+            env["ANTHROPIC_API_KEY"] = anthropic_key
+
+        log_path = _agent_spawn_log_dir / f"{_safe_agent_log_stem(label)}_{int(time.time())}.log"
+        log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+        try:
+            header = f"# agent={label} started={datetime.now(timezone.utc).isoformat()}\n# cmd={' '.join(command)}\n"
+            log_file.write(header)
+            log_file.flush()
+            process = subprocess.Popen(
+                command,
+                cwd=str(_agentic_root),
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        finally:
+            log_file.close()
+        logger.info("Agent subprocess log: %s", log_path)
+        with self._lock:
+            self._active_processes[label] = process
+        return process, log_path
 
     def _dispatch_crash_agent(self, fuzzer_id: int, program_hash: str):
-        """Spin up EBG_Crash in a daemon thread."""
-        def _run():
-            try:
-                from agents.EBG_crash import EBG_Crash
-                openai_key    = get_openai_api_key()
-                anthropic_key = get_anthropic_api_key()
-                os.environ["OPENAI_API_KEY"] = openai_key or ""
-
-                label = f"crash-{program_hash[:12]}"
-                logger.info("[CRASH] Launching EBG_Crash for fuzzer=%d hash=%s", fuzzer_id, program_hash)
-
-                model = _make_model(openai_key)
-                sys_obj = EBG_Crash(
-                    model, api_key=openai_key, anthropic_api_key=anthropic_key,
-                    crash_program_hash=program_hash,
-                )
-                sys_obj.start_system()
-            except Exception as e:
-                logger.error("[CRASH] Agent error: %s", e)
-            finally:
-                self._remove_active_agent(label)
-
         label = f"crash-{program_hash[:12]}"
-        t = threading.Thread(target=_run, name=label, daemon=True)
-        t.start()
+        command = [
+            _AGENT_PYTHON,
+            str(_agentic_root / "start_scripts" / "ethiopian_boiled_egg.py"),
+            "--mode",
+            "Crash",
+            "--crash-hash",
+            program_hash,
+        ]
+        process, spawn_log = self._spawn_agent_process(label, command)
         entry = {
-            "type":      "crash",
+            "type": "crash",
             "fuzzer_id": fuzzer_id,
-            "hash":      program_hash,
-            "started_at": datetime.utcnow().isoformat(),
-            "label":     label,
+            "hash": program_hash,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "label": label,
+            "pid": process.pid,
+            "spawn_log": str(spawn_log),
         }
         with self._lock:
-            self.status["crashes_detected"].append({
-                "fuzzer_id": fuzzer_id, "program_hash": program_hash,
-                "detected_at": datetime.utcnow().isoformat(),
-            })
+            self.status["crashes_detected"].append(
+                {
+                    "fuzzer_id": fuzzer_id,
+                    "program_hash": program_hash,
+                    "detected_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             self.status["active_agents"].append(entry)
-        logger.info("[CRASH] Thread started: %s", label)
+        logger.info("[CRASH] Subprocess started: %s pid=%s", label, process.pid)
 
     def _dispatch_plateau_agent(self, fuzzer_id: int):
-        """Spin up EBG_Plateau in a daemon thread."""
         fuzzer_label = f"fuzzer-{fuzzer_id}"
-
-        def _run():
-            try:
-                from agents.EBG_plateau import EBG_Plateau
-                openai_key    = get_openai_api_key()
-                anthropic_key = get_anthropic_api_key()
-                os.environ["OPENAI_API_KEY"] = openai_key or ""
-
-                logger.info("[PLATEAU] Launching EBG_Plateau for %s", fuzzer_label)
-                model = _make_model(openai_key)
-                sys_obj = EBG_Plateau(
-                    model, api_key=openai_key, anthropic_api_key=anthropic_key,
-                    fuzzer_id=fuzzer_label,
-                )
-                sys_obj.start_system()
-            except Exception as e:
-                logger.error("[PLATEAU] Agent error: %s", e)
-            finally:
-                self._remove_active_agent(fuzzer_label)
-
-        t = threading.Thread(target=_run, name=fuzzer_label, daemon=True)
-        t.start()
+        command = [
+            _AGENT_PYTHON,
+            str(_agentic_root / "start_scripts" / "ethiopian_boiled_egg.py"),
+            "--mode",
+            "Plateau",
+            "--fuzzer-id",
+            fuzzer_label,
+        ]
+        process, spawn_log = self._spawn_agent_process(fuzzer_label, command)
         entry = {
-            "type":       "plateau",
-            "fuzzer_id":  fuzzer_id,
-            "started_at": datetime.utcnow().isoformat(),
-            "label":      fuzzer_label,
+            "type": "plateau",
+            "fuzzer_id": fuzzer_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "label": fuzzer_label,
+            "pid": process.pid,
+            "spawn_log": str(spawn_log),
         }
         with self._lock:
             self._plateau_last_trigger[fuzzer_id] = time.time()
-            self.status["plateaus_detected"].append({
-                "fuzzer_id": fuzzer_id,
-                "detected_at": datetime.utcnow().isoformat(),
-            })
+            self.status["plateaus_detected"].append(
+                {
+                    "fuzzer_id": fuzzer_id,
+                    "detected_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             self.status["active_agents"].append(entry)
-        logger.info("[PLATEAU] Thread started: %s", fuzzer_label)
+        logger.info("[PLATEAU] Subprocess started: %s pid=%s", fuzzer_label, process.pid)
 
     def _remove_active_agent(self, label: str):
         with self._lock:
+            self._active_processes.pop(label, None)
             self.status["active_agents"] = [
-                a for a in self.status["active_agents"] if a.get("label") != label
+                agent for agent in self.status["active_agents"] if agent.get("label") != label
             ]
 
-    # ── public API ─────────────────────────────────────────────────────────────
+    def _reap_finished_agents(self):
+        finished: list[tuple[str, int]] = []
+        with self._lock:
+            items = list(self._active_processes.items())
+        for label, process in items:
+            returncode = process.poll()
+            if returncode is not None:
+                finished.append((label, returncode))
+        for label, returncode in finished:
+            logger.info("Agent process finished: %s exit=%s", label, returncode)
+            self._remove_active_agent(label)
 
     def trigger_crash(self, fuzzer_id: int, program_hash: str):
-        """Manually trigger crash agent (via HTTP POST)."""
-        self._triggered_crash_hashes.add(program_hash)   # prevent auto re-trigger
+        self._triggered_crash_hashes.add(program_hash)
         self._dispatch_crash_agent(fuzzer_id, program_hash)
 
     def trigger_plateau(self, fuzzer_id: int):
-        """Manually trigger plateau agent (via HTTP POST)."""
         self._plateau_last_trigger[fuzzer_id] = time.time()
         self._dispatch_plateau_agent(fuzzer_id)
 
@@ -260,42 +293,46 @@ class FuzzerMonitor:
                 return self._active_fuzzers(conn)
             finally:
                 conn.close()
-        except Exception as e:
-            logger.error("get_fuzzers error: %s", e)
+        except Exception as exc:
+            logger.error("get_fuzzers error: %s", exc)
             return []
-
-    # ── polling loop ───────────────────────────────────────────────────────────
 
     def _poll_once(self):
         try:
-            conn = _connect()
-            try:
-                crashes    = self._check_crashes(conn)
-                stagnating = self._check_stagnation(conn)
-            finally:
-                conn.close()
+            self._reap_finished_agents()
+            if self._auto_dispatch_agents:
+                conn = _connect()
+                try:
+                    crashes = self._check_crashes(conn)
+                    stagnating = self._check_stagnation(conn)
+                finally:
+                    conn.close()
 
-            for crash in crashes:
-                self._dispatch_crash_agent(crash["fuzzer_id"], crash["program_hash"])
+                for crash in crashes:
+                    self._dispatch_crash_agent(crash["fuzzer_id"], crash["program_hash"])
 
-            for fid in stagnating:
-                self._dispatch_plateau_agent(fid)
+                for fuzzer_id in stagnating:
+                    self._dispatch_plateau_agent(fuzzer_id)
+
+                if crashes or stagnating:
+                    logger.info("Poll: %d new crashes, %d stagnating fuzzers", len(crashes), len(stagnating))
 
             with self._lock:
-                self.status["last_poll"]   = datetime.utcnow().isoformat()
+                self.status["last_poll"] = datetime.now(timezone.utc).isoformat()
                 self.status["polls_total"] += 1
 
-            if crashes or stagnating:
-                logger.info("Poll: %d new crashes, %d stagnating fuzzers", len(crashes), len(stagnating))
-
-        except Exception as e:
-            logger.error("Poll error: %s", e)
+        except Exception as exc:
+            logger.error("Poll error: %s", exc)
 
     def run_forever(self):
         with self._lock:
             self.status["running"] = True
-        logger.info("Monitor started (poll_interval=%ds stagnation_window=%dmin)",
-                    POLL_INTERVAL_SECONDS, STAGNATION_WINDOW_MINUTES)
+        logger.info(
+            "Monitor started (poll_interval=%ds stagnation_window=%dmin auto_dispatch=%s)",
+            POLL_INTERVAL_SECONDS,
+            STAGNATION_WINDOW_MINUTES,
+            self._auto_dispatch_agents,
+        )
         while self.status["running"]:
             self._poll_once()
             time.sleep(POLL_INTERVAL_SECONDS)
@@ -305,126 +342,60 @@ class FuzzerMonitor:
             self.status["running"] = False
 
 
-# ── HTTP handler ───────────────────────────────────────────────────────────────
-
-def _json_response(handler, code: int, data):
-    body = json.dumps(data, default=str).encode()
-    handler.send_response(code)
-    handler.send_header("Content-Type", "application/json")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
-
-
-def make_handler(monitor: FuzzerMonitor):
-
-    class Handler(BaseHTTPRequestHandler):
-        log_message = lambda self, fmt, *args: None   # silence access log
-
-        def do_GET(self):
-            parsed = urlparse(self.path)
-            path   = parsed.path.rstrip("/")
-
-            if path == "/health":
-                _json_response(self, 200, {"ok": True})
-
-            elif path == "/status":
-                with monitor._lock:
-                    snap = dict(monitor.status)
-                _json_response(self, 200, snap)
-
-            elif path == "/fuzzers":
-                fuzzers = monitor.get_fuzzers()
-                _json_response(self, 200, {"fuzzers": fuzzers})
-
-            else:
-                _json_response(self, 404, {"error": "not found"})
-
-        def do_POST(self):
-            parsed = urlparse(self.path)
-            path   = parsed.path.rstrip("/")
-
-            length = int(self.headers.get("Content-Length", 0))
-            body   = self.rfile.read(length) if length else b"{}"
-            try:
-                payload = json.loads(body)
-            except json.JSONDecodeError:
-                _json_response(self, 400, {"error": "invalid JSON"})
-                return
-
-            if path == "/trigger/crash":
-                fid  = payload.get("fuzzer_id")
-                phsh = payload.get("program_hash")
-                if fid is None or not phsh:
-                    _json_response(self, 400, {"error": "fuzzer_id and program_hash required"})
-                    return
-                monitor.trigger_crash(int(fid), str(phsh))
-                _json_response(self, 202, {"status": "crash agent dispatched", "fuzzer_id": fid, "program_hash": phsh})
-
-            elif path == "/trigger/plateau":
-                fid = payload.get("fuzzer_id")
-                if fid is None:
-                    _json_response(self, 400, {"error": "fuzzer_id required"})
-                    return
-                monitor.trigger_plateau(int(fid))
-                _json_response(self, 202, {"status": "plateau agent dispatched", "fuzzer_id": fid})
-
-            else:
-                _json_response(self, 404, {"error": "not found"})
-
-    return Handler
-
-
-# ── helpers ────────────────────────────────────────────────────────────────────
+# -- helpers -------------------------------------------------------------------
 
 def _make_model(openai_key: str):
     model_id = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
     return type("_Model", (), {"model_id": model_id, "api_key": openai_key})()
 
 
-def _setup_logging(level: str):
-    logging.basicConfig(
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        level=getattr(logging, level.upper(), logging.INFO),
-    )
+def _setup_logging(level: str, stem: str = "forward_server"):
+    log_path = _service_log_dir / f"{stem}.log"
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    logger.info("Writing service logs to %s", log_path)
 
 
-# ── entry point ────────────────────────────────────────────────────────────────
+# -- entry point ----------------------------------------------------------------
 
 def main():
     global POLL_INTERVAL_SECONDS, STAGNATION_WINDOW_MINUTES  # noqa: PLW0603
+
     parser = argparse.ArgumentParser(description="Forward Server - fuzzer monitoring + agent dispatch")
-    parser.add_argument("--host",          default="0.0.0.0",  help="Bind address (default: 0.0.0.0)")
-    parser.add_argument("--port",          type=int, default=8765, help="HTTP port (default: 8765)")
-    parser.add_argument("--poll-interval", type=int, default=POLL_INTERVAL_SECONDS,
-                        help=f"DB poll interval in seconds (default: {POLL_INTERVAL_SECONDS})")
-    parser.add_argument("--stagnation-window", type=int, default=STAGNATION_WINDOW_MINUTES,
-                        help=f"Stagnation detection window in minutes (default: {STAGNATION_WINDOW_MINUTES})")
-    parser.add_argument("--log-level",     default="INFO", help="Logging level (default: INFO)")
-    parser.add_argument("--no-monitor",    action="store_true",
-                        help="Start only the API server without the background DB monitor")
+    parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=POLL_INTERVAL_SECONDS,
+        help=f"DB poll interval in seconds (default: {POLL_INTERVAL_SECONDS})",
+    )
+    parser.add_argument(
+        "--stagnation-window",
+        type=int,
+        default=STAGNATION_WINDOW_MINUTES,
+        help=f"Stagnation detection window in minutes (default: {STAGNATION_WINDOW_MINUTES})",
+    )
+    parser.add_argument("--log-level", default="INFO", help="Logging level (default: INFO)")
+    parser.add_argument(
+        "--no-auto-agents",
+        action="store_true",
+        help="Poll the database but never automatically spawn crash or plateau agents",
+    )
     args = parser.parse_args()
 
     _setup_logging(args.log_level)
-
-    POLL_INTERVAL_SECONDS     = args.poll_interval
+    POLL_INTERVAL_SECONDS = args.poll_interval
     STAGNATION_WINDOW_MINUTES = args.stagnation_window
 
-    monitor = FuzzerMonitor()
-
-    if not args.no_monitor:
-        t = threading.Thread(target=monitor.run_forever, name="db-monitor", daemon=True)
-        t.start()
-
-    server = HTTPServer((args.host, args.port), make_handler(monitor))
-    logger.info("Forward server listening on %s:%d", args.host, args.port)
-    logger.info("Endpoints: GET /health /status /fuzzers  |  POST /trigger/crash /trigger/plateau")
+    monitor = FuzzerMonitor(auto_dispatch_agents=not args.no_auto_agents)
     try:
-        server.serve_forever()
+        monitor.run_forever()
     except KeyboardInterrupt:
         logger.info("Shutting down")
         monitor.stop()
-        server.server_close()
 
 
 if __name__ == "__main__":

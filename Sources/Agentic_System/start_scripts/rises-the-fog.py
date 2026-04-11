@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
-import argparse
-import functools
-import json
 import os
 import sys
 import subprocess
 from pathlib import Path
-import logging
-from datetime import datetime
-import pytz
 
-import site
-
-# Ensure the Agentic_System package root and IkaCore src are on sys.path
 _agentic_root = Path(__file__).resolve().parents[1]
 if str(_agentic_root) not in sys.path:
     sys.path.insert(0, str(_agentic_root))
+
+from venv_site_packages import add_fuzzillai_repo_venv_site_packages
+
+add_fuzzillai_repo_venv_site_packages()
+
 _ikacore_src = _agentic_root / "IkaCore" / "src"
 if _ikacore_src.exists() and str(_ikacore_src) not in sys.path:
     sys.path.insert(0, str(_ikacore_src))
 
+import argparse
+import functools
+import json
+import logging
+import site
+from datetime import datetime
+import pytz
+
 import config_loader as config_loader
+config_loader.apply_runtime_paths()
 from startup_checks import collect_runtime_preflight, format_preflight_report
 from agents.FoG import Father
+from agent_logging import configure_process_logging
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 
 def _model(model_id, api_key):
@@ -37,16 +43,6 @@ est_timezone = pytz.timezone("America/New_York")
 
 BASE_MODEL_ID = "deepseek-chat"
 MANAGER_MODEL_ID = os.getenv("FOG_MANAGER_MODEL", "gpt-5.4")
-
-# Prefer the project's virtualenv site-packages if present, so RAG tools are importable
-try:
-    # Repo root (unchanged despite this file moving one level deeper)
-    _root = Path(__file__).resolve().parents[3]
-    _venv_site = _root / ".venv" / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-    if _venv_site.exists():
-        site.addsitedir(str(_venv_site))
-except Exception:
-    pass
 
 
 def _regressions_json_candidates(agentic_root: Path) -> list[Path]:
@@ -135,60 +131,8 @@ def run(force_logging: bool = True):
     args.debug = force_logging
 
     if args.debug:
-        # Logs live under Agentic_System/agents/fog_logs even though this file moved into start_scripts
-        agentic_root = Path(__file__).resolve().parents[1]
-        log_dir = agentic_root / 'agents' / 'fog_logs'
-        log_dir.mkdir(parents=True, exist_ok=True)
-        latest_num = 0
-        if os.path.exists(log_dir / 'rises_the_fog.log'):
-            for root, dirs, files in os.walk(log_dir, topdown=False):
-                for name in files:
-                    if name.endswith('.log'):
-                        if "rises_the_fog.log" not in name:
-                            num = int(name[len('rises_the_fog'):-len('.log')])
-                            if num > latest_num:
-                                latest_num = num
-            log_path = str(log_dir / f'rises_the_fog{latest_num + 1}.log')
-        else:
-            log_path = str(log_dir / f'rises_the_fog.log')
-
-        if os.path.exists(log_path):
-            print(f"Log file already exists: {log_path}")
-
-        # Configure logger to write messages as-is (no prefixes) for 1:1 capture
-        logger.handlers.clear()
-        file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
-        file_handler.setFormatter(logging.Formatter('%(message)s'))
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
-        logger.disabled = False
-
-        class _StreamToLogger:
-            def __init__(self, log_fn):
-                self.log_fn = log_fn
-                self._buffer = ''
-
-            def write(self, message):
-                if not isinstance(message, str):
-                    message = message.decode('utf-8', errors='ignore')
-                self._buffer += message
-                while '\n' in self._buffer:
-                    line, self._buffer = self._buffer.split('\n', 1)
-                    self.log_fn(line)
-
-            def flush(self):
-                if self._buffer:
-                    self.log_fn(self._buffer)
-                    self._buffer = ''
-
-            def isatty(self):
-                return False
-
-        sys.stdout = _StreamToLogger(logger.info)
-        sys.stderr = _StreamToLogger(logger.error)
-
-        # Signal BaseAgent to enable its own logging lazily and ensure directory exists
-        os.environ["FOG_DEBUG"] = "1"
+        log_path = configure_process_logging("fog", "rises_the_fog", logger=logger)
+        logger.info(f"Writing logs to {log_path}")
 
     logger.info("I must go in; the fog is rising")
     logger.info(f"time: {datetime.now(est_timezone)}")

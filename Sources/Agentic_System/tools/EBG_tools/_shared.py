@@ -17,8 +17,9 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "fuzzilli_master")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "fuzzilli")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "fuzzilli123")
 
-TEMP_FUZZIL_PATH = "/tmp/temp-base64-fuzzil.fzil"
 _RUNTIME_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "runtime_data"
+_TMP_DIR = _RUNTIME_DATA_DIR / "tmp"
+TEMP_FUZZIL_PATH = str(_TMP_DIR / "temp-base64-fuzzil.fzil")
 
 _GENERATE_FOLDER_HASHS = None
 _DB_QUERY_CACHE = OrderedDict()

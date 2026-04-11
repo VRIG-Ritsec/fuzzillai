@@ -76,6 +76,7 @@ from typing import Optional
 import argparse
 import logging
 import pytz
+from agent_logging import configure_process_logging
 
 # Default to OpenAI GPT-5 models. IkaCore routes these through the Responses API.
 MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
@@ -315,12 +316,12 @@ class EBG_Crash(Agent):
                 "DBAnalyzer": "Analyze PostgreSQL database for execution information"
             }
         )
-        print("EBG Crash start result:")
-        print(f"Completed: {result['completed']}")
+        logger.info("EBG Crash start result:")
+        logger.info(f"Completed: {result['completed']}")
         if result['output']:
-            print(f"Output: {result['output']}")
+            logger.info(f"Output: {result['output']}")
         if result['error']:
-            print(f"Error: {result['error']}")
+            logger.error(f"Error: {result['error']}")
         return result
 
 
@@ -331,67 +332,8 @@ def main():
     args.debug = True
 
     if args.debug:
-        # Logs live under Agentic_System/agents/ebg_logs even though this file moved into start_scripts
-        agentic_root = Path(__file__).resolve().parents[1]
-        log_dir = agentic_root / 'agents' / 'ebg_logs'
-        log_dir.mkdir(parents=True, exist_ok=True)
-        latest_num = 0
-        if os.path.exists(log_dir / 'EBG_crash.log'):
-            for root, dirs, files in os.walk(log_dir, topdown=False):
-                for name in files:
-                    if not name.endswith('.log'):
-                        continue
-                    if name == 'EBG_crash.log':
-                        continue
-                    if not name.startswith('EBG_crash'):
-                        continue
-
-                    suffix = name[len('EBG_crash'):-len('.log')]
-                    if suffix.isdigit():
-                        num = int(suffix)
-                        if num > latest_num:
-                            latest_num = num
-            log_path = str(log_dir / f'EBG_crash{latest_num + 1}.log')
-        else:
-            log_path = str(log_dir / f'EBG_crash.log')
-
-        if os.path.exists(log_path):
-            print(f"Log file already exists: {log_path}")
-
-        # Configure logger to write messages as-is (no prefixes) for 1:1 capture
-        logger.handlers.clear()
-        file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
-        file_handler.setFormatter(logging.Formatter('%(message)s'))
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
-        logger.disabled = False
-
-        class _StreamToLogger:
-            def __init__(self, log_fn):
-                self.log_fn = log_fn
-                self._buffer = ''
-
-            def write(self, message):
-                if not isinstance(message, str):
-                    message = message.decode('utf-8', errors='ignore')
-                self._buffer += message
-                while '\n' in self._buffer:
-                    line, self._buffer = self._buffer.split('\n', 1)
-                    self.log_fn(line)
-
-            def flush(self):
-                if self._buffer:
-                    self.log_fn(self._buffer)
-                    self._buffer = ''
-
-            def isatty(self):
-                return False
-
-        sys.stdout = _StreamToLogger(logger.info)
-        sys.stderr = _StreamToLogger(logger.error)
-
-        # Signal BaseAgent to enable its own logging lazily and ensure directory exists
-        os.environ["EBG_DEBUG"] = "1"
+        log_path = configure_process_logging("ebg_crash", "EBG_crash", logger=logger)
+        logger.info(f"Writing logs to {log_path}")
 
 
     openai_key = get_openai_api_key()
@@ -426,11 +368,11 @@ def main():
         }
     )
 
-    print("Task Result:")
-    print(f"Completed: {result['completed']}")
-    print(f"Output: {result['output']}")
+    logger.info("Task Result:")
+    logger.info(f"Completed: {result['completed']}")
+    logger.info(f"Output: {result['output']}")
     if result['error']:
-        print(f"Error: {result['error']}")
+        logger.error(f"Error: {result['error']}")
 
 
 if __name__ == "__main__":

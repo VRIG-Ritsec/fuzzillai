@@ -15,10 +15,20 @@
 # limitations under the License.
 
 if [ "$(uname)" == "Linux" ]; then
+    V8_SRC="${V8_SRC:-/mnt/vdc/v8_vrig/v8}"
+    cd "$V8_SRC" || exit 1
+    GN="${V8_SRC}/buildtools/linux64/gn"
+
+    NINJA_JOBS="${NINJA_JOBS:-}"
+    if [ -z "$NINJA_JOBS" ]; then
+        np=$(nproc)
+        NINJA_JOBS=$((np > 16 ? 16 : np))
+    fi
+
     # See https://v8.dev/docs/compile-arm64 for instructions on how to build on Arm64
-    gn gen out/fuzzbuild_dbg --args='is_debug=true v8_symbol_level=2 v8_enable_i18n_support=false dcheck_always_on=true v8_static_library=true v8_enable_verify_heap=true v8_fuzzilli=true sanitizer_coverage_flags="trace-pc-guard" target_cpu="x64" v8_enable_trace_feedback_updates=true'
+    "$GN" gen out/fuzzbuild_dbg --args='is_debug=true is_component_build=false v8_symbol_level=2 v8_enable_i18n_support=false dcheck_always_on=true v8_static_library=true v8_enable_verify_heap=true v8_fuzzilli=true sanitizer_coverage_flags="trace-pc-guard" target_cpu="x64" v8_enable_trace_feedback_updates=true'
+
+    ninja -C ./out/fuzzbuild_dbg -j"${NINJA_JOBS}" d8
 else
     echo "Unsupported operating system"
 fi
-
-ninja -C ./out/fuzzbuild_dbg -j$(nproc) d8

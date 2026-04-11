@@ -63,11 +63,18 @@ from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepsee
 
 import sys
 import os
+import logging
+from agent_logging import configure_process_logging
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 WORKER_MODEL = os.environ.get("FOG_WORKER_MODEL", "gpt-5.4-mini")
 MANAGER_MODEL = os.environ.get("FOG_MANAGER_MODEL", "gpt-5.4")
+logger = logging.getLogger("fog")
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
+logger.propagate = False
+logger.disabled = True
 
 class Father(Agent):
 
@@ -312,16 +319,18 @@ class Father(Agent):
             },
             checkpoint_uid=checkpoint_uid,
         )
-        print("FoG start result:")
-        print(f"Completed: {result['completed']}")
+        logger.info("FoG start result:")
+        logger.info(f"Completed: {result['completed']}")
         if result['output']:
-            print(f"Output: {result['output']}")
+            logger.info(f"Output: {result['output']}")
         if result['error']:
-            print(f"Error: {result['error']}")
+            logger.error(f"Error: {result['error']}")
         return result
 
 
 def main():
+    log_path = configure_process_logging("fog", "FoG", logger=logger)
+    logger.info(f"Writing logs to {log_path}")
     openai_key = get_openai_api_key()
     anthropic_key = get_anthropic_api_key()
     deepseek_key = get_deepseek_api_key()
@@ -344,11 +353,11 @@ def main():
         }
     )
 
-    print("Task Result:")
-    print(f"Completed: {result['completed']}")
-    print(f"Output: {result['output']}")
+    logger.info("Task Result:")
+    logger.info(f"Completed: {result['completed']}")
+    logger.info(f"Output: {result['output']}")
     if result['error']:
-        print(f"Error: {result['error']}")
+        logger.error(f"Error: {result['error']}")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from datetime import datetime
 import pytz
 from abc import ABC, abstractmethod
 from pathlib import Path
+from agent_logging import enable_named_logger_from_env
 
 _ikacore_src = Path(__file__).resolve().parent.parent / "IkaCore" / "src"
 if str(_ikacore_src) not in sys.path:
@@ -38,26 +39,8 @@ DEFAULT_AGENT_LOGGING_LEVEL = 1
 
 def enable_base_agent_logging():
     try:
-        if os.getenv("FOG_DEBUG") == "1":
-            logs_dir = Path(__file__).parent / "fog_logs"
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            log_path = logs_dir / "base_agent.log"
-            logging.basicConfig(
-                filename=str(log_path),
-                level=logging.INFO,
-                format='%(asctime)s - %(levelname)s - %(message)s'
-            )
-            logger.disabled = False
-        elif os.getenv("EBG_DEBUG") == "1":
-            logs_dir = Path(__file__).parent / "ebg_logs"
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            log_path = logs_dir / "base_agent.log"
-            logging.basicConfig(
-                filename=str(log_path),
-                level=logging.INFO,
-                format='%(asctime)s - %(levelname)s - %(message)s'
-            )
-            logger.disabled = False
+        enable_named_logger_from_env("base_agent")
+        logger.disabled = not bool(os.getenv("IKA_AGENT_LOG_FILE", "").strip())
     except Exception:
         logger.disabled = True
 
@@ -71,6 +54,7 @@ class Agent(ABC):
         model_id: str = None,
         logging_level=None,
     ):
+        enable_base_agent_logging()
         self.model_id = model_id or (getattr(model, "model_id", None) if model else None) or "deepseek"
         self.api_key = api_key or (getattr(model, "api_key", None) if model else None)
         self.anthropic_api_key = anthropic_api_key

@@ -69,6 +69,8 @@ from tools.FoG_tools import get_v8_path
 import sys
 import os
 from typing import Optional
+import logging
+from agent_logging import configure_process_logging
 
 MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
 WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5-mini")
@@ -78,6 +80,11 @@ FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH", str(Path(__file__).resolve().par
 _AGENTIC_ROOT = Path(__file__).resolve().parents[1]
 
 sys.path.append(str(Path(__file__).parent.parent))
+logger = logging.getLogger("ebg_plateau")
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
+logger.propagate = False
+logger.disabled = True
 
 class EBG_Plateau(Agent):
 
@@ -330,16 +337,18 @@ class EBG_Plateau(Agent):
                 "DBAnalyzer": "Retrieve PostgreSQL corpus and execution data for the plateaued fuzzer",
             }
         )
-        print("EBG Plateau start result:")
-        print(f"Completed: {result['completed']}")
+        logger.info("EBG Plateau start result:")
+        logger.info(f"Completed: {result['completed']}")
         if result['output']:
-            print(f"Output: {result['output']}")
+            logger.info(f"Output: {result['output']}")
         if result['error']:
-            print(f"Error: {result['error']}")
+            logger.error(f"Error: {result['error']}")
         return result
 
 
 def main():
+    log_path = configure_process_logging("ebg_plateau", "EBG_plateau", logger=logger)
+    logger.info(f"Writing logs to {log_path}")
     openai_key = get_openai_api_key()
     anthropic_key = get_anthropic_api_key()
     deepseek_key = get_deepseek_api_key()
@@ -363,11 +372,11 @@ def main():
         }
     )
 
-    print("Task Result:")
-    print(f"Completed: {result['completed']}")
-    print(f"Output: {result['output']}")
+    logger.info("Task Result:")
+    logger.info(f"Completed: {result['completed']}")
+    logger.info(f"Output: {result['output']}")
     if result['error']:
-        print(f"Error: {result['error']}")
+        logger.error(f"Error: {result['error']}")
 
 
 if __name__ == "__main__":

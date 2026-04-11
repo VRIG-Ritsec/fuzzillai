@@ -56,6 +56,27 @@ static inline void clear_edge(uint8_t* bits, uint64_t index)
     bits[index / 8] &= ~(1u << (index % 8));
 }
 
+static inline unsigned char* shmem_edges_ptr(struct cov_context* context)
+{
+    return (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+}
+
+static uint32_t wait_for_num_edges(struct cov_context* context)
+{
+    for (int attempt = 0; attempt < 100; attempt++) {
+        uint32_t num_edges = context->shmem->num_edges;
+        if (num_edges != 0) {
+            return num_edges;
+        }
+#if defined(_WIN32)
+        Sleep(10);
+#else
+        usleep(10 * 1000);
+#endif
+    }
+    return 0;
+}
+
 int cov_initialize(struct cov_context* context)
 {
 #if defined(_WIN32)
@@ -103,7 +124,7 @@ int cov_initialize(struct cov_context* context)
 
 void cov_finish_initialization(struct cov_context* context, int should_track_edges)
 {
-    uint32_t num_edges = context->shmem->num_edges;
+    uint32_t num_edges = wait_for_num_edges(context);
     if (num_edges == 0) {
         fprintf(stderr, "[LibCoverage] Coverage bitmap size could not be determined, is the engine instrumentation working properly?\n");
         exit(-1);
@@ -165,8 +186,7 @@ void cov_shutdown(struct cov_context* context)
 
 static uint32_t internal_evaluate(struct cov_context* context, uint8_t* virgin_bits, struct edge_set* new_edges)
 {
-    // Calculate offset to edges array (after feedback nexus data)
-    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    unsigned char* edges_ptr = shmem_edges_ptr(context);
     uint64_t* current = (uint64_t*)edges_ptr;
     uint64_t* end = (uint64_t*)(edges_ptr + context->bitmap_size);
     uint64_t* virgin = (uint64_t*)virgin_bits;
@@ -237,8 +257,7 @@ int cov_evaluate_crash(struct cov_context* context)
 
 int cov_compare_equal(struct cov_context* context, uint32_t* edges, uint32_t num_edges)
 {
-    // Calculate offset to edges array (after feedback nexus data)
-    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    unsigned char* edges_ptr = shmem_edges_ptr(context);
     
     for (int i = 0; i < num_edges; i++) {
         int idx = edges[i];
@@ -251,8 +270,7 @@ int cov_compare_equal(struct cov_context* context, uint32_t* edges, uint32_t num
 
 void cov_clear_bitmap(struct cov_context* context)
 {
-    // Calculate offset to edges array (after feedback nexus data)
-    unsigned char* edges_ptr = (unsigned char*)context->shmem + offsetof(struct shmem_data, edges);
+    unsigned char* edges_ptr = shmem_edges_ptr(context);
     memset(edges_ptr, 0, context->bitmap_size);
     clear_feedback_nexus(context);
     clear_optimization_bits(context);

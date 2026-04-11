@@ -4,11 +4,12 @@ Execution tools: trace_v8_analysis, list_v8_trace_options, write_and_execute_js.
 
 import os
 import json
+from pathlib import Path
 
 from IkaCore.tools import IkaTools
 
 from .db import fetch_program_js_from_db
-from ._shared import _get_varianal_folder, json_serial
+from ._shared import _RUNTIME_DATA_DIR, _get_varianal_folder, json_serial
 from tools._shared import run_d8
 
 V8_TRACE_PRESETS = {
@@ -132,12 +133,35 @@ V8_AVAILABLE_FLAGS = [
 ]
 
 
+def _normalize_runtime_output_dir(requested_path: str | None, default_folder: str) -> str:
+    runtime_root = _RUNTIME_DATA_DIR.resolve()
+    default_dir = Path(default_folder).resolve()
+
+    if requested_path:
+        raw_path = Path(requested_path).expanduser()
+        if raw_path.is_absolute():
+            target = default_dir / raw_path.name
+        else:
+            target = default_dir / raw_path
+    else:
+        target = default_dir / "turbofan_ir"
+
+    target = target.resolve()
+    try:
+        target.relative_to(runtime_root)
+    except ValueError:
+        target = default_dir / target.name
+
+    target.mkdir(parents=True, exist_ok=True)
+    return str(target)
+
+
 def trace_v8_analysis(
     program_hash: str,
     presets: list = None,
     custom_flags: list = None,
     function_filter: str = None,
-    turbo_path: str = "/tmp/turbofan_ir",
+    turbo_path: str = "",
     timeout_seconds: int = 60
 ) -> str:
     if presets is not None and len(presets) == 0:
@@ -146,16 +170,16 @@ def trace_v8_analysis(
         custom_flags = None
     if function_filter == "":
         function_filter = None
-    if turbo_path == "":
-        turbo_path = "/tmp/turbofan_ir"
-
     js_code = fetch_program_js_from_db(program_hash)
     if js_code is None:
         return json.dumps({"error": f"Program with hash {program_hash} not found in database"})
     if js_code.startswith("Error"):
         return json.dumps({"error": js_code})
 
-    filepath_js = f"/tmp/{program_hash}.js"
+    artifact_dir = _get_varianal_folder()
+    os.makedirs(artifact_dir, exist_ok=True)
+    filepath_js = os.path.join(artifact_dir, f"{program_hash}.js")
+    turbo_path = _normalize_runtime_output_dir(turbo_path, artifact_dir)
     with open(filepath_js, "w") as f:
         f.write(js_code)
 
@@ -187,9 +211,7 @@ def trace_v8_analysis(
         ]
         flags.extend(filter_flags)
 
-    if turbo_path:
-        os.makedirs(turbo_path, exist_ok=True)
-        flags.append(f"--trace-turbo-path={turbo_path}")
+    flags.append(f"--trace-turbo-path={turbo_path}")
 
     flags = list(dict.fromkeys(flags))
 
@@ -320,7 +342,7 @@ trace_v8_analysis_tool = IkaTools(
         "presets": {"type": "array", "items": {"type": "string"}, "description": "Preset names such as tiering, maglev, turbofan", "required": False},
         "custom_flags": {"type": "array", "items": {"type": "string"}, "description": "Additional d8 trace flags", "required": False},
         "function_filter": {"type": "string", "description": "Filter trace output to specific function names", "required": False},
-        "turbo_path": {"type": "string", "description": "Directory for TurboFan IR dumps (default /tmp/turbofan_ir)", "required": False},
+        "turbo_path": {"type": "string", "description": "Directory name under runtime_data for TurboFan IR dumps (defaults to the current variant-analysis folder)", "required": False},
         "timeout_seconds": {"type": "number", "description": "Max execution time in seconds (default 60)", "required": False},
     },
     execute_function=lambda x: trace_v8_analysis(
@@ -328,7 +350,7 @@ trace_v8_analysis_tool = IkaTools(
         presets=x.get("presets"),
         custom_flags=x.get("custom_flags"),
         function_filter=x.get("function_filter"),
-        turbo_path=x.get("turbo_path", "/tmp/turbofan_ir"),
+        turbo_path=x.get("turbo_path", ""),
         timeout_seconds=int(x.get("timeout_seconds", 60)),
     ),
 )

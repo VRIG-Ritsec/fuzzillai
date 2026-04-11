@@ -23,6 +23,7 @@
 #   - MIN_MUTATIONS_PER_SAMPLE: Minimum mutations per sample (default: 25)
 #   - DEBUG_LOGGING: Enable debug logging (default: false)
 #   - FUZZILLI_EXTRA_ARGS: Extra FuzzilliCli args (e.g. --disablePostgresSync)
+#   - FUZZILLI_ENABLE_INSPECTION: Optional. If unset, VRIG entrypoint defaults inspection on. Set to 0 in .env to disable (then passed into workers).
 
 set -e
 
@@ -139,6 +140,9 @@ fi
 echo "Configuration:"
 echo "  V8 Build Path: ${V8_BUILD_PATH}"
 echo "  Timeout: ${TIMEOUT}ms"
+if [ -n "${FUZZILLI_ENABLE_INSPECTION+x}" ]; then
+    echo "  FUZZILLI_ENABLE_INSPECTION: ${FUZZILLI_ENABLE_INSPECTION} (override; else entrypoint default)"
+fi
 if [ "$USE_REMOTE_DB" = true ]; then
     echo "  Database: ${POSTGRES_USER}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
 elif [ -n "$POSTGRES_DATA_PATH" ]; then
@@ -174,6 +178,11 @@ for i in $(seq 1 $NUM_WORKERS); do
       - TIMEOUT=${TIMEOUT}
       - MIN_MUTATIONS_PER_SAMPLE=${MIN_MUTATIONS_PER_SAMPLE}
       - DEBUG_LOGGING=${DEBUG_LOGGING}
+EOF
+    if [ -n "${FUZZILLI_ENABLE_INSPECTION+x}" ]; then
+        printf '      - FUZZILLI_ENABLE_INSPECTION=%s\n' "${FUZZILLI_ENABLE_INSPECTION}" >> "${WORKER_COMPOSE}"
+    fi
+    cat >> "${WORKER_COMPOSE}" <<EOF
       - FUZZILLI_EXTRA_ARGS=${FUZZILLI_EXTRA_ARGS}
 EOF
 

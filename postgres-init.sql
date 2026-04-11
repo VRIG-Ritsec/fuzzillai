@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS program (
     created_at TIMESTAMP DEFAULT NOW(),
     source_mutators VARCHAR(50)[],  -- Array of mutator names that contributed to this program
     contributors VARCHAR(50)[],      -- Array of all contributor names (mutators + other sources)
-    parent_program_hash VARCHAR(64) REFERENCES program(program_hash) ON DELETE SET NULL
+    parent_program_hash VARCHAR(64) REFERENCES program(program_hash) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX idx_program_fuzzer_id ON program(fuzzer_id);

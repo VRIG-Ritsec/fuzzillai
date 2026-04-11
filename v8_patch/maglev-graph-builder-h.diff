@@ -1,8 +1,8 @@
 diff --git a/src/maglev/maglev-graph-builder.h b/src/maglev/maglev-graph-builder.h
-index 96e4a82464c..ee30d296288 100644
+index 49557da53e4..179f2b3c469 100644
 --- a/src/maglev/maglev-graph-builder.h
 +++ b/src/maglev/maglev-graph-builder.h
-@@ -38,6 +38,7 @@
+@@ -40,6 +40,7 @@
  #include "src/objects/bytecode-array.h"
  #include "src/objects/elements-kind.h"
  #include "src/objects/string.h"
@@ -10,7 +10,7 @@ index 96e4a82464c..ee30d296288 100644
  
  namespace v8 {
  namespace internal {
-@@ -1863,13 +1864,17 @@ class MaglevGraphBuilder {
+@@ -1892,13 +1893,17 @@ class MaglevGraphBuilder {
      return compilation_unit_->feedback();
    }
    const FeedbackNexus FeedbackNexusForOperand(int slot_operand_index) const {

@@ -1,8 +1,8 @@
 diff --git a/src/compiler/js-heap-broker.cc b/src/compiler/js-heap-broker.cc
-index 0debada2f89..ae761a6cc56 100644
+index 2b81a9bd5ef..edb5588af03 100644
 --- a/src/compiler/js-heap-broker.cc
 +++ b/src/compiler/js-heap-broker.cc
-@@ -21,6 +21,7 @@
+@@ -23,6 +23,7 @@
  #include "src/objects/megadom-handler-inl.h"
  #include "src/objects/objects-inl.h"
  #include "src/objects/property-cell.h"
@@ -10,7 +10,7 @@ index 0debada2f89..ae761a6cc56 100644
  
  namespace v8 {
  namespace internal {
-@@ -455,13 +456,15 @@ FeedbackSlotKind JSHeapBroker::GetFeedbackSlotKind(
+@@ -457,13 +458,15 @@ FeedbackSlotKind JSHeapBroker::GetFeedbackSlotKind(
      FeedbackSource const& source) const {
    if (HasFeedback(source)) return GetFeedback(source).slot_kind();
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());
@@ -28,15 +28,15 @@ index 0debada2f89..ae761a6cc56 100644
  }
  
  const ProcessedFeedback& JSHeapBroker::NewInsufficientFeedback(
-@@ -473,6 +476,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForPropertyAccess(
-     FeedbackSource const& source, AccessMode mode,
-     OptionalNameRef static_name) {
+@@ -475,6 +478,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForPropertyAccess(
+     FeedbackSource const& source, AccessMode mode, OptionalNameRef static_name,
+     bool allow_homomorphic) {
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());
 +  cov_add_feedback_nexus(&nexus);
    FeedbackSlotKind kind = nexus.kind();
    if (nexus.IsUninitialized()) return NewInsufficientFeedback(kind);
  
-@@ -554,6 +558,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForPropertyAccess(
+@@ -582,6 +586,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForPropertyAccess(
  ProcessedFeedback const& JSHeapBroker::ReadFeedbackForGlobalAccess(
      JSHeapBroker* broker, FeedbackSource const& source) {
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());
@@ -44,7 +44,7 @@ index 0debada2f89..ae761a6cc56 100644
    DCHECK(nexus.kind() == FeedbackSlotKind::kLoadGlobalInsideTypeof ||
           nexus.kind() == FeedbackSlotKind::kLoadGlobalNotInsideTypeof ||
           nexus.kind() == FeedbackSlotKind::kStoreGlobalSloppy ||
-@@ -598,6 +603,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForGlobalAccess(
+@@ -626,6 +631,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForGlobalAccess(
  ProcessedFeedback const& JSHeapBroker::ReadFeedbackForBinaryOperation(
      FeedbackSource const& source) const {
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());
@@ -52,7 +52,7 @@ index 0debada2f89..ae761a6cc56 100644
    if (nexus.IsUninitialized()) return NewInsufficientFeedback(nexus.kind());
    BinaryOperationHint hint = nexus.GetBinaryOperationFeedback();
    DCHECK_NE(hint, BinaryOperationHint::kNone);  // Not uninitialized.
-@@ -607,6 +613,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForBinaryOperation(
+@@ -635,6 +641,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForBinaryOperation(
  ProcessedFeedback const& JSHeapBroker::ReadFeedbackForTypeOf(
      FeedbackSource const& source) const {
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());
@@ -60,7 +60,7 @@ index 0debada2f89..ae761a6cc56 100644
    if (nexus.IsUninitialized()) return NewInsufficientFeedback(nexus.kind());
    return *zone()->New<TypeOfOpFeedback>(nexus.GetTypeOfFeedback(),
                                          nexus.kind());
-@@ -615,6 +622,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForTypeOf(
+@@ -643,6 +650,7 @@ ProcessedFeedback const& JSHeapBroker::ReadFeedbackForTypeOf(
  ProcessedFeedback const& JSHeapBroker::ReadFeedbackForCompareOperation(
      FeedbackSource const& source) const {
    FeedbackNexus nexus(source.vector, source.slot, feedback_nexus_config());

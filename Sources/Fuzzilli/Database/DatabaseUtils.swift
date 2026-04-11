@@ -62,6 +62,8 @@ public class DatabaseUtils {
         switch outcome {
         case .succeeded:
             return 3
+        case .differential:
+            return 3
         case .failed:
             return 2
         case .crashed:

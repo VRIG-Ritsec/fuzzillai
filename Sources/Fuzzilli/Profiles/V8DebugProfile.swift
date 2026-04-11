@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Fuzzilli
-
-
 let v8DebugProfile = Profile(
     processArgs: { randomize in
         var args = [
@@ -24,6 +21,7 @@ let v8DebugProfile = Profile(
         ]
         return args
     },
+    processArgsReference: nil,
 
     // We typically fuzz without any sanitizer instrumentation, but if any sanitizers are active, "abort_on_error=1" must probably be set so that sanitizer errors can be detected.
     processEnv: [:],

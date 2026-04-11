@@ -20,98 +20,121 @@ import Fuzzilli
 //
 let args = Arguments.parse(from: CommandLine.arguments)
 
+/// Inspection from --inspect, or when FUZZILLI_ENABLE_INSPECTION is 1/true/on/yes (used by VRIG/docker). --no-inspect wins.
+func inspectionEnabled(args: Arguments) -> Bool {
+    if args.has("--no-inspect") {
+        return false
+    }
+    if args.has("--inspect") {
+        return true
+    }
+    guard let raw = ProcessInfo.processInfo.environment["FUZZILLI_ENABLE_INSPECTION"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+          !raw.isEmpty else {
+        return false
+    }
+    if raw == "0" || raw == "false" || raw == "no" || raw == "off" {
+        return false
+    }
+    if raw == "1" || raw == "true" || raw == "yes" || raw == "on" {
+        return true
+    }
+    return false
+}
+
 if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 1 {
     print(
         """
-        Usage:
-        \(args.programName) [options] --profile=<profile> /path/to/jsshell
+                Usage:
+                \(args.programName) [options] --profile=<profile> /path/to/jsshell
 
-Options:
-    --profile=name               : Select one of several preconfigured profiles.
-                                   Available profiles: \(profiles.keys).
-    --jobs=n                     : Total number of fuzzing jobs. This will start a main instance and n-1 worker instances.
-    --engine=name                : The fuzzing engine to use. Available engines: "mutation" (default), "hybrid", "multi".
-                                   Only the mutation engine should be regarded stable at this point.
-    --corpus=name                : The corpus scheduler to use. Available schedulers: "basic" (default), "markov", "postgresql"
-    --logLevel=level             : The log level to use. Valid values: "verbose", "info", "warning", "error", "fatal" (default: "info").
-    --maxIterations=n            : Run for the specified number of iterations (default: unlimited).
-    --maxRuntimeInHours=n        : Run for the specified number of hours (default: unlimited).
-    --timeout=n                  : Timeout in ms after which to interrupt execution of programs (default depends
-                                   on the profile). Or provide an interval like --timeout=200,400. The actual
-                                   timeout in this interval will be determined by the start-up tests.
-    --minMutationsPerSample=n    : Discard samples from the corpus only after they have been mutated at least this many times (default: 25).
-    --minCorpusSize=n            : Keep at least this many samples in the corpus regardless of the number of times
-                                   they have been mutated (default: 1000).
-    --maxCorpusSize=n            : Only allow the corpus to grow to this many samples. Otherwise the oldest samples
-                                   will be discarded (default: unlimited).
-    --markovDropoutRate=p        : Rate at which low edge samples are not selected, in the Markov Corpus Scheduler,
-                                   per round of sample selection. Used to ensure diversity between fuzzer instances
-                                   (default: 0.10)
-    --consecutiveMutations=n     : Perform this many consecutive mutations on each sample (default: 5).
-    --minimizationLimit=p        : When minimizing interesting programs, keep at least this percentage of the original instructions
-                                   regardless of whether they are needed to trigger the interesting behaviour or not.
-                                   See Minimizer.swift for an overview of this feature (default: 0.0).
-    --storagePath=path           : Path at which to store output files (crashes, corpus, etc.) to.
-    --resume                     : If storage path exists, import the programs from the corpus/ subdirectory
-    --overwrite                  : If storage path exists, delete all data in it and start a fresh fuzzing session
-    --staticCorpus               : In this mode, we will just mutate the existing corpus and look for crashes.
-                                   No new samples are added to the corpus, regardless of their coverage.
-                                   This can be used to find different manifestations of bugs and
-                                   also to try and reproduce a flaky crash or turn it into a deterministic one.
-    --exportStatistics           : If enabled, fuzzing statistics will be collected and saved to disk in regular intervals.
-                                   Requires --storagePath.
-    --statisticsExportInterval=n : Interval in minutes for saving fuzzing statistics to disk (default: 10).
-                                   Requires --exportStatistics.
-    --importCorpus=path          : Imports an existing corpus of FuzzIL programs to build the initial corpus for fuzzing.
-                                   The provided path must point to a directory, and all .fzil files in that directory will be imported.
-    --corpusImportMode=mode      : The corpus import mode. Possible values:
-                                             default : Keep samples that are interesting (e.g. those that increase code coverage) and minimize them (default).
-                                                full : Keep all samples that execute successfully without minimization.
-                                         unminimized : Keep samples that are interesting but do not minimize them.
+                Options:
+                    --profile=name               : Select one of several preconfigured profiles.
+                                                   Available profiles: \(profiles.keys).
+                    --jobs=n                     : Total number of fuzzing jobs. This will start a main instance and n-1 worker instances.
+                    --engine=name                : The fuzzing engine to use. Available engines: "mutation" (default), "hybrid", "multi".
+                                                   Only the mutation engine should be regarded stable at this point.
+                    --corpus=name                : The corpus scheduler to use. Available schedulers: "basic" (default), "markov", "postgresql"
+                    --logLevel=level             : The log level to use. Valid values: "verbose", "info", "warning", "error", "fatal" (default: "info").
+                    --maxIterations=n            : Run for the specified number of iterations (default: unlimited).
+                    --maxRuntimeInHours=n        : Run for the specified number of hours (default: unlimited).
+                    --timeout=n                  : Timeout in ms after which to interrupt execution of programs (default depends
+                                                   on the profile). Or provide an interval like --timeout=200,400. The actual
+                                                   timeout in this interval will be determined by the start-up tests.
+                    --minMutationsPerSample=n    : Discard samples from the corpus only after they have been mutated at least this many times (default: 25).
+                    --minCorpusSize=n            : Keep at least this many samples in the corpus regardless of the number of times
+                                                   they have been mutated (default: 1000).
+                    --maxCorpusSize=n            : Only allow the corpus to grow to this many samples. Otherwise the oldest samples
+                                                   will be discarded (default: unlimited).
+                    --markovDropoutRate=p        : Rate at which low edge samples are not selected, in the Markov Corpus Scheduler,
+                                                   per round of sample selection. Used to ensure diversity between fuzzer instances
+                                                   (default: 0.10)
+                    --consecutiveMutations=n     : Perform this many consecutive mutations on each sample (default: 5).
+                    --minimizationLimit=p        : When minimizing interesting programs, keep at least this percentage of the original instructions
+                                                   regardless of whether they are needed to trigger the interesting behaviour or not.
+                                                   See Minimizer.swift for an overview of this feature (default: 0.0).
+                    --storagePath=path           : Path at which to store output files (crashes, corpus, etc.) to.
+                    --resume                     : If storage path exists, import the programs from the corpus/ subdirectory
+                    --overwrite                  : If storage path exists, delete all data in it and start a fresh fuzzing session
+                    --staticCorpus               : In this mode, we will just mutate the existing corpus and look for crashes.
+                                                   No new samples are added to the corpus, regardless of their coverage.
+                                                   This can be used to find different manifestations of bugs and
+                                                   also to try and reproduce a flaky crash or turn it into a deterministic one.
+                    --exportStatistics           : If enabled, fuzzing statistics will be collected and saved to disk in regular intervals.
+                                                   Requires --storagePath.
+                    --statisticsExportInterval=n : Interval in minutes for saving fuzzing statistics to disk (default: 10).
+                                                   Requires --exportStatistics.
+                    --importCorpus=path          : Imports an existing corpus of FuzzIL programs to build the initial corpus for fuzzing.
+                                                   The provided path must point to a directory, and all .fzil files in that directory will be imported.
+                    --corpusImportMode=mode      : The corpus import mode. Possible values:
+                                                             default : Keep samples that are interesting (e.g. those that increase code coverage) and minimize them (default).
+                                                                full : Keep all samples that execute successfully without minimization.
+                                                         unminimized : Keep samples that are interesting but do not minimize them.
 
-    --instanceType=type          : Specifies the instance type for distributed fuzzing over a network.
-                                   In distributed fuzzing, instances form a tree hierarchy, so the possible values are:
-                                               root: Accept connections from other instances.
-                                               leaf: Connect to a parent instance and synchronize with it.
-                                       intermediate: Connect to a parent instance and synchronize with it but also accept incoming connections.
-                                         standalone: Don't participate in distributed fuzzing (default).
-                                   Note: it is *highly* recommended to run distributed fuzzing in an isolated network!
-    --bindTo=host:port           : When running as a root or intermediate node, bind to this address (default: 127.0.0.1:1337).
-    --connectTo=host:port        : When running as a leaf or intermediate node, connect to the parent instance at this address (default: 127.0.0.1:1337).
-    --corpusSyncMode=mode        : How the corpus is synchronized during distributed fuzzing. Possible values:
-                                                  up: newly discovered corpus samples are only sent to parent nodes but
-                                                      not to chjild nodes. This way, the child nodes are forced to generate their
-                                                      own corpus, which may lead to more diverse samples overall. However, parent
-                                                      instances will still have the full corpus.
-                                                down: newly discovered corpus samples are only sent to child nodes but not to
-                                                      parent nodes. This may make sense when importing a corpus in the parent.
-                                      full (default): newly discovered corpus samples are sent in both direction. This is the
-                                                      default behaviour and will generally cause all instances in the network
-                                                      to have very roughly the same corpus.
-                                               none : corpus samples are not shared with any other instances in the network.
-                                   Note: thread workers (--jobs=X) always fully synchronize their corpus.
-    --diagnostics                : Enable saving of programs that failed or timed-out during execution. Also tracks
-                                   executions on the current REPRL instance.
-    --swarmTesting               : Enable Swarm Testing mode. The fuzzer will choose random weights for the code generators per process.
-    --inspect                    : Enable inspection for generated programs. When enabled, additional .fuzzil.history files are written
-                                   to disk for every interesting or crashing program. These describe in detail how the program was generated
-                                   through mutations, code generation, and minimization.
-    --argumentRandomization      : Enable JS engine argument randomization
-    --additionalArguments=args   : Pass additional arguments to the JS engine. If multiple arguments are passed, they should be separated by a comma.
-    --tag=tag                    : Optional string tag associated with this instance which will be stored in the settings.json file as well as in crashing samples.
-                                   This can for example be used to remember the target revision that is being fuzzed.
-    --wasm                       : Enable Wasm CodeGenerators (see WasmCodeGenerators.swift).
-    --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
-    --postgres-url=url           : PostgreSQL connection string for PostgreSQL corpus (e.g., postgresql://user:pass@host:port/db).
-    --disablePostgresSync        : Disable PostgreSQL synchronization even when --corpus=postgresql is selected.
-    --postgresSyncMode=mode      : PostgreSQL synchronization mode. Possible values:
-                                                 generated : pull only per-fuzzer generated corpus seeds (default).
-                                                    shared : pull the shared corpus from PostgreSQL (legacy behavior).
-                                                      push : do not pull any corpus from PostgreSQL, only push local findings.
-    --postgresPushOnly           : Deprecated alias for --postgresSyncMode=push.
-    --validate-before-cache      : Enable program validation before caching in PostgreSQL corpus (default: true).
-    --execution-history-size=n   : Number of recent executions to keep in memory for PostgreSQL corpus (default: 10).
-    --postgres-logging           : Enable PostgreSQL database operation logging.
+                    --instanceType=type          : Specifies the instance type for distributed fuzzing over a network.
+                                                   In distributed fuzzing, instances form a tree hierarchy, so the possible values are:
+                                                               root: Accept connections from other instances.
+                                                               leaf: Connect to a parent instance and synchronize with it.
+                                                       intermediate: Connect to a parent instance and synchronize with it but also accept incoming connections.
+                                                         standalone: Don't participate in distributed fuzzing (default).
+                                                   Note: it is *highly* recommended to run distributed fuzzing in an isolated network!
+                    --bindTo=host:port           : When running as a root or intermediate node, bind to this address (default: 127.0.0.1:1337).
+                    --connectTo=host:port        : When running as a leaf or intermediate node, connect to the parent instance at this address (default: 127.0.0.1:1337).
+                    --corpusSyncMode=mode        : How the corpus is synchronized during distributed fuzzing. Possible values:
+                                                                  up: newly discovered corpus samples are only sent to parent nodes but
+                                                                      not to chjild nodes. This way, the child nodes are forced to generate their
+                                                                      own corpus, which may lead to more diverse samples overall. However, parent
+                                                                      instances will still have the full corpus.
+                                                                down: newly discovered corpus samples are only sent to child nodes but not to
+                                                                      parent nodes. This may make sense when importing a corpus in the parent.
+                                                      full (default): newly discovered corpus samples are sent in both direction. This is the
+                                                                      default behaviour and will generally cause all instances in the network
+                                                                      to have very roughly the same corpus.
+                                                               none : corpus samples are not shared with any other instances in the network.
+                                                   Note: thread workers (--jobs=X) always fully synchronize their corpus.
+                    --diagnostics                : Enable saving of programs that failed or timed-out during execution. Also tracks
+                                                   executions on the current REPRL instance.
+                    --swarmTesting               : Enable Swarm Testing mode. The fuzzer will choose random weights for the code generators per process.
+                    --inspect                    : Enable inspection for generated programs. When enabled, additional .fuzzil.history files are written
+                                                   to disk for every interesting or crashing program. These describe in detail how the program was generated
+                                                   through mutations, code generation, and minimization.
+                    --no-inspect                 : Force inspection off (overrides --inspect and FUZZILLI_ENABLE_INSPECTION).
+                    FUZZILLI_ENABLE_INSPECTION   : If set to 1, true, on, or yes, enables inspection without --inspect (VRIG / compose use this).
+                    --argumentRandomization      : Enable JS engine argument randomization
+                    --additionalArguments=args   : Pass additional arguments to the JS engine. If multiple arguments are passed, they should be separated by a comma.
+                    --tag=tag                    : Optional string tag associated with this instance which will be stored in the settings.json file as well as in crashing samples.
+                                                   This can for example be used to remember the target revision that is being fuzzed.
+                    --wasm                       : Enable Wasm CodeGenerators (see WasmCodeGenerators.swift).
+                    --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
+                    --postgres-url=url           : PostgreSQL connection string for PostgreSQL corpus (e.g., postgresql://user:pass@host:port/db).
+                    --disablePostgresSync        : Disable PostgreSQL synchronization even when --corpus=postgresql is selected.
+                    --postgresSyncMode=mode      : PostgreSQL synchronization mode. Possible values:
+                                                                 generated : pull only per-fuzzer generated corpus seeds (default).
+                                                                    shared : pull the shared corpus from PostgreSQL (legacy behavior).
+                                                                      push : do not pull any corpus from PostgreSQL, only push local findings.
+                    --postgresPushOnly           : Deprecated alias for --postgresSyncMode=push.
+                    --validate-before-cache      : Enable program validation before caching in PostgreSQL corpus (default: true).
+                    --execution-history-size=n   : Number of recent executions to keep in memory for PostgreSQL corpus (default: 10).
+                    --postgres-logging           : Enable PostgreSQL database operation logging.
 
         """)
     exit(0)
@@ -164,7 +187,7 @@ let corpusImportModeName = args["--corpusImportMode"] ?? "default"
 let instanceType = args["--instanceType"] ?? "standalone"
 let corpusSyncMode = args["--corpusSyncMode"] ?? "full"
 let diagnostics = args.has("--diagnostics")
-let inspect = args.has("--inspect")
+let inspect = inspectionEnabled(args: args)
 let swarmTesting = args.has("--swarmTesting")
 let argumentRandomization = args.has("--argumentRandomization")
 let additionalArguments = args["--additionalArguments"] ?? ""

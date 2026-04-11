@@ -180,7 +180,7 @@ public class Fuzzer {
 
     /// State management.
     private var iterations = 0
-    private var iterationOfLastInteratingSample = 0
+    private var iterationOfLastInterestingSample = 0
     private var corpusGenerationStartTime: Date? = nil
 
     /// Currently active corpus import job, if any.
@@ -1307,6 +1307,49 @@ public class Fuzzer {
     public func adjustMutatorWeightsForTimeout() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
         runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
+    }
+
+    private func executeDifferentialIfNeeded(
+        _ execution: Execution, _ program: Program, _ script: String, withTimeout timeout: UInt32
+    ) -> Execution {
+        do {
+            let optPath = config.diffConfig!.getDumpFilename(isOptimized: true)
+            let unoptPath = config.diffConfig!.getDumpFilename(isOptimized: false)
+
+            let optimizedDump = try String(contentsOfFile: optPath, encoding: .utf8)
+
+            if optimizedDump.isEmpty {
+                return execution
+            }
+
+            let unoptExecution = referenceRunner!.run(script, withTimeout: timeout)
+            if unoptExecution.outcome != .succeeded {
+                return unoptExecution
+            }
+
+            let unoptimizedDump = try String(contentsOfFile: unoptPath, encoding: .utf8)
+            let result = DiffExecution.diff(
+                optExec: execution,
+                unoptExec: unoptExecution,
+                optDumpOut: optimizedDump,
+                unoptDumpOut: unoptimizedDump
+            )
+
+            if result.outcome == .differential {
+                logger.error(
+                    """
+                    ================================================================
+                    [DUMPLING]  POTENTIAL DIFFERENTIAL DETECTED
+                    ================================================================
+                    """
+                )
+                logger.error(script)
+            }
+
+            return result
+        } catch {
+            fatalError("Critical failure: Unable to read dump files. Error: \(error)")
+        }
     }
 
     /// A pending corpus import job together with some statistics.

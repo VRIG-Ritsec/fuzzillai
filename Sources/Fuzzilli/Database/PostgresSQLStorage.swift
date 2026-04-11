@@ -545,8 +545,38 @@ public actor PostgresSQLStorage {
         
         // Sort by hash - ensures all workers acquire locks in the same order
         preparedPrograms.sort { $0.hash < $1.hash }
+
+        let batchHashes = Set(preparedPrograms.map { $0.hash })
+        let externalParentHashes = Set(
+            preparedPrograms.compactMap { $0.parentHash }.filter { !batchHashes.contains($0) }
+        )
         
         return try await databasePool.withConnection { connection in
+            var parentsPresentInDatabase = Set<String>()
+            if !externalParentHashes.isEmpty {
+                let inList = externalParentHashes.sorted().map { "'\($0)'" }.joined(separator: ", ")
+                let lookupQuery = PostgresQuery(stringLiteral: "SELECT program_hash FROM program WHERE program_hash IN (\(inList))")
+                let lookupResult = try await connection.query(lookupQuery, logger: self.logger)
+                for row in try await lookupResult.collect() {
+                    let h = try row.decode(String.self)
+                    parentsPresentInDatabase.insert(h)
+                }
+            }
+
+            var droppedParentRefs = 0
+            let rowsForInsert: [PreparedProgram] = preparedPrograms.map { prep in
+                guard let p = prep.parentHash else { return prep }
+                if batchHashes.contains(p) || parentsPresentInDatabase.contains(p) {
+                    return prep
+                }
+                droppedParentRefs += 1
+                return PreparedProgram(hash: prep.hash, input: prep.input, parentHash: nil, programData: prep.programData)
+            }
+
+            if self.enableLogging && droppedParentRefs > 0 {
+                self.logger.info("Cleared parent_program_hash on \(droppedParentRefs) program(s): parent row not in database or this flush batch")
+            }
+
             var programHashes: [String] = []
 
             try await connection.query("BEGIN", logger:self.logger)
@@ -555,7 +585,7 @@ public actor PostgresSQLStorage {
                 var insertedCount = 0
                 var skippedCount = 0
                 
-                for prepared in preparedPrograms {
+                for prepared in rowsForInsert {
                     let programHash = prepared.hash
                     let programInput = prepared.input
                     let mutatorNames = programInput.mutatorNames

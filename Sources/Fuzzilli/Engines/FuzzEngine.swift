@@ -51,45 +51,52 @@ public class FuzzEngine: ComponentBase {
         let execution = fuzzer.execute(program, withTimeout: timeout, purpose: .fuzzing)
 
         switch execution.outcome {
-            case .crashed(let termsig):
-                fuzzer.processCrash(program, withSignal: termsig, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
-                fuzzer.adjustMutatorWeightsForCrash()
-                program.contributors.generatedCrashingSample()
+        case .crashed(let termsig):
+            fuzzer.processCrash(
+                program, withSignal: termsig, withStderr: execution.stderr,
+                withStdout: execution.stdout, origin: .local, withExectime: execution.execTime)
+            fuzzer.adjustMutatorWeightsForCrash()
+            program.contributors.generatedCrashingSample()
 
-            case .succeeded:
-                fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
-                var isInteresting = false
-                if let aspects = fuzzer.evaluator.evaluate(execution) {
-                    if fuzzer.config.enableInspection {
-                        program.comments.add("Program may be interesting due to \(aspects)", at: .footer)
-                        program.comments.add("RUNNER ARGS: \(fuzzer.runner.processArguments.joined(separator: " "))", at: .header)
-                    }
-                    isInteresting = fuzzer.processMaybeInteresting(program, havingAspects: aspects, origin: .local, execution: execution)
+        case .differential:
+            fuzzer.processDifferential(
+                program, withStderr: execution.stderr, withStdout: execution.stdout, origin: .local)
+            program.contributors.generatedDifferentialSample()
+
+        case .succeeded:
+            fuzzer.dispatchEvent(fuzzer.events.ValidProgramFound, data: program)
+            var isInteresting = false
+            if let aspects = fuzzer.evaluator.evaluate(execution) {
+                if fuzzer.config.enableInspection {
+                    program.comments.add("Program may be interesting due to \(aspects)", at: .footer)
+                    program.comments.add(
+                        "RUNNER ARGS: \(fuzzer.runner.processArguments.joined(separator: " "))",
+                        at: .header)
                 }
                 isInteresting = fuzzer.processMaybeInteresting(
-                    program, havingAspects: aspects, origin: .local)
+                    program, havingAspects: aspects, origin: .local, execution: execution)
             }
 
-                if isInteresting {
-                    program.contributors.generatedInterestingSample()
-                    fuzzer.adjustMutatorWeightsForInteresting()
-                } else {
-                    program.contributors.generatedValidSample()
-                    fuzzer.adjustMutatorWeightsForValid()
-                }
+            if isInteresting {
+                program.contributors.generatedInterestingSample()
+                fuzzer.adjustMutatorWeightsForInteresting()
+            } else {
+                program.contributors.generatedValidSample()
+                fuzzer.adjustMutatorWeightsForValid()
+            }
 
-            case .failed(_):
-                if fuzzer.config.enableDiagnostics {
-                    program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
-                }
-                fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
-                fuzzer.adjustMutatorWeightsForInvalid()
-                program.contributors.generatedInvalidSample()
+        case .failed(_):
+            if fuzzer.config.enableDiagnostics {
+                program.comments.add("Stdout:\n" + execution.stdout, at: .footer)
+            }
+            fuzzer.dispatchEvent(fuzzer.events.InvalidProgramFound, data: program)
+            fuzzer.adjustMutatorWeightsForInvalid()
+            program.contributors.generatedInvalidSample()
 
-            case .timedOut:
-                fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
-                fuzzer.adjustMutatorWeightsForTimeout()
-                program.contributors.generatedTimeOutSample()
+        case .timedOut:
+            fuzzer.dispatchEvent(fuzzer.events.TimeOutFound, data: program)
+            fuzzer.adjustMutatorWeightsForTimeout()
+            program.contributors.generatedTimeOutSample()
         }
 
         if fuzzer.config.enableDiagnostics {

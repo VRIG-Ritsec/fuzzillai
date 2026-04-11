@@ -262,6 +262,8 @@ def _corpus_program_detail(program_hash: str) -> dict:
 
 
 def _fuzzer_rows(conn) -> list[dict]:
+    # Live aggregates from base tables (not fuzzer_dashboard MV) so the UI stays correct
+    # when materialized views are stale or refresh_all_stats has not run yet.
     return forward_core._query(
         conn,
         """
@@ -270,21 +272,20 @@ def _fuzzer_rows(conn) -> list[dict]:
             m.status,
             m.created_at AS fuzzer_started,
             m.last_activity,
-            COALESCE(fd.total_programs, 0) AS total_programs,
-            COALESCE(fd.total_executions, 0) AS total_executions,
-            COALESCE(fd.executions_last_hour, 0) AS executions_last_hour,
-            COALESCE(fd.execs_per_second, 0) AS execs_per_second,
-            COALESCE(fd.total_crashes, 0) AS total_crashes,
-            COALESCE(fd.crashes_last_hour, 0) AS crashes_last_hour,
-            COALESCE(fd.new_edges_found, 0) AS new_edges_found,
-            COALESCE(fd.max_coverage, 0) AS max_coverage,
-            COALESCE(fd.avg_coverage, 0) AS avg_coverage,
-            COALESCE(fd.max_edges_found, 0) AS max_edges_found,
+            stats.total_programs,
+            stats.total_executions,
+            stats.executions_last_hour,
+            stats.execs_per_second,
+            stats.total_crashes,
+            stats.crashes_last_hour,
+            stats.new_edges_found,
+            stats.max_coverage,
+            stats.avg_coverage,
+            stats.max_edges_found,
             COALESCE(gq.queued_programs, 0) AS queued_programs,
             gq.oldest_queued_at,
             gq.newest_queued_at
         FROM main m
-        LEFT JOIN fuzzer_dashboard fd ON fd.fuzzer_id = m.fuzzer_id
         LEFT JOIN (
             SELECT
                 target_fuzzer_id,
@@ -294,6 +295,42 @@ def _fuzzer_rows(conn) -> list[dict]:
             FROM generated_program_queue
             GROUP BY target_fuzzer_id
         ) gq ON gq.target_fuzzer_id = m.fuzzer_id
+        LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(COUNT(DISTINCT p.program_hash), 0)::bigint AS total_programs,
+                COALESCE(COUNT(e.execution_id), 0)::bigint AS total_executions,
+                COALESCE(
+                    COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                    0
+                )::bigint AS executions_last_hour,
+                ROUND(
+                    COALESCE(
+                        COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                        0
+                    )::numeric / 3600.0,
+                    2
+                ) AS execs_per_second,
+                COALESCE(COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1), 0)::bigint
+                    AS total_crashes,
+                COALESCE(
+                    COUNT(e.execution_id) FILTER (
+                        WHERE e.execution_outcome_id = 1
+                        AND e.created_at > NOW() - INTERVAL '1 hour'
+                    ),
+                    0
+                )::bigint AS crashes_last_hour,
+                COALESCE(COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE), 0)::bigint
+                    AS new_edges_found,
+                COALESCE(MAX(e.coverage_total), 0::numeric) AS max_coverage,
+                COALESCE(
+                    AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL),
+                    0::numeric
+                ) AS avg_coverage,
+                COALESCE(MAX(e.edges_found), 0)::bigint AS max_edges_found
+            FROM program p
+            LEFT JOIN execution e ON e.program_hash = p.program_hash
+            WHERE p.fuzzer_id = m.fuzzer_id
+        ) stats ON true
         ORDER BY m.fuzzer_id ASC
         """,
     )
@@ -376,33 +413,65 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
             details = forward_core._query_one(
                 conn,
                 """
-                SELECT *
-                FROM (
+                SELECT
+                    m.fuzzer_id,
+                    m.status,
+                    m.created_at AS fuzzer_started,
+                    m.last_activity,
+                    stats.total_programs,
+                    stats.total_executions,
+                    stats.executions_last_hour,
+                    stats.execs_per_second,
+                    stats.total_crashes,
+                    stats.crashes_last_hour,
+                    stats.new_edges_found,
+                    stats.max_coverage,
+                    stats.avg_coverage,
+                    stats.max_edges_found,
+                    COALESCE(gq.queued_programs, 0) AS queued_programs
+                FROM main m
+                LEFT JOIN (
+                    SELECT target_fuzzer_id, COUNT(*) AS queued_programs
+                    FROM generated_program_queue
+                    GROUP BY target_fuzzer_id
+                ) gq ON gq.target_fuzzer_id = m.fuzzer_id
+                LEFT JOIN LATERAL (
                     SELECT
-                        m.fuzzer_id,
-                        m.status,
-                        m.created_at AS fuzzer_started,
-                        m.last_activity,
-                        COALESCE(fd.total_programs, 0) AS total_programs,
-                        COALESCE(fd.total_executions, 0) AS total_executions,
-                        COALESCE(fd.executions_last_hour, 0) AS executions_last_hour,
-                        COALESCE(fd.execs_per_second, 0) AS execs_per_second,
-                        COALESCE(fd.total_crashes, 0) AS total_crashes,
-                        COALESCE(fd.crashes_last_hour, 0) AS crashes_last_hour,
-                        COALESCE(fd.new_edges_found, 0) AS new_edges_found,
-                        COALESCE(fd.max_coverage, 0) AS max_coverage,
-                        COALESCE(fd.avg_coverage, 0) AS avg_coverage,
-                        COALESCE(fd.max_edges_found, 0) AS max_edges_found,
-                        COALESCE(gq.queued_programs, 0) AS queued_programs
-                    FROM main m
-                    LEFT JOIN fuzzer_dashboard fd ON fd.fuzzer_id = m.fuzzer_id
-                    LEFT JOIN (
-                        SELECT target_fuzzer_id, COUNT(*) AS queued_programs
-                        FROM generated_program_queue
-                        GROUP BY target_fuzzer_id
-                    ) gq ON gq.target_fuzzer_id = m.fuzzer_id
-                ) rows
-                WHERE fuzzer_id = %s
+                        COALESCE(COUNT(DISTINCT p.program_hash), 0)::bigint AS total_programs,
+                        COALESCE(COUNT(e.execution_id), 0)::bigint AS total_executions,
+                        COALESCE(
+                            COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                            0
+                        )::bigint AS executions_last_hour,
+                        ROUND(
+                            COALESCE(
+                                COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                                0
+                            )::numeric / 3600.0,
+                            2
+                        ) AS execs_per_second,
+                        COALESCE(COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1), 0)::bigint
+                            AS total_crashes,
+                        COALESCE(
+                            COUNT(e.execution_id) FILTER (
+                                WHERE e.execution_outcome_id = 1
+                                AND e.created_at > NOW() - INTERVAL '1 hour'
+                            ),
+                            0
+                        )::bigint AS crashes_last_hour,
+                        COALESCE(COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE), 0)::bigint
+                            AS new_edges_found,
+                        COALESCE(MAX(e.coverage_total), 0::numeric) AS max_coverage,
+                        COALESCE(
+                            AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL),
+                            0::numeric
+                        ) AS avg_coverage,
+                        COALESCE(MAX(e.edges_found), 0)::bigint AS max_edges_found
+                    FROM program p
+                    LEFT JOIN execution e ON e.program_hash = p.program_hash
+                    WHERE p.fuzzer_id = m.fuzzer_id
+                ) stats ON true
+                WHERE m.fuzzer_id = %s
                 LIMIT 1
                 """,
                 (fuzzer_id,),
@@ -410,9 +479,18 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
             coverage = forward_core._query(
                 conn,
                 """
-                SELECT time_bucket, max_coverage, avg_coverage, max_edges_found, new_edges_count, execution_count
-                FROM coverage_progression
-                WHERE fuzzer_id = %s
+                SELECT
+                    DATE_TRUNC('hour', e.created_at) AS time_bucket,
+                    MAX(e.coverage_total) AS max_coverage,
+                    AVG(e.coverage_total) AS avg_coverage,
+                    MAX(e.edges_found) AS max_edges_found,
+                    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) AS new_edges_count,
+                    COUNT(e.execution_id) AS execution_count
+                FROM execution e
+                JOIN program p ON e.program_hash = p.program_hash
+                WHERE p.fuzzer_id = %s
+                  AND e.coverage_total IS NOT NULL
+                GROUP BY DATE_TRUNC('hour', e.created_at)
                 ORDER BY time_bucket DESC
                 LIMIT 48
                 """,
@@ -443,21 +521,29 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
                 conn,
                 """
                 SELECT
-                    program_hash,
-                    created_at,
-                    source_mutators,
-                    contributors,
-                    execution_count,
-                    max_coverage,
-                    max_edges_found,
-                    new_edges_discovered,
-                    crash_count,
-                    success_count,
-                    timeout_count,
-                    program_size,
-                    last_execution
-                FROM program_coverage_mapping
-                WHERE fuzzer_id = %s
+                    p.program_hash,
+                    p.created_at,
+                    p.source_mutators,
+                    p.contributors,
+                    COUNT(e.execution_id) AS execution_count,
+                    MAX(e.coverage_total) AS max_coverage,
+                    MAX(e.edges_found) AS max_edges_found,
+                    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) AS new_edges_discovered,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) AS crash_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3) AS success_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4) AS timeout_count,
+                    LENGTH(p.program_base64) AS program_size,
+                    MAX(e.created_at) AS last_execution
+                FROM program p
+                LEFT JOIN execution e ON e.program_hash = p.program_hash
+                WHERE p.fuzzer_id = %s
+                GROUP BY
+                    p.fuzzer_id,
+                    p.program_hash,
+                    p.created_at,
+                    p.source_mutators,
+                    p.contributors,
+                    p.program_base64
                 ORDER BY new_edges_discovered DESC, max_coverage DESC NULLS LAST, last_execution DESC NULLS LAST
                 LIMIT 20
                 """,

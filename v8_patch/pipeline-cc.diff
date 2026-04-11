@@ -1,8 +1,8 @@
 diff --git a/src/compiler/pipeline.cc b/src/compiler/pipeline.cc
-index 7a6a69eaf3d..ac5ee2a1ce5 100644
+index 731e618d08a..a0ff75c2c34 100644
 --- a/src/compiler/pipeline.cc
 +++ b/src/compiler/pipeline.cc
-@@ -104,6 +104,7 @@
+@@ -103,6 +103,7 @@
  #include "src/logging/runtime-call-stats-scope.h"
  #include "src/logging/runtime-call-stats.h"
  #include "src/objects/code-kind.h"
@@ -10,31 +10,37 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
  #include "src/objects/shared-function-info.h"
  #include "src/objects/string-inl.h"
  #include "src/tracing/trace-event.h"
-@@ -491,6 +492,9 @@ TurbofanPipelineStatistics* CreatePipelineStatistics(
+@@ -490,6 +491,11 @@ TurbofanPipelineStatistics* CreatePipelineStatistics(
    // Run Turboshaft instruction selection.
    if (!turboshaft_pipeline.PrepareForInstructionSelection()) return false;
    if (!turboshaft_pipeline.SelectInstructions(linkage)) return false;
 +  // Mark instruction selection complete.
-+  turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kInstructionSelection);
-+  cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kInstructionSelection));
++  if (turbofan_pipeline) {
++    turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kInstructionSelection);
++    cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kInstructionSelection));
++  }
    // We can release the graph now.
    turboshaft_data->ClearGraphComponent();
  
-@@ -498,9 +502,13 @@ TurbofanPipelineStatistics* CreatePipelineStatistics(
+@@ -497,9 +503,17 @@ TurbofanPipelineStatistics* CreatePipelineStatistics(
            linkage->GetIncomingDescriptor())) {
      return false;
    }
-+  turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kRegisterAllocation);
-+  cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kRegisterAllocation));
++  if (turbofan_pipeline) {
++    turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kRegisterAllocation);
++    cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kRegisterAllocation));
++  }
    if (!turboshaft_pipeline.AssembleCode(linkage)) {
      return false;
    }
-+  turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kCodeGeneration);
-+  cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kCodeGeneration));
++  if (turbofan_pipeline) {
++    turbofan_pipeline->info()->SetOptimizationBit(OptimizedCompilationInfo::OptimizationBit::kCodeGeneration);
++    cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kCodeGeneration));
++  }
    return true;
  }
-
-@@ -1952,6 +1959,8 @@ bool PipelineImpl::InitializeHeapBroker() {
+ 
+@@ -1948,6 +1962,8 @@ bool PipelineImpl::InitializeHeapBroker() {
    }
  
    RUN_MAYBE_ABORT(HeapBrokerInitializationPhase);
@@ -43,7 +49,7 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
    data->broker()->StopSerializing();
    data->EndPhaseKind();
    return !info()->was_cancelled();
-@@ -1966,10 +1975,14 @@ bool PipelineImpl::CreateGraph(Linkage* linkage) {
+@@ -1962,10 +1978,14 @@ bool PipelineImpl::CreateGraph(Linkage* linkage) {
  
    RUN_MAYBE_ABORT(GraphBuilderPhase, linkage);
    RunPrintAndVerify(GraphBuilderPhase::phase_name(), true);
@@ -58,7 +64,7 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
  
    // Determine the Typer operation flags.
    {
-@@ -2000,37 +2013,52 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
+@@ -1996,37 +2016,52 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
    // Trim the graph before typing to ensure all nodes are typed.
    RUN_MAYBE_ABORT(EarlyGraphTrimmingPhase);
    RunPrintAndVerify(EarlyGraphTrimmingPhase::phase_name(), true);
@@ -112,7 +118,7 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
    }
  
    // Perform simplified lowering. This has to run w/o the Typer decorator,
-@@ -2038,30 +2066,39 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
+@@ -2034,30 +2069,39 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
    // types might even conflict with the representation/truncation logic.
    RUN_MAYBE_ABORT(SimplifiedLoweringPhase, linkage);
    RunPrintAndVerify(SimplifiedLoweringPhase::phase_name(), true);
@@ -155,7 +161,7 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
      }
    }
  #endif  // V8_ENABLE_WEBASSEMBLY
-@@ -2077,12 +2114,15 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
+@@ -2073,12 +2117,15 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
  #ifdef DEBUG
    RUN_MAYBE_ABORT(UntyperPhase);
    RunPrintAndVerify(UntyperPhase::phase_name(), true);
@@ -172,7 +178,7 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
    data->BeginPhaseKind("V8.TFBlockBuilding");
  
    data->InitializeFrameData(linkage->GetIncomingDescriptor());
-@@ -2090,14 +2130,16 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
+@@ -2086,14 +2133,16 @@ bool PipelineImpl::OptimizeTurbofanGraph(Linkage* linkage) {
    // Run early optimization pass.
    RUN_MAYBE_ABORT(EarlyOptimizationPhase);
    RunPrintAndVerify(EarlyOptimizationPhase::phase_name(), true);
@@ -190,3 +196,4 @@ index 7a6a69eaf3d..ac5ee2a1ce5 100644
 +  cov_set_turbofan_optimization_bits(1ull << static_cast<int>(OptimizedCompilationInfo::OptimizationBit::kScheduledGraph));
    return !info()->was_cancelled();
  }
+ 

@@ -30,10 +30,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26-nightly
-      - name: Swift Version
-        run: swift --version
-      # Is it failing to run tests b/c we're overriding
-      # what swift binary to use?
       - name: Setup Swift for Ubuntu
         if: runner.os == 'Linux'
         run: |
@@ -42,6 +38,8 @@ jobs:
           mv swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04 /opt/swift
           rm swift-${SWIFT_VERSION}-RELEASE-ubuntu22.04.tar.gz
           echo "/opt/swift/usr/bin" >> $GITHUB_PATH
+      - name: Swift Version
+        run: swift --version
       - uses: actions/checkout@v4
       - name: Build
         run: swift build -c ${{ matrix.kind }}

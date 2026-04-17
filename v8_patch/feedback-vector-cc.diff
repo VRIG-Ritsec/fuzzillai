@@ -1,5 +1,5 @@
 diff --git a/src/objects/feedback-vector.cc b/src/objects/feedback-vector.cc
-index 1b74062970b..120315c4f2c 100644
+index 8af792bb2f0..b3ca6406c03 100644
 --- a/src/objects/feedback-vector.cc
 +++ b/src/objects/feedback-vector.cc
 @@ -20,6 +20,7 @@
@@ -10,7 +10,7 @@ index 1b74062970b..120315c4f2c 100644
  
  namespace v8::internal {
  
-@@ -635,6 +636,7 @@ bool FeedbackNexus::ConfigureMegamorphic() {
+@@ -637,6 +638,7 @@ bool FeedbackNexus::ConfigureMegamorphic() {
    Tagged<MaybeObject> sentinel = MegamorphicSentinel();
    if (GetFeedback() != sentinel) {
      SetFeedback(sentinel, SKIP_WRITE_BARRIER, kClearedWeakValue);
@@ -18,7 +18,7 @@ index 1b74062970b..120315c4f2c 100644
      return true;
    }
  
-@@ -646,6 +648,7 @@ void FeedbackNexus::ConfigureMegaDOM(const MaybeObjectDirectHandle& handler) {
+@@ -655,6 +657,7 @@ void FeedbackNexus::ConfigureMegaDOM(const MaybeObjectDirectHandle& handler) {
    Tagged<MaybeObject> sentinel = MegaDOMSentinel();
  
    SetFeedback(sentinel, SKIP_WRITE_BARRIER, *handler, UPDATE_WRITE_BARRIER);
@@ -26,7 +26,7 @@ index 1b74062970b..120315c4f2c 100644
  }
  
  bool FeedbackNexus::ConfigureMegamorphic(IcCheckType property_type) {
-@@ -659,6 +662,7 @@ bool FeedbackNexus::ConfigureMegamorphic(IcCheckType property_type) {
+@@ -668,6 +671,7 @@ bool FeedbackNexus::ConfigureMegamorphic(IcCheckType property_type) {
        feedback.first != sentinel || feedback.second != maybe_extra;
    if (update_required) {
      SetFeedback(sentinel, SKIP_WRITE_BARRIER, maybe_extra, SKIP_WRITE_BARRIER);

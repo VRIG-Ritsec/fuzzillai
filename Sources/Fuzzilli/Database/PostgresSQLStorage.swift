@@ -483,8 +483,50 @@ public actor PostgresSQLStorage {
             try await self._storeProgramsBatchImpl(programInputs: programInputs, fuzzerId: fuzzerId)
         }
     }
+
+    /// Adds in-memory ancestor programs to this flush so `parent_program_hash` can reference rows in the same batch.
+    private func expandedBatchIncludingAncestors(programInputs: [ProgramInput], fuzzerId: Int) -> [ProgramInput] {
+        let maxAncestorDepth = 32
+        var expanded = programInputs
+        var knownHashes = Set<String>()
+        for pi in programInputs {
+            if let h = try? DatabaseUtils.calculateProgramHash(program: pi.program) {
+                knownHashes.insert(h)
+            }
+        }
+        var i = 0
+        while i < expanded.count {
+            let pi = expanded[i]
+            var parentOpt = pi.program.parent
+            var depth = 0
+            while let parent = parentOpt, depth < maxAncestorDepth {
+                depth += 1
+                guard let parentHash = try? DatabaseUtils.calculateProgramHash(program: parent) else { break }
+                if knownHashes.contains(parentHash) {
+                    break
+                }
+                guard (try? DatabaseUtils.encodeProgramToBase64(program: parent)) != nil else { break }
+                knownHashes.insert(parentHash)
+                let names = parent.contributors.map { $0.name }
+                let mutatorNames = names.filter { $0.contains("Mutator") }
+                let contributorNames = names.filter { $0.contains("Contributor") }
+                expanded.append(
+                    ProgramInput(
+                        program: parent,
+                        fuzzerId: fuzzerId,
+                        mutatorNames: mutatorNames,
+                        contributorNames: contributorNames
+                    )
+                )
+                parentOpt = parent.parent
+            }
+            i += 1
+        }
+        return expanded
+    }
     
     private func _storeProgramsBatchImpl(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
+        let expandedInputs = expandedBatchIncludingAncestors(programInputs: programInputs, fuzzerId: fuzzerId)
         // Pre-calculate all hashes and sort to ensure consistent lock ordering
         struct PreparedProgram {
             let hash: String
@@ -495,7 +537,7 @@ public actor PostgresSQLStorage {
         
         var preparedPrograms: [PreparedProgram] = []
         
-        for programInput in programInputs {
+        for programInput in expandedInputs {
             let program = programInput.program
             
             // Calculate program hash
@@ -545,8 +587,38 @@ public actor PostgresSQLStorage {
         
         // Sort by hash - ensures all workers acquire locks in the same order
         preparedPrograms.sort { $0.hash < $1.hash }
+
+        let batchHashes = Set(preparedPrograms.map { $0.hash })
+        let externalParentHashes = Set(
+            preparedPrograms.compactMap { $0.parentHash }.filter { !batchHashes.contains($0) }
+        )
         
         return try await databasePool.withConnection { connection in
+            var parentsPresentInDatabase = Set<String>()
+            if !externalParentHashes.isEmpty {
+                let inList = externalParentHashes.sorted().map { "'\($0)'" }.joined(separator: ", ")
+                let lookupQuery = PostgresQuery(stringLiteral: "SELECT program_hash FROM program WHERE program_hash IN (\(inList))")
+                let lookupResult = try await connection.query(lookupQuery, logger: self.logger)
+                for row in try await lookupResult.collect() {
+                    let h = try row.decode(String.self, context: .default)
+                    parentsPresentInDatabase.insert(h)
+                }
+            }
+
+            var droppedParentRefs = 0
+            let rowsForInsert: [PreparedProgram] = preparedPrograms.map { prep in
+                guard let p = prep.parentHash else { return prep }
+                if batchHashes.contains(p) || parentsPresentInDatabase.contains(p) {
+                    return prep
+                }
+                droppedParentRefs += 1
+                return PreparedProgram(hash: prep.hash, input: prep.input, parentHash: nil, programData: prep.programData)
+            }
+
+            if self.enableLogging && droppedParentRefs > 0 {
+                self.logger.info("Cleared parent_program_hash on \(droppedParentRefs) program(s): parent not in batch or database")
+            }
+
             var programHashes: [String] = []
 
             try await connection.query("BEGIN", logger:self.logger)
@@ -555,7 +627,7 @@ public actor PostgresSQLStorage {
                 var insertedCount = 0
                 var skippedCount = 0
                 
-                for prepared in preparedPrograms {
+                for prepared in rowsForInsert {
                     let programHash = prepared.hash
                     let programInput = prepared.input
                     let mutatorNames = programInput.mutatorNames

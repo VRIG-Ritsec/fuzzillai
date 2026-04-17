@@ -165,49 +165,48 @@ def _read_log_source(ref: str, lines: int = 300) -> dict:
 
 
 _PROGRAM_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
+_PROGRAM_HASH_FILTER_RE = re.compile(r"^[a-fA-F0-9]{1,64}$")
 
 
-def _corpus_program_list(fuzzer_id: int | None, limit: int, offset: int) -> list[dict]:
+def _corpus_program_list(fuzzer_id: int | None, limit: int, offset: int, program_hash: str | None = None) -> list[dict]:
     limit = max(1, min(int(limit), 200))
     offset = max(0, min(int(offset), 50_000))
+    hash_filter = (program_hash or "").strip()
+    if hash_filter and not _PROGRAM_HASH_FILTER_RE.match(hash_filter):
+        raise ValueError("invalid program_hash")
+
+    conditions: list[str] = []
+    params: list[object] = []
+    if fuzzer_id is not None:
+        conditions.append("fuzzer_id = %s")
+        params.append(fuzzer_id)
+    if hash_filter:
+        if len(hash_filter) == 64:
+            conditions.append("LOWER(program_hash) = %s")
+            params.append(hash_filter.lower())
+        else:
+            conditions.append("LOWER(program_hash) LIKE %s")
+            params.append(f"{hash_filter.lower()}%")
+
+    sql = """
+        SELECT
+            program_hash,
+            fuzzer_id,
+            inserted_at,
+            created_at,
+            source_mutators,
+            contributors,
+            parent_program_hash
+        FROM program
+    """
+    if conditions:
+        sql += "\nWHERE " + " AND ".join(conditions)
+    sql += "\nORDER BY inserted_at DESC\nLIMIT %s OFFSET %s"
+    params.extend((limit, offset))
+
     conn = forward_core._connect()
     try:
-        if fuzzer_id is not None:
-            return forward_core._query(
-                conn,
-                """
-                SELECT
-                    program_hash,
-                    fuzzer_id,
-                    inserted_at,
-                    created_at,
-                    source_mutators,
-                    contributors,
-                    parent_program_hash
-                FROM program
-                WHERE fuzzer_id = %s
-                ORDER BY inserted_at DESC
-                LIMIT %s OFFSET %s
-                """,
-                (fuzzer_id, limit, offset),
-            )
-        return forward_core._query(
-            conn,
-            """
-            SELECT
-                program_hash,
-                fuzzer_id,
-                inserted_at,
-                created_at,
-                source_mutators,
-                contributors,
-                parent_program_hash
-            FROM program
-            ORDER BY inserted_at DESC
-            LIMIT %s OFFSET %s
-            """,
-            (limit, offset),
-        )
+        return forward_core._query(conn, sql, tuple(params))
     finally:
         conn.close()
 
@@ -262,6 +261,8 @@ def _corpus_program_detail(program_hash: str) -> dict:
 
 
 def _fuzzer_rows(conn) -> list[dict]:
+    # Live aggregates from base tables (not fuzzer_dashboard MV) so the UI stays correct
+    # when materialized views are stale or refresh_all_stats has not run yet.
     return forward_core._query(
         conn,
         """
@@ -270,21 +271,20 @@ def _fuzzer_rows(conn) -> list[dict]:
             m.status,
             m.created_at AS fuzzer_started,
             m.last_activity,
-            COALESCE(fd.total_programs, 0) AS total_programs,
-            COALESCE(fd.total_executions, 0) AS total_executions,
-            COALESCE(fd.executions_last_hour, 0) AS executions_last_hour,
-            COALESCE(fd.execs_per_second, 0) AS execs_per_second,
-            COALESCE(fd.total_crashes, 0) AS total_crashes,
-            COALESCE(fd.crashes_last_hour, 0) AS crashes_last_hour,
-            COALESCE(fd.new_edges_found, 0) AS new_edges_found,
-            COALESCE(fd.max_coverage, 0) AS max_coverage,
-            COALESCE(fd.avg_coverage, 0) AS avg_coverage,
-            COALESCE(fd.max_edges_found, 0) AS max_edges_found,
+            stats.total_programs,
+            stats.total_executions,
+            stats.executions_last_hour,
+            stats.execs_per_second,
+            stats.total_crashes,
+            stats.crashes_last_hour,
+            stats.new_edges_found,
+            stats.max_coverage,
+            stats.avg_coverage,
+            stats.max_edges_found,
             COALESCE(gq.queued_programs, 0) AS queued_programs,
             gq.oldest_queued_at,
             gq.newest_queued_at
         FROM main m
-        LEFT JOIN fuzzer_dashboard fd ON fd.fuzzer_id = m.fuzzer_id
         LEFT JOIN (
             SELECT
                 target_fuzzer_id,
@@ -294,6 +294,42 @@ def _fuzzer_rows(conn) -> list[dict]:
             FROM generated_program_queue
             GROUP BY target_fuzzer_id
         ) gq ON gq.target_fuzzer_id = m.fuzzer_id
+        LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(COUNT(DISTINCT p.program_hash), 0)::bigint AS total_programs,
+                COALESCE(COUNT(e.execution_id), 0)::bigint AS total_executions,
+                COALESCE(
+                    COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                    0
+                )::bigint AS executions_last_hour,
+                ROUND(
+                    COALESCE(
+                        COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                        0
+                    )::numeric / 3600.0,
+                    2
+                ) AS execs_per_second,
+                COALESCE(COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1), 0)::bigint
+                    AS total_crashes,
+                COALESCE(
+                    COUNT(e.execution_id) FILTER (
+                        WHERE e.execution_outcome_id = 1
+                        AND e.created_at > NOW() - INTERVAL '1 hour'
+                    ),
+                    0
+                )::bigint AS crashes_last_hour,
+                COALESCE(COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE), 0)::bigint
+                    AS new_edges_found,
+                COALESCE(MAX(e.coverage_total), 0::numeric) AS max_coverage,
+                COALESCE(
+                    AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL),
+                    0::numeric
+                ) AS avg_coverage,
+                COALESCE(MAX(e.edges_found), 0)::bigint AS max_edges_found
+            FROM program p
+            LEFT JOIN execution e ON e.program_hash = p.program_hash
+            WHERE p.fuzzer_id = m.fuzzer_id
+        ) stats ON true
         ORDER BY m.fuzzer_id ASC
         """,
     )
@@ -336,6 +372,60 @@ def _overview_payload(monitor: forward_core.FuzzerMonitor) -> dict:
                 LIMIT 20
                 """,
             )
+            crash_groups = forward_core._query(
+                conn,
+                """
+                WITH recent AS (
+                    SELECT
+                        e.program_hash,
+                        p.fuzzer_id,
+                        e.created_at,
+                        e.coverage_total,
+                        e.edges_found
+                    FROM execution e
+                    JOIN program p ON p.program_hash = e.program_hash
+                    WHERE e.execution_outcome_id = 1
+                      AND e.created_at > NOW() - INTERVAL '30 days'
+                ),
+                grouped AS (
+                    SELECT
+                        program_hash,
+                        COUNT(*)::bigint AS crash_count,
+                        MIN(created_at) AS first_seen,
+                        MAX(created_at) AS last_seen,
+                        COUNT(DISTINCT fuzzer_id)::bigint AS distinct_fuzzers,
+                        ARRAY_AGG(DISTINCT fuzzer_id ORDER BY fuzzer_id) AS fuzzer_ids,
+                        MAX(coverage_total) AS max_coverage,
+                        MAX(edges_found) AS max_edges_found
+                    FROM recent
+                    GROUP BY program_hash
+                    ORDER BY crash_count DESC, last_seen DESC
+                    LIMIT 30
+                ),
+                latest AS (
+                    SELECT DISTINCT ON (program_hash)
+                        program_hash,
+                        fuzzer_id AS last_fuzzer_id,
+                        created_at AS last_crash_at
+                    FROM recent
+                    ORDER BY program_hash, created_at DESC
+                )
+                SELECT
+                    g.program_hash,
+                    g.crash_count,
+                    g.first_seen,
+                    g.last_seen,
+                    g.distinct_fuzzers,
+                    g.fuzzer_ids,
+                    g.max_coverage,
+                    g.max_edges_found,
+                    l.last_fuzzer_id,
+                    l.last_crash_at
+                FROM grouped g
+                JOIN latest l ON l.program_hash = g.program_hash
+                ORDER BY g.crash_count DESC, g.last_seen DESC
+                """,
+            )
             generated_queue = forward_core._query(
                 conn,
                 """
@@ -354,6 +444,7 @@ def _overview_payload(monitor: forward_core.FuzzerMonitor) -> dict:
             "summary": {},
             "fuzzers": [],
             "recent_crashes": [],
+            "crash_groups": [],
             "generated_queue": [],
         }
 
@@ -362,6 +453,7 @@ def _overview_payload(monitor: forward_core.FuzzerMonitor) -> dict:
         "summary": summary,
         "fuzzers": fuzzers,
         "recent_crashes": recent_crashes,
+        "crash_groups": crash_groups,
         "generated_queue": generated_queue,
     }
 
@@ -376,33 +468,65 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
             details = forward_core._query_one(
                 conn,
                 """
-                SELECT *
-                FROM (
+                SELECT
+                    m.fuzzer_id,
+                    m.status,
+                    m.created_at AS fuzzer_started,
+                    m.last_activity,
+                    stats.total_programs,
+                    stats.total_executions,
+                    stats.executions_last_hour,
+                    stats.execs_per_second,
+                    stats.total_crashes,
+                    stats.crashes_last_hour,
+                    stats.new_edges_found,
+                    stats.max_coverage,
+                    stats.avg_coverage,
+                    stats.max_edges_found,
+                    COALESCE(gq.queued_programs, 0) AS queued_programs
+                FROM main m
+                LEFT JOIN (
+                    SELECT target_fuzzer_id, COUNT(*) AS queued_programs
+                    FROM generated_program_queue
+                    GROUP BY target_fuzzer_id
+                ) gq ON gq.target_fuzzer_id = m.fuzzer_id
+                LEFT JOIN LATERAL (
                     SELECT
-                        m.fuzzer_id,
-                        m.status,
-                        m.created_at AS fuzzer_started,
-                        m.last_activity,
-                        COALESCE(fd.total_programs, 0) AS total_programs,
-                        COALESCE(fd.total_executions, 0) AS total_executions,
-                        COALESCE(fd.executions_last_hour, 0) AS executions_last_hour,
-                        COALESCE(fd.execs_per_second, 0) AS execs_per_second,
-                        COALESCE(fd.total_crashes, 0) AS total_crashes,
-                        COALESCE(fd.crashes_last_hour, 0) AS crashes_last_hour,
-                        COALESCE(fd.new_edges_found, 0) AS new_edges_found,
-                        COALESCE(fd.max_coverage, 0) AS max_coverage,
-                        COALESCE(fd.avg_coverage, 0) AS avg_coverage,
-                        COALESCE(fd.max_edges_found, 0) AS max_edges_found,
-                        COALESCE(gq.queued_programs, 0) AS queued_programs
-                    FROM main m
-                    LEFT JOIN fuzzer_dashboard fd ON fd.fuzzer_id = m.fuzzer_id
-                    LEFT JOIN (
-                        SELECT target_fuzzer_id, COUNT(*) AS queued_programs
-                        FROM generated_program_queue
-                        GROUP BY target_fuzzer_id
-                    ) gq ON gq.target_fuzzer_id = m.fuzzer_id
-                ) rows
-                WHERE fuzzer_id = %s
+                        COALESCE(COUNT(DISTINCT p.program_hash), 0)::bigint AS total_programs,
+                        COALESCE(COUNT(e.execution_id), 0)::bigint AS total_executions,
+                        COALESCE(
+                            COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                            0
+                        )::bigint AS executions_last_hour,
+                        ROUND(
+                            COALESCE(
+                                COUNT(e.execution_id) FILTER (WHERE e.created_at > NOW() - INTERVAL '1 hour'),
+                                0
+                            )::numeric / 3600.0,
+                            2
+                        ) AS execs_per_second,
+                        COALESCE(COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1), 0)::bigint
+                            AS total_crashes,
+                        COALESCE(
+                            COUNT(e.execution_id) FILTER (
+                                WHERE e.execution_outcome_id = 1
+                                AND e.created_at > NOW() - INTERVAL '1 hour'
+                            ),
+                            0
+                        )::bigint AS crashes_last_hour,
+                        COALESCE(COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE), 0)::bigint
+                            AS new_edges_found,
+                        COALESCE(MAX(e.coverage_total), 0::numeric) AS max_coverage,
+                        COALESCE(
+                            AVG(e.coverage_total) FILTER (WHERE e.coverage_total IS NOT NULL),
+                            0::numeric
+                        ) AS avg_coverage,
+                        COALESCE(MAX(e.edges_found), 0)::bigint AS max_edges_found
+                    FROM program p
+                    LEFT JOIN execution e ON e.program_hash = p.program_hash
+                    WHERE p.fuzzer_id = m.fuzzer_id
+                ) stats ON true
+                WHERE m.fuzzer_id = %s
                 LIMIT 1
                 """,
                 (fuzzer_id,),
@@ -410,9 +534,41 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
             coverage = forward_core._query(
                 conn,
                 """
-                SELECT time_bucket, max_coverage, avg_coverage, max_edges_found, new_edges_count, execution_count
-                FROM coverage_progression
-                WHERE fuzzer_id = %s
+                SELECT
+                    DATE_TRUNC('hour', e.created_at) AS time_bucket,
+                    MAX(e.coverage_total) AS max_coverage,
+                    AVG(e.coverage_total) AS avg_coverage,
+                    MAX(e.edges_found) AS max_edges_found,
+                    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) AS new_edges_count,
+                    COUNT(e.execution_id) AS execution_count
+                FROM execution e
+                JOIN program p ON e.program_hash = p.program_hash
+                WHERE p.fuzzer_id = %s
+                  AND e.coverage_total IS NOT NULL
+                GROUP BY DATE_TRUNC('hour', e.created_at)
+                ORDER BY time_bucket DESC
+                LIMIT 48
+                """,
+                (fuzzer_id,),
+            )
+            outcome_breakdown = forward_core._query(
+                conn,
+                """
+                SELECT
+                    DATE_TRUNC('hour', e.created_at) AS time_bucket,
+                    COUNT(e.execution_id)::bigint AS total_executions,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1)::bigint AS crash_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3)::bigint AS success_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4)::bigint AS timeout_count,
+                    COUNT(e.execution_id) FILTER (
+                        WHERE e.execution_outcome_id NOT IN (1, 3, 4)
+                    )::bigint AS other_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE)::bigint AS new_edge_count
+                FROM execution e
+                JOIN program p ON e.program_hash = p.program_hash
+                WHERE p.fuzzer_id = %s
+                  AND e.created_at > NOW() - INTERVAL '48 hours'
+                GROUP BY DATE_TRUNC('hour', e.created_at)
                 ORDER BY time_bucket DESC
                 LIMIT 48
                 """,
@@ -443,21 +599,29 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
                 conn,
                 """
                 SELECT
-                    program_hash,
-                    created_at,
-                    source_mutators,
-                    contributors,
-                    execution_count,
-                    max_coverage,
-                    max_edges_found,
-                    new_edges_discovered,
-                    crash_count,
-                    success_count,
-                    timeout_count,
-                    program_size,
-                    last_execution
-                FROM program_coverage_mapping
-                WHERE fuzzer_id = %s
+                    p.program_hash,
+                    p.created_at,
+                    p.source_mutators,
+                    p.contributors,
+                    COUNT(e.execution_id) AS execution_count,
+                    MAX(e.coverage_total) AS max_coverage,
+                    MAX(e.edges_found) AS max_edges_found,
+                    COUNT(e.execution_id) FILTER (WHERE e.is_new_edge = TRUE) AS new_edges_discovered,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 1) AS crash_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 3) AS success_count,
+                    COUNT(e.execution_id) FILTER (WHERE e.execution_outcome_id = 4) AS timeout_count,
+                    LENGTH(p.program_base64) AS program_size,
+                    MAX(e.created_at) AS last_execution
+                FROM program p
+                LEFT JOIN execution e ON e.program_hash = p.program_hash
+                WHERE p.fuzzer_id = %s
+                GROUP BY
+                    p.fuzzer_id,
+                    p.program_hash,
+                    p.created_at,
+                    p.source_mutators,
+                    p.contributors,
+                    p.program_base64
                 ORDER BY new_edges_discovered DESC, max_coverage DESC NULLS LAST, last_execution DESC NULLS LAST
                 LIMIT 20
                 """,
@@ -482,6 +646,7 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
     return {
         "details": details,
         "coverage": list(reversed(coverage)),
+        "outcome_breakdown": list(reversed(outcome_breakdown)),
         "recent_executions": recent_executions,
         "top_programs": top_programs,
         "queued_programs": queued_programs,
@@ -492,6 +657,7 @@ def _fuzzer_detail_payload(monitor: forward_core.FuzzerMonitor, fuzzer_id: int) 
 def _json_response(handler, code: int, data):
     body = json.dumps(data, default=str).encode("utf-8")
     handler.send_response(code)
+    _send_common_headers(handler)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
@@ -501,6 +667,7 @@ def _json_response(handler, code: int, data):
 def _html_response(handler, code: int, body: str):
     payload = body.encode("utf-8")
     handler.send_response(code)
+    _send_common_headers(handler)
     handler.send_header("Content-Type", "text/html; charset=utf-8")
     handler.send_header("Content-Length", str(len(payload)))
     handler.end_headers()
@@ -522,15 +689,32 @@ def _static_response(handler, path: Path):
 
     payload = path.read_bytes()
     handler.send_response(200)
+    _send_common_headers(handler)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(len(payload)))
     handler.end_headers()
     handler.wfile.write(payload)
 
 
+def _send_common_headers(handler):
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+    handler.send_header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
+    handler.send_header("Access-Control-Allow-Private-Network", "true")
+    handler.send_header("Cross-Origin-Resource-Policy", "cross-origin")
+    handler.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+
 def make_handler(monitor: forward_core.FuzzerMonitor):
     class Handler(BaseHTTPRequestHandler):
         log_message = lambda self, fmt, *args: None
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            _send_common_headers(self)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_GET(self):
             parsed = urlparse(self.path)
@@ -616,6 +800,7 @@ def make_handler(monitor: forward_core.FuzzerMonitor):
 
             if path == "/api/corpus-programs":
                 raw_f = (query.get("fuzzer_id") or [None])[0]
+                program_hash = ((query.get("program_hash") or [""])[0] or "").strip()
                 fuzzer_id = None
                 if raw_f not in (None, ""):
                     try:
@@ -632,7 +817,7 @@ def make_handler(monitor: forward_core.FuzzerMonitor):
                 except ValueError:
                     off = 0
                 try:
-                    rows = _corpus_program_list(fuzzer_id, lim, off)
+                    rows = _corpus_program_list(fuzzer_id, lim, off, program_hash=program_hash)
                 except Exception as exc:
                     _json_response(self, 400, {"error": str(exc)})
                     return

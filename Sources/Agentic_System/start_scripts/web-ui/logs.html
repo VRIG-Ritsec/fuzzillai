@@ -8,7 +8,7 @@
   <style>
     .log-shell {
       display: grid;
-      grid-template-columns: 300px 1fr;
+      grid-template-columns: 320px 1fr;
       gap: 14px;
       min-height: calc(100vh - 220px);
     }
@@ -24,10 +24,13 @@
       top: 0;
       z-index: 2;
       padding: 10px;
+      display: grid;
+      gap: 10px;
       background: var(--panel-2);
       border-bottom: 1px solid var(--border);
     }
-    .log-search input { width: 100%; }
+    .log-search input,
+    .log-search select { width: 100%; }
     .log-item {
       width: 100%;
       text-align: left;
@@ -47,6 +50,15 @@
     }
     .log-item .name { font-weight: 600; font-size: 13px; }
     .log-item .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+    .log-filters {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .log-filters .wide { grid-column: 1 / -1; }
+
     .log-view {
       min-height: 480px;
       max-height: calc(100vh - 220px);
@@ -54,16 +66,39 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       background: #050507;
-      padding: 14px;
+      padding: 0;
     }
     .log-view-inner {
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
       font-family: var(--font-mono);
       font-size: 12px;
       line-height: 1.55;
       color: var(--text);
+    }
+    .log-line {
+      padding: 3px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    .log-line--error {
+      background: rgba(239, 68, 68, 0.08);
+      box-shadow: inset 3px 0 0 rgba(239, 68, 68, 0.6);
+    }
+    .log-line--warn {
+      background: rgba(245, 158, 11, 0.08);
+      box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.6);
+    }
+    .log-line--jump {
+      outline: 1px solid var(--accent);
+      background: rgba(251, 146, 60, 0.12);
+    }
+    .log-status {
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     /* IkaCore BoxRenderer.cli_output + logging_utils ANSI mappings */
@@ -79,7 +114,8 @@
 
     @media (max-width: 960px) {
       .log-shell { grid-template-columns: 1fr; }
-      .log-list { max-height: 240px; }
+      .log-list { max-height: 260px; }
+      .log-filters { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -88,7 +124,7 @@
     <header class="hero">
       <div>
         <h1>AI <span class="accent">Logs</span></h1>
-        <p>IkaCore-style ANSI colors for agent init, tool calls, results, responses, and summarization.</p>
+        <p>IkaCore-style ANSI colors with regex filtering, severity triage, timestamp jump, follow mode, and pause.</p>
       </div>
       <div class="toolbar">
         <nav class="nav" aria-label="Primary">{{NAV}}</nav>
@@ -98,6 +134,14 @@
         <label class="toggle">
           <input type="checkbox" id="autoToggle" checked>
           Auto refresh
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="followToggle" checked>
+          Follow tail
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="pauseToggle">
+          Pause
         </label>
       </div>
     </header>
@@ -122,18 +166,45 @@
         <div class="log-list">
           <div class="log-search">
             <input type="search" id="logFilter" placeholder="Filter log files…">
+            <input type="search" id="regexFilter" placeholder="Regex filter for log lines">
+            <select id="severityFilter">
+              <option value="all">All severities</option>
+              <option value="error">Errors only</option>
+              <option value="warn">Warnings only</option>
+              <option value="failure">Failures only</option>
+            </select>
           </div>
           <div id="logItems"></div>
         </div>
-        <div class="log-view">
-          <pre class="log-view-inner" id="logContent">Choose a log from the list. Content loads only after you select one.</pre>
+        <div>
+          <div class="log-filters">
+            <input class="wide" type="search" id="jumpInput" placeholder="Jump to timestamp or substring in current log">
+            <button type="button" class="btn" id="jumpBtn">Jump</button>
+            <button type="button" class="btn btn--ghost" id="clearFiltersBtn">Clear line filters</button>
+          </div>
+          <div id="logStatus" class="log-status">
+            <span>No log selected.</span>
+          </div>
+          <div class="log-view" id="logView">
+            <div class="log-view-inner" id="logContent">Choose a log from the list. Content loads only after you select one.</div>
+          </div>
         </div>
       </div>
     </section>
   </div>
 
   <script>
-    const state = { auto: true, selectedLog: null, timer: null, logs: [] };
+    const state = {
+      auto: true,
+      follow: true,
+      paused: false,
+      selectedLog: null,
+      timer: null,
+      logs: [],
+      rawContent: "",
+      invalidRegex: "",
+      pendingJump: "",
+    };
 
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     function escapeHtml(v) {
@@ -227,6 +298,44 @@
       document.getElementById("messages").innerHTML = "";
     }
 
+    function syncLocationQuery() {
+      const q = new URLSearchParams(window.location.search);
+      if (state.selectedLog) q.set("id", state.selectedLog);
+      else q.delete("id");
+      const next = `${window.location.pathname}${q.toString() ? `?${q.toString()}` : ""}`;
+      window.history.replaceState({}, "", next);
+    }
+
+    function classifyLine(line) {
+      const lower = line.toLowerCase();
+      const isError = /traceback|exception|fatal|error|failed|crash|sqlstate|panic/.test(lower);
+      const isWarn = /warning|warn|retry|timeout|stalled|stale/.test(lower);
+      const isFailure = /traceback|exception|fatal|error|failed|crash/.test(lower);
+      return {
+        classes: [
+          isError ? "log-line--error" : "",
+          !isError && isWarn ? "log-line--warn" : "",
+        ].filter(Boolean),
+        severity: isError ? "error" : isWarn ? "warn" : "info",
+        failure: isFailure,
+      };
+    }
+
+    function buildRegex() {
+      const raw = document.getElementById("regexFilter").value.trim();
+      if (!raw) {
+        state.invalidRegex = "";
+        return null;
+      }
+      try {
+        state.invalidRegex = "";
+        return new RegExp(raw, "i");
+      } catch (err) {
+        state.invalidRegex = err.message;
+        return null;
+      }
+    }
+
     function updateLogListSelection() {
       document.querySelectorAll("#logItems [data-log-id]").forEach(btn => {
         const on = state.selectedLog && btn.dataset.logId === state.selectedLog;
@@ -247,29 +356,94 @@
       updateLogListSelection();
     }
 
-    function applyFilter() {
+    function applyLogListFilter() {
       const term = document.getElementById("logFilter").value.trim().toLowerCase();
       if (!term) { renderLogItems(state.logs); return; }
       const filtered = state.logs.filter(l => l.label.toLowerCase().includes(term));
       renderLogItems(filtered);
     }
 
+    function renderLogStatus(visibleCount, totalCount) {
+      const linesSel = document.getElementById("logLines");
+      const parts = [];
+      if (state.selectedLog) parts.push(`selected=${state.selectedLog.slice(0, 16)}...`);
+      parts.push(`lines shown=${visibleCount}/${totalCount}`);
+      parts.push(`tail=${linesSel.value === "0" ? "entire file" : `${linesSel.value} lines`}`);
+      parts.push(`follow=${state.follow ? "on" : "off"}`);
+      parts.push(`paused=${state.paused ? "yes" : "no"}`);
+      if (state.invalidRegex) parts.push(`regex error=${state.invalidRegex}`);
+      document.getElementById("logStatus").innerHTML = parts.map(part => `<span>${escapeHtml(part)}</span>`).join("");
+    }
+
+    function scrollToPendingJump() {
+      if (!state.pendingJump) return;
+      const target = document.querySelector(".log-line--jump");
+      if (target) target.scrollIntoView({ block: "center" });
+      state.pendingJump = "";
+    }
+
+    function renderCurrentLogContent() {
+      const content = document.getElementById("logContent");
+      const view = document.getElementById("logView");
+      const severity = document.getElementById("severityFilter").value;
+      const regex = buildRegex();
+      const jumpTerm = document.getElementById("jumpInput").value.trim();
+      const rawLines = state.rawContent ? state.rawContent.split(/\r?\n/) : [];
+      let matchedJump = false;
+      const prevScroll = view.scrollTop;
+      const prevHeight = view.scrollHeight;
+
+      if (state.invalidRegex) {
+        showMessage(`Invalid regex: ${state.invalidRegex}`, true);
+      }
+
+      const rendered = [];
+      for (const line of rawLines) {
+        const meta = classifyLine(line);
+        if (severity === "error" && meta.severity !== "error") continue;
+        if (severity === "warn" && meta.severity !== "warn") continue;
+        if (severity === "failure" && !meta.failure) continue;
+        if (regex && !regex.test(line)) continue;
+        const classes = ["log-line", ...meta.classes];
+        if (!matchedJump && jumpTerm && line.includes(jumpTerm)) {
+          classes.push("log-line--jump");
+          matchedJump = true;
+        }
+        rendered.push(`<div class="${classes.join(" ")}">${ansiToHtml(line || " ")}</div>`);
+      }
+
+      content.innerHTML = rendered.join("") || '<div class="empty" style="padding:14px;">No log lines match the current filters.</div>';
+      renderLogStatus(rendered.length, rawLines.length);
+      if (state.pendingJump || jumpTerm) {
+        scrollToPendingJump();
+        return;
+      }
+      if (state.follow) {
+        view.scrollTop = view.scrollHeight;
+      } else {
+        const delta = view.scrollHeight - prevHeight;
+        view.scrollTop = prevScroll + Math.max(0, delta);
+      }
+    }
+
     async function loadLogList() {
       const data = await fetchJSON("/api/logs");
       state.logs = data.logs || [];
-      applyFilter();
+      applyLogListFilter();
       return state.logs;
     }
 
     async function loadLogContent(logId) {
       state.selectedLog = logId;
+      syncLocationQuery();
       const el = document.getElementById("logContent");
       const linesSel = document.getElementById("logLines");
       linesSel.disabled = false;
-      el.innerHTML = '<span class="muted"><span class="spinner"></span> Loading…</span>';
+      el.innerHTML = '<div class="muted" style="padding:14px;"><span class="spinner"></span> Loading…</div>';
       const lines = linesSel.value;
       const data = await fetchJSON(`/api/logs/content?id=${encodeURIComponent(logId)}&lines=${lines}`);
-      el.innerHTML = ansiToHtml(data.content || "");
+      state.rawContent = data.content || "";
+      renderCurrentLogContent();
       updateLogListSelection();
     }
 
@@ -290,6 +464,7 @@
           document.getElementById("logLines").disabled = true;
           document.getElementById("logContent").textContent =
             "Choose a log from the list. Content loads only after you select one.";
+          renderLogStatus(0, 0);
         }
       } catch (err) {
         showMessage(err.message, true);
@@ -297,8 +472,12 @@
     }
 
     document.getElementById("refreshBtn").addEventListener("click", async () => {
-      try { hideMessage(); await loadLogList(); }
-      catch (err) { showMessage(err.message, true); }
+      try {
+        hideMessage();
+        await loadLogList();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
     });
     document.getElementById("reloadContent").addEventListener("click", () => {
       if (state.selectedLog) loadLogContent(state.selectedLog);
@@ -309,12 +488,48 @@
     document.getElementById("autoToggle").addEventListener("change", (e) => {
       state.auto = e.target.checked;
     });
-    document.getElementById("logFilter").addEventListener("input", applyFilter);
+    document.getElementById("followToggle").addEventListener("change", (e) => {
+      state.follow = e.target.checked;
+    });
+    document.getElementById("pauseToggle").addEventListener("change", (e) => {
+      state.paused = e.target.checked;
+      renderLogStatus(state.rawContent ? state.rawContent.split(/\r?\n/).length : 0, state.rawContent ? state.rawContent.split(/\r?\n/).length : 0);
+    });
+    document.getElementById("logFilter").addEventListener("input", applyLogListFilter);
+    document.getElementById("regexFilter").addEventListener("input", () => {
+      hideMessage();
+      renderCurrentLogContent();
+    });
+    document.getElementById("severityFilter").addEventListener("change", renderCurrentLogContent);
+    document.getElementById("jumpBtn").addEventListener("click", () => {
+      state.pendingJump = document.getElementById("jumpInput").value.trim();
+      renderCurrentLogContent();
+    });
+    document.getElementById("jumpInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        state.pendingJump = document.getElementById("jumpInput").value.trim();
+        renderCurrentLogContent();
+      }
+    });
+    document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+      document.getElementById("regexFilter").value = "";
+      document.getElementById("severityFilter").value = "all";
+      document.getElementById("jumpInput").value = "";
+      state.pendingJump = "";
+      hideMessage();
+      renderCurrentLogContent();
+    });
 
     init();
-    state.timer = setInterval(() => {
+    state.timer = setInterval(async () => {
       if (!state.auto) return;
-      if (state.selectedLog) loadLogContent(state.selectedLog).catch(() => {});
+      try {
+        await loadLogList();
+        if (state.selectedLog && !state.paused) {
+          await loadLogContent(state.selectedLog);
+        }
+      } catch (_) {
+      }
     }, 12000);
   </script>
 </body>

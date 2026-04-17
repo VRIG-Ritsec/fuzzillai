@@ -161,14 +161,19 @@ def run(force_logging: bool = True):
 
     if args.debug:
         system_name = "ebg_crash" if args.mode == "Crash" else "ebg_plateau"
-        log_path = configure_process_logging(system_name, "ethiopian_boiled_egg", logger=logger)
+        log_stem = "EBG_crash" if args.mode == "Crash" else "EBG_plateau"
+        log_path = configure_process_logging(system_name, log_stem, logger=logger)
         logger.info(f"Writing logs to {log_path}")
 
     logger.info("something funny")
     logger.info(f"time: {datetime.now(est_timezone)}")
     logger.info(f"mode: {args.mode}  fuzzer_id: {args.fuzzer_id}  crash_hash: {args.crash_hash}")
 
-    errors, warnings = collect_runtime_preflight(check_debugger=(args.mode == "Plateau"))
+    warn_only_vars: tuple[str, ...] = ("D8_PATH",) if args.mode == "Crash" else ()
+    errors, warnings = collect_runtime_preflight(
+        check_debugger=(args.mode == "Plateau"),
+        warn_only_vars=warn_only_vars,
+    )
     for warning in warnings:
         logger.warning(f"Runtime preflight warning: {warning}")
     if errors:

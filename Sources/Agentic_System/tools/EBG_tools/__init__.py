@@ -47,9 +47,11 @@ from .execution import (
     trace_v8_analysis,
     list_v8_trace_options,
     write_and_execute_js,
+    minimize_crash_flags,
     trace_v8_analysis_tool,
     list_v8_trace_options_tool,
     write_and_execute_js_tool,
+    minimize_crash_flags_tool,
 )
 from .debug import (
     read_file_tool,
@@ -92,6 +94,7 @@ __all__ = [
     "trace_v8_analysis",
     "list_v8_trace_options",
     "write_and_execute_js",
+    "minimize_crash_flags",
     "db_query_tool",
     "db_list_programs_tool",
     "db_resolve_fuzzer_id_tool",
@@ -113,6 +116,7 @@ __all__ = [
     "trace_v8_analysis_tool",
     "list_v8_trace_options_tool",
     "write_and_execute_js_tool",
+    "minimize_crash_flags_tool",
     "read_file_tool",
     "start_mi_debug_session_tool",
     "stop_mi_debug_session_tool",

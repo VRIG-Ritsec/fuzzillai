@@ -18,7 +18,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_1:/home/app/Corpus
-      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -54,7 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_2:/home/app/Corpus
-      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -90,7 +90,7 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_3:/home/app/Corpus
-      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -126,7 +126,403 @@ services:
         condition: service_healthy
     volumes:
       - fuzzer_data_4:/home/app/Corpus
-      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild:/home/app/fuzzbuild:ro
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 5 - Fuzzilli Container
+  fuzzer-worker-5:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-5
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-5
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_5:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 6 - Fuzzilli Container
+  fuzzer-worker-6:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-6
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-6
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_6:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 7 - Fuzzilli Container
+  fuzzer-worker-7:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-7
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-7
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_7:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 8 - Fuzzilli Container
+  fuzzer-worker-8:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-8
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-8
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_8:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 9 - Fuzzilli Container
+  fuzzer-worker-9:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-9
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-9
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_9:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 10 - Fuzzilli Container
+  fuzzer-worker-10:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-10
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-10
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_10:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 11 - Fuzzilli Container
+  fuzzer-worker-11:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-11
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-11
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_11:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 12 - Fuzzilli Container
+  fuzzer-worker-12:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-12
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-12
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_12:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 13 - Fuzzilli Container
+  fuzzer-worker-13:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-13
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-13
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_13:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 14 - Fuzzilli Container
+  fuzzer-worker-14:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-14
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-14
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_14:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fuzzing-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 1G
+
+
+  # Worker 15 - Fuzzilli Container
+  fuzzer-worker-15:
+    build:
+      context: /mnt/vdc/fuzzillai
+      dockerfile: Cloud/VRIG/Dockerfile.distributed
+    container_name: fuzzer-worker-15
+    environment:
+      - POSTGRES_URL=postgresql://fuzzilli:fuzzilli123@postgres-master:5432/fuzzilli_master
+      - FUZZER_INSTANCE_NAME=fuzzer-dev-15
+      - TIMEOUT=2500
+      - MIN_MUTATIONS_PER_SAMPLE=25
+      - DEBUG_LOGGING=false
+      - FUZZILLI_EXTRA_ARGS=
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+    volumes:
+      - fuzzer_data_15:/home/app/Corpus
+      - /mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/:/home/app/fuzzbuild:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f FuzzilliCli || exit 1"]
@@ -149,3 +545,14 @@ volumes:
   fuzzer_data_2:
   fuzzer_data_3:
   fuzzer_data_4:
+  fuzzer_data_5:
+  fuzzer_data_6:
+  fuzzer_data_7:
+  fuzzer_data_8:
+  fuzzer_data_9:
+  fuzzer_data_10:
+  fuzzer_data_11:
+  fuzzer_data_12:
+  fuzzer_data_13:
+  fuzzer_data_14:
+  fuzzer_data_15:

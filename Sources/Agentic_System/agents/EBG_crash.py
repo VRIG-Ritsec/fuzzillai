@@ -21,6 +21,7 @@ from tools.EBG_tools import (
     base64_program_to_js_tool,
     db_get_crash_program_as_js_tool,
     db_query_tool,
+    db_store_generated_program_tool,
     db_list_programs_tool,
     db_get_fuzzer_performance_summary_tool,
     db_list_fuzzers_tool,
@@ -35,6 +36,7 @@ from tools.EBG_tools import (
     create_generate_folder_tool,
     trace_v8_analysis_tool,
     list_v8_trace_options_tool,
+    minimize_crash_flags_tool,
     get_program_js_from_hash_tool,
     start_mi_debug_session_tool,
     stop_mi_debug_session_tool,
@@ -79,8 +81,9 @@ import pytz
 from agent_logging import configure_process_logging
 
 # Default to OpenAI GPT-5 models. IkaCore routes these through the Responses API.
-MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
-WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5-mini")
+MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4-mini")
+WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5.4-mini")
+ROOT_MODEL = os.environ.get("EBG_ROOT_MODEL", "gpt-5.4")
 API_URL = os.environ.get("EBG_API_URL", "https://api.openai.com/v1/responses")
 
 
@@ -88,7 +91,7 @@ logger = logging.getLogger("boiled_eggs")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 logger.propagate = False
-logger.disabled = True
+logger.disabled = False
 est_timezone = pytz.timezone("America/New_York")
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -199,6 +202,7 @@ class EBG_Crash(Agent):
                 trace_v8_analysis_tool,
                 get_program_js_from_hash_tool,
                 read_from_generate_folder_tool,
+                write_to_generate_folder_tool,
                 list_generate_folder_tool,
                 start_mi_debug_session_tool,
                 stop_mi_debug_session_tool,
@@ -229,7 +233,21 @@ class EBG_Crash(Agent):
             description="L2 Worker responsible for generating JavaScript program seeds from a crash PoC",
             prompt=self.get_prompt("JS_generator.txt"),
             system_prompt="You are JSGenerator.",
-            tools=[],
+            tools=[
+                db_store_generated_program_tool,
+                db_query_tool,
+                db_list_programs_tool,
+                execute_javascript_program_tool,
+                list_d8_flags_tool,
+                list_v8_trace_options_tool,
+                trace_v8_analysis_tool,
+                get_program_js_from_hash_tool,
+                read_from_generate_folder_tool,
+                write_to_generate_folder_tool,
+                delete_files_from_generate_folder_tool,
+                list_generate_folder_tool,
+                create_generate_folder_tool,
+            ],
             model_id=WORKER_MODEL,
             api_key=self.api_key,
             maxsteps=30,
@@ -248,6 +266,7 @@ class EBG_Crash(Agent):
                 execute_javascript_program_tool,
                 list_d8_flags_tool,
                 list_v8_trace_options_tool,
+                minimize_crash_flags_tool,
                 trace_v8_analysis_tool,
                 read_from_generate_folder_tool,
                 list_generate_folder_tool,
@@ -273,7 +292,10 @@ class EBG_Crash(Agent):
                 list_v8_trace_options_tool,
                 trace_v8_analysis_tool,
                 read_from_generate_folder_tool,
+                write_to_generate_folder_tool,
+                delete_files_from_generate_folder_tool,
                 list_generate_folder_tool,
+                create_generate_folder_tool,
             ],
             model_id=MANAGER_MODEL,
             api_key=self.api_key,
@@ -293,7 +315,7 @@ class EBG_Crash(Agent):
             prompt=root_manager_prompt,
             system_prompt="You are RootManager.",
             tools=[],
-            model_id=MANAGER_MODEL,
+            model_id=ROOT_MODEL,
             api_key=self.api_key,
             subagents=root_managed,
             maxsteps=30,
@@ -328,8 +350,9 @@ class EBG_Crash(Agent):
 def main():
     parser = argparse.ArgumentParser(description="Run EBG Crash system for a specific crash program hash")
     parser.add_argument("--crash_program_hash", required=False, help="Program hash for the crashing corpus entry")
+    parser.add_argument("--debug", action="store_true", default=True, help="Enable debug logging (default: on)")
+    parser.add_argument("--no-debug", dest="debug", action="store_false", help="Disable debug logging")
     args = parser.parse_args()
-    args.debug = True
 
     if args.debug:
         log_path = configure_process_logging("ebg_crash", "EBG_crash", logger=logger)

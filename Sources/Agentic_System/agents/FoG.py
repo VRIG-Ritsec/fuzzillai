@@ -69,7 +69,8 @@ from agent_logging import configure_process_logging
 sys.path.append(str(Path(__file__).parent.parent))
 
 WORKER_MODEL = os.environ.get("FOG_WORKER_MODEL", "gpt-5.4-mini")
-MANAGER_MODEL = os.environ.get("FOG_MANAGER_MODEL", "gpt-5.4")
+MANAGER_MODEL = os.environ.get("FOG_MANAGER_MODEL", "gpt-5.4-mini")
+ROOT_MODEL = os.environ.get("FOG_ROOT_MODEL", "gpt-5.4")
 logger = logging.getLogger("fog")
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
@@ -295,7 +296,7 @@ class Father(Agent):
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
             ],
-            model_id=MANAGER_MODEL,
+            model_id=ROOT_MODEL,
             api_key=self.api_key,
             subagents=[self.agents['code_analyzer'], self.agents['program_builder'], self.agents['pick_section']],
             maxsteps=30,

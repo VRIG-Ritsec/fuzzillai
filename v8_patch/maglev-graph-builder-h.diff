@@ -1,8 +1,8 @@
 diff --git a/src/maglev/maglev-graph-builder.h b/src/maglev/maglev-graph-builder.h
-index 96e4a82464c..ee30d296288 100644
+index 58cd5709a7c..2890ffe0488 100644
 --- a/src/maglev/maglev-graph-builder.h
 +++ b/src/maglev/maglev-graph-builder.h
-@@ -38,6 +38,7 @@
+@@ -40,6 +40,7 @@
  #include "src/objects/bytecode-array.h"
  #include "src/objects/elements-kind.h"
  #include "src/objects/string.h"
@@ -10,21 +10,24 @@ index 96e4a82464c..ee30d296288 100644
  
  namespace v8 {
  namespace internal {
-@@ -1863,13 +1864,17 @@ class MaglevGraphBuilder {
+@@ -1894,13 +1895,17 @@ class MaglevGraphBuilder {
      return compilation_unit_->feedback();
    }
    const FeedbackNexus FeedbackNexusForOperand(int slot_operand_index) const {
 -    return FeedbackNexus(feedback().object(),
+-                         GetSlotOperand(slot_operand_index),
+-                         broker()->feedback_nexus_config());
 +    FeedbackNexus nexus = FeedbackNexus(feedback().object(),
-                          GetSlotOperand(slot_operand_index),
-                          broker()->feedback_nexus_config());
++                          GetSlotOperand(slot_operand_index),
++                          broker()->feedback_nexus_config());
 +    cov_add_feedback_nexus(&nexus);
 +    return nexus;
    }
    const FeedbackNexus FeedbackNexusForSlot(FeedbackSlot slot) const {
 -    return FeedbackNexus(feedback().object(), slot,
+-                         broker()->feedback_nexus_config());
 +    FeedbackNexus nexus = FeedbackNexus(feedback().object(), slot,
-                          broker()->feedback_nexus_config());
++                          broker()->feedback_nexus_config());
 +    cov_add_feedback_nexus(&nexus);
 +    return nexus;
    }

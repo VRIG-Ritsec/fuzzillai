@@ -1,9 +1,12 @@
 """
-Execution tools: trace_v8_analysis, list_v8_trace_options, write_and_execute_js.
+Execution tools: trace_v8_analysis, list_v8_trace_options, write_and_execute_js,
+and crash-flag minimization helpers.
 """
 
 import os
 import json
+import math
+import re
 from pathlib import Path
 
 from IkaCore.tools import IkaTools
@@ -131,6 +134,29 @@ V8_AVAILABLE_FLAGS = [
     "--trace-regexp-bytecodes", "--trace-regexp-parser", "--trace-regexp-tier-up",
     "--trace-serializer", "--trace-deserialization", "--profile-deserialization"
 ]
+
+DEFAULT_CRASH_TRIAGE_FLAGS = [
+    "--expose-gc",
+    "--expose-externalize-string",
+    "--omit-quit",
+    "--allow-natives-syntax",
+    "--fuzzing",
+    "--jit-fuzzing",
+    "--future",
+    "--harmony",
+    "--experimental-fuzzing",
+    "--js-staging",
+    "--wasm-staging",
+    "--wasm-fast-api",
+    "--expose-fast-api",
+    "--wasm-test-streaming",
+]
+
+DEFAULT_CRASH_SIGNATURES = [
+    "Bytecode mismatch",
+]
+
+DEFAULT_CRASH_RETURNCODES = [134, 139, 6, -6, -11]
 
 
 def _normalize_runtime_output_dir(requested_path: str | None, default_folder: str) -> str:
@@ -334,6 +360,116 @@ def write_and_execute_js(js_code: str, file_name: str = None, d8_flags: str = ""
         return json.dumps({"error": f"Failed to write or execute JS: {str(e)}"}, indent=2)
 
 
+def _matches_crash_signature(
+    result,
+    crash_signatures: list[str] | None = None,
+    expected_return_codes: list[int] | None = None,
+) -> bool:
+    output = f"{result.stdout}\n{result.stderr}"
+    if crash_signatures:
+        for pattern in crash_signatures:
+            if not pattern:
+                continue
+            try:
+                if re.search(pattern, output, re.MULTILINE):
+                    return True
+            except re.error:
+                if pattern in output:
+                    return True
+    return result.returncode in set(expected_return_codes or [])
+
+
+def _serialize_d8_result(result, flags: list[str]) -> dict:
+    return {
+        "flags_used": list(flags),
+        "return_code": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+
+
+def minimize_crash_flags(
+    js_path: str,
+    candidate_flags: list[str] | None = None,
+    crash_signatures: list[str] | None = None,
+    expected_return_codes: list[int] | None = None,
+    timeout_seconds: int = 60,
+) -> str:
+    flags = list(dict.fromkeys(candidate_flags or DEFAULT_CRASH_TRIAGE_FLAGS))
+    crash_signatures = crash_signatures or DEFAULT_CRASH_SIGNATURES
+    expected_return_codes = expected_return_codes or DEFAULT_CRASH_RETURNCODES
+
+    baseline = run_d8(js_path, flags=flags, timeout=timeout_seconds)
+    baseline_reproduces = _matches_crash_signature(
+        baseline,
+        crash_signatures=crash_signatures,
+        expected_return_codes=expected_return_codes,
+    )
+
+    payload = {
+        "js_path": str(Path(js_path).expanduser()),
+        "candidate_flags": flags,
+        "crash_signatures": crash_signatures,
+        "expected_return_codes": expected_return_codes,
+        "baseline_reproduces": baseline_reproduces,
+        "baseline_result": _serialize_d8_result(baseline, flags),
+    }
+
+    if not baseline_reproduces:
+        payload["error"] = "Crash did not reproduce with the full candidate flag set"
+        payload["minimal_flags"] = []
+        payload["attempt_log"] = []
+        return json.dumps(payload, default=json_serial)
+
+    current = list(flags)
+    attempt_log: list[dict] = []
+    granularity = 2
+
+    while current:
+        subset_size = max(1, math.ceil(len(current) / granularity))
+        removed_chunk = False
+
+        for start in range(0, len(current), subset_size):
+            complement = current[:start] + current[start + subset_size :]
+            result = run_d8(js_path, flags=complement, timeout=timeout_seconds)
+            reproduces = _matches_crash_signature(
+                result,
+                crash_signatures=crash_signatures,
+                expected_return_codes=expected_return_codes,
+            )
+            attempt_log.append(
+                {
+                    "dropped_flags": current[start : start + subset_size],
+                    "trial_flags": complement,
+                    "return_code": result.returncode,
+                    "reproduces": reproduces,
+                }
+            )
+            if reproduces:
+                current = complement
+                granularity = max(2, granularity - 1)
+                removed_chunk = True
+                break
+
+        if removed_chunk:
+            continue
+        if granularity >= len(current):
+            break
+        granularity = min(len(current), granularity * 2)
+
+    final_result = run_d8(js_path, flags=current, timeout=timeout_seconds)
+    payload["minimal_flags"] = current
+    payload["dropped_flags"] = [flag for flag in flags if flag not in current]
+    payload["attempt_log"] = attempt_log
+    payload["final_reproduces"] = _matches_crash_signature(
+        final_result,
+        crash_signatures=crash_signatures,
+        expected_return_codes=expected_return_codes,
+    )
+    payload["final_result"] = _serialize_d8_result(final_result, current)
+    return json.dumps(payload, default=json_serial)
+
+
 trace_v8_analysis_tool = IkaTools(
     name="trace_v8_analysis",
     description="Run V8 tracing on a program by hash. Fetches program from DB, converts to JS, runs d8 with trace presets (tiering, turbofan, maglev, ignition, gc, ic_maps, etc.) or custom flags. Use list_v8_trace_options first to see presets.",
@@ -374,5 +510,42 @@ write_and_execute_js_tool = IkaTools(
         js_code=x["js_code"],
         file_name=x.get("file_name"),
         d8_flags=x.get("d8_flags", ""),
+    ),
+)
+
+minimize_crash_flags_tool = IkaTools(
+    name="minimize_crash_flags",
+    description=(
+        "Run a delta-debugging / binary-search-style flag minimization pass against a crash JS file "
+        "to find the smallest reproducing d8 flag subset. Use this during initial crash triage."
+    ),
+    parameters={
+        "js_path": {"type": "string", "description": "Path to the crash JS file to execute", "required": True},
+        "candidate_flags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Candidate d8 flags to minimize. Defaults to the standard Fuzzilli crash-triage flag set.",
+            "required": False,
+        },
+        "crash_signatures": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Regex or substring signatures that count as reproducing the crash, e.g. Bytecode mismatch.",
+            "required": False,
+        },
+        "expected_return_codes": {
+            "type": "array",
+            "items": {"type": "number"},
+            "description": "Return codes that also count as a crash if signatures are absent.",
+            "required": False,
+        },
+        "timeout_seconds": {"type": "number", "description": "Per-run timeout in seconds", "required": False},
+    },
+    execute_function=lambda x: minimize_crash_flags(
+        js_path=x["js_path"],
+        candidate_flags=x.get("candidate_flags"),
+        crash_signatures=x.get("crash_signatures"),
+        expected_return_codes=x.get("expected_return_codes"),
+        timeout_seconds=int(x.get("timeout_seconds", 60)),
     ),
 )

@@ -38,6 +38,16 @@ For every candidate variant marked valid, you must include one trace_v8_analysis
 - return code
 - stderr/stdout crash evidence
 
+When you call `JSGenerator`, require it to:
+- save every generated candidate into the generate folder via `create_generate_folder` / `write_to_generate_folder`
+- return the exact `file_path` for every generated candidate
+- store validated candidates via `db_store_generated_program` whenever a target fuzzer id is available or can be resolved
+
+When validating a candidate:
+- ALWAYS execute the exact `file_path` returned by `write_to_generate_folder`
+- NEVER invent placeholder paths such as `/tmp/variant1.js`
+- If JSGenerator returns only `js_code` and no concrete file path, you MUST materialize it yourself with `write_to_generate_folder` first, then execute the returned `file_path`
+
 Only call `Debugger` after you have a concrete JS artifact path and a specific hypothesis to test.
 Do not run debugger loops when there is no reproducible crash signal.
 
@@ -50,6 +60,11 @@ that reach the same crashing code. Then perform STAGE 2.
 Using `JSGenerator` and `Debugger`, create program(s) that crash in a dissimilar manner to original 
 crashing program. Save crashing programs into crashes/ directory using the original crash's name
 + '_variant_#' as an identifier. If there are multiple variants, increment the '#' in the identifier.
+
+For every dissimilar candidate you attempt to validate:
+- prefer the generate-folder artifact path first
+- only save into `crashes/` after the candidate has concrete trace-backed crash evidence
+- include the concrete `file_path` you executed in your final summary
 
 If debugging evidence shows "inferior exited" / "no stack" / "no registers", stop repeating the same
 debugger commands and return a failure reason with next required inputs.

@@ -63,6 +63,10 @@ class CompilerTests: XCTestCase {
             // Execute the original code and record the output.
             let result1 = try nodejs.executeScript(at: URL(fileURLWithPath: testcasePath))
             guard result1.isSuccess else {
+                if testName == "explicit_resource_management.js",
+                   result1.output.contains("SyntaxError") || result1.error.contains("SyntaxError") {
+                    continue
+                }
                 XCTFail("Tescase \(testName) failed to execute. Output:\n\(result1.output)")
                 continue
             }

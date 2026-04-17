@@ -58,6 +58,13 @@ func GetJavaScriptExecutorOrSkipTest(type: JavaScriptExecutor.ExecutorType, with
     guard let runner = JavaScriptExecutor(type: type, withArguments: args) else {
         throw XCTSkip("Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable).")
     }
+    if !args.isEmpty {
+        let probeResult = try runner.executeScript("", withTimeout: 5)
+        let diagnostics = probeResult.output + probeResult.error
+        if probeResult.isFailure && diagnostics.contains("bad option") {
+            throw XCTSkip("The selected JavaScript shell does not support the requested test flags: \(args.joined(separator: " "))")
+        }
+    }
     return runner
 }
 
@@ -84,4 +91,3 @@ func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (Program
 func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> ()) -> String {
     return buildAndLiftProgram(withLiftingOptions: [], buildFunc: buildFunc)
 }
-

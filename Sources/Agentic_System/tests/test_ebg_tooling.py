@@ -377,26 +377,68 @@ class TestEBGTooling(unittest.TestCase):
             shared_tools.MI_CONTROLLER = None
 
     def test_trace_v8_analysis_writes_js_and_turbo_output_under_runtime_data(self):
-        trace_dir = Path(db.TEMP_FUZZIL_PATH).parent / "trace_v8_test"
-        trace_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trace_dir = Path(temp_dir) / "trace_v8_test"
+            trace_dir.mkdir(parents=True, exist_ok=True)
 
-        def fake_run_d8(js_path, flags=None, timeout=90):
-            self.assertTrue(str(Path(js_path).resolve()).startswith(str(trace_dir.resolve())))
-            turbo_flag = next(flag for flag in flags if flag.startswith("--trace-turbo-path="))
-            turbo_dir = Path(turbo_flag.split("=", 1)[1])
-            self.assertTrue(str(turbo_dir.resolve()).startswith(str(trace_dir.resolve())))
-            turbo_dir.mkdir(parents=True, exist_ok=True)
-            (turbo_dir / "turbo-test.json").write_text("{\"ok\":true}")
-            return subprocess.CompletedProcess(args=[js_path], returncode=0, stdout="trace-ok", stderr="")
+            def fake_run_d8(js_path, flags=None, timeout=90):
+                self.assertTrue(str(Path(js_path).resolve()).startswith(str(trace_dir.resolve())))
+                turbo_flag = next(flag for flag in flags if flag.startswith("--trace-turbo-path="))
+                turbo_dir = Path(turbo_flag.split("=", 1)[1])
+                self.assertTrue(str(turbo_dir.resolve()).startswith(str(trace_dir.resolve())))
+                turbo_dir.mkdir(parents=True, exist_ok=True)
+                (turbo_dir / "turbo-test.json").write_text("{\"ok\":true}")
+                return subprocess.CompletedProcess(args=[js_path], returncode=0, stdout="trace-ok", stderr="")
 
-        with patch.object(execution, "fetch_program_js_from_db", return_value="print(1);\n"), patch.object(
-            execution, "_get_varianal_folder", return_value=str(trace_dir)
-        ), patch.object(execution, "run_d8", side_effect=fake_run_d8):
-            raw = json.loads(execution.trace_v8_analysis("deadbeef"))
+            with patch.object(execution, "fetch_program_js_from_db", return_value="print(1);\n"), patch.object(
+                execution, "_get_varianal_folder", return_value=str(trace_dir)
+            ), patch.object(execution, "run_d8", side_effect=fake_run_d8):
+                raw = json.loads(execution.trace_v8_analysis("deadbeef"))
 
-        self.assertEqual(raw["js_file"], str((trace_dir / "deadbeef.js").resolve()))
-        self.assertIn("turbo-test.json", raw["turbo_ir_files"])
-        self.assertEqual(raw["stdout"], "trace-ok")
+            self.assertEqual(raw["js_file"], str((trace_dir / "deadbeef.js").resolve()))
+            self.assertIn("turbo-test.json", raw["turbo_ir_files"])
+            self.assertEqual(raw["stdout"], "trace-ok")
+
+    def test_minimize_crash_flags_finds_smallest_reproducing_subset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            js_path = Path(temp_dir) / "crash.js"
+            js_path.write_text("print(1);\n")
+
+            required_flags = {"--need-a", "--need-c"}
+
+            def fake_run_d8(js_file, flags=None, timeout=90):
+                flags = flags or []
+                reproduces = required_flags.issubset(set(flags))
+                if reproduces:
+                    return subprocess.CompletedProcess(
+                        args=[js_file, *flags],
+                        returncode=-6,
+                        stdout="",
+                        stderr="Bytecode mismatch at offset 48\n",
+                    )
+                return subprocess.CompletedProcess(
+                    args=[js_file, *flags],
+                    returncode=0,
+                    stdout="ok",
+                    stderr="",
+                )
+
+            with patch.object(execution, "run_d8", side_effect=fake_run_d8):
+                raw = json.loads(
+                    execution.minimize_crash_flags(
+                        js_path=str(js_path),
+                        candidate_flags=["--need-a", "--drop-b", "--need-c", "--drop-d"],
+                        crash_signatures=["Bytecode mismatch"],
+                        expected_return_codes=[-6],
+                        timeout_seconds=10,
+                    )
+                )
+
+        self.assertTrue(raw["baseline_reproduces"])
+        self.assertTrue(raw["final_reproduces"])
+        self.assertEqual(raw["minimal_flags"], ["--need-a", "--need-c"])
+        self.assertEqual(set(raw["dropped_flags"]), {"--drop-b", "--drop-d"})
+        self.assertEqual(raw["final_result"]["return_code"], -6)
 
 
 if __name__ == "__main__":

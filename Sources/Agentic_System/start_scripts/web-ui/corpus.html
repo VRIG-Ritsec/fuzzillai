@@ -15,6 +15,7 @@
     }
     .filters label { color: var(--muted); font-size: 12px; }
     .filters input { width: 120px; }
+    #hashFilter { width: min(100%, 420px); flex: 1 1 360px; }
 
     .pager {
       display: flex;
@@ -28,7 +29,7 @@
     .meta {
       color: var(--muted);
       font-size: 12px;
-      max-height: 160px;
+      max-height: 200px;
       overflow: auto;
       white-space: pre-wrap;
       padding: 10px 12px;
@@ -37,7 +38,14 @@
       border-radius: 10px;
     }
 
-    #jsView {
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .code-view {
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
@@ -53,6 +61,70 @@
       margin-top: 12px;
     }
 
+    .compare-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .compare-controls input {
+      flex: 1 1 360px;
+      min-width: 220px;
+    }
+    .compare-shell {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .compare-pane {
+      display: grid;
+      gap: 10px;
+    }
+    .compare-pane h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .compare-diff {
+      display: grid;
+      gap: 1px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--border);
+    }
+    .diff-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+    }
+    .diff-cell {
+      min-height: 22px;
+      background: #050507;
+      padding: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .diff-cell--same { background: #050507; }
+    .diff-cell--added { background: rgba(34, 197, 94, 0.16); }
+    .diff-cell--removed { background: rgba(239, 68, 68, 0.16); }
+    .diff-cell--placeholder { background: rgba(148, 163, 184, 0.08); }
+
+    .compare-summary {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    .btn.btn--compact {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
     /* Syntax highlight colors for /assets/highlight.js */
     .tok-keyword  { color: #fb923c; font-weight: 600; }
     .tok-literal  { color: #fbbf24; }
@@ -63,6 +135,13 @@
     .tok-number   { color: #38bdf8; }
     .tok-comment  { color: #64748b; font-style: italic; }
     .tok-punct    { color: #cbd5e1; }
+
+    @media (max-width: 1100px) {
+      .compare-shell,
+      .diff-row {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -86,6 +165,8 @@
       <div class="filters">
         <label for="fuzzerFilter">Fuzzer</label>
         <input id="fuzzerFilter" type="text" inputmode="numeric" placeholder="e.g. 4" style="width:100px">
+        <label for="hashFilter">Hash</label>
+        <input id="hashFilter" type="search" spellcheck="false" autocomplete="off" placeholder="Hash prefix or full 64-char hash">
         <label for="limitInput">Per page</label>
         <select id="limitInput">
           <option value="25">25</option>
@@ -109,6 +190,7 @@
               <th>Inserted</th>
               <th>Created</th>
               <th>Parent hash</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="progBody"></tbody>
@@ -122,17 +204,62 @@
         <span class="muted">Lifted with syntax highlighting</span>
       </div>
       <div id="detailMeta" class="meta">Select a row to load the lifted program.</div>
-      <pre id="jsView"></pre>
+      <div class="detail-actions">
+        <button type="button" id="clearPrimaryBtn" class="btn btn--ghost btn--compact">Clear Selected</button>
+      </div>
+      <pre id="jsView" class="code-view"></pre>
+    </section>
+
+    <section class="card">
+      <div class="section-title">
+        <h2>Compare Programs</h2>
+        <span class="muted">Primary hash from the viewer above, compare target loaded by exact hash</span>
+      </div>
+      <div class="compare-controls">
+        <input type="search" id="compareHashInput" spellcheck="false" autocomplete="off" placeholder="Second 64-char hash to compare against the selected program">
+        <button type="button" id="compareBtn" class="btn btn--primary">Compare</button>
+        <button type="button" id="swapCompareBtn" class="btn">Swap</button>
+        <button type="button" id="clearCompareBtn" class="btn btn--ghost">Clear</button>
+      </div>
+      <div id="compareSummary" class="compare-summary">Load a primary hash and a second hash to compare lifted JavaScript, mutators, contributors, and metadata.</div>
+      <div id="compareShell" class="compare-shell">
+        <div class="compare-pane">
+          <h3>Primary</h3>
+          <div id="compareMetaA" class="meta">No primary program selected.</div>
+        </div>
+        <div class="compare-pane">
+          <h3>Compare target</h3>
+          <div id="compareMetaB" class="meta">No compare target loaded.</div>
+        </div>
+      </div>
+      <div id="compareDiff" class="compare-diff" style="margin-top:12px;">
+        <div class="empty" style="padding:14px; background:var(--panel-2);">No comparison loaded.</div>
+      </div>
     </section>
   </div>
 
   <script src="/assets/highlight.js"></script>
   <script>
-    const state = { selectedHash: null, offset: 0, lastCount: 0 };
+    const state = {
+      selectedHash: null,
+      selectedData: null,
+      offset: 0,
+      lastCount: 0,
+      compareHash: "",
+      compareData: null,
+    };
 
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     function escapeHtml(v) {
       return String(v ?? "").replace(/[&<>"']/g, ch => ESC_MAP[ch]);
+    }
+
+    function isFullHash(value) {
+      return /^[a-fA-F0-9]{64}$/.test(value || "");
+    }
+
+    function normalizeHash(value) {
+      return String(value || "").trim();
     }
 
     async function fetchJSON(url) {
@@ -164,13 +291,33 @@
       return Math.max(1, parseInt(document.getElementById("limitInput").value, 10) || 50);
     }
 
+    function currentHashFilter() {
+      return document.getElementById("hashFilter").value.trim();
+    }
+
+    function currentCompareHash() {
+      return normalizeHash(document.getElementById("compareHashInput").value);
+    }
+
     function buildListUrl() {
       const fuzz = document.getElementById("fuzzerFilter").value.trim();
+      const hash = currentHashFilter();
       const q = new URLSearchParams();
       q.set("limit", String(currentLimit()));
       q.set("offset", String(state.offset));
       if (fuzz) q.set("fuzzer_id", fuzz);
+      if (hash) q.set("program_hash", hash);
       return `/api/corpus-programs?${q.toString()}`;
+    }
+
+    function syncLocationQuery() {
+      const q = new URLSearchParams(window.location.search);
+      if (state.selectedHash) q.set("hash", state.selectedHash);
+      else q.delete("hash");
+      if (state.compareHash) q.set("compare", state.compareHash);
+      else q.delete("compare");
+      const next = `${window.location.pathname}${q.toString() ? `?${q.toString()}` : ""}`;
+      window.history.replaceState({}, "", next);
     }
 
     function updateRowHighlight() {
@@ -190,6 +337,25 @@
       document.getElementById("nextBtn").disabled = state.lastCount < limit;
     }
 
+    function formatMeta(data) {
+      const sm = data.source_mutators != null ? JSON.stringify(data.source_mutators) : "";
+      const ct = data.contributors != null ? JSON.stringify(data.contributors) : "";
+      return [
+        `hash=${data.program_hash}`,
+        `fuzzer_id=${data.fuzzer_id}`,
+        `inserted_at=${data.inserted_at}`,
+        `created_at=${data.created_at}`,
+        `parent_program_hash=${data.parent_program_hash || ""}`,
+        "",
+        `source_mutators=${sm}`,
+        `contributors=${ct}`,
+      ].join("\n");
+    }
+
+    async function fetchProgram(programHash) {
+      return await fetchJSON(`/api/corpus-programs/${encodeURIComponent(programHash)}`);
+    }
+
     async function loadList() {
       const data = await fetchJSON(buildListUrl());
       const rows = data.programs || [];
@@ -202,9 +368,15 @@
           <td class="muted">${escapeHtml(p.inserted_at)}</td>
           <td class="muted">${escapeHtml(p.created_at)}</td>
           <td class="mono-cell">${p.parent_program_hash ? escapeHtml(p.parent_program_hash) : '<span class="muted">—</span>'}</td>
-        </tr>`).join("") || '<tr><td colspan="5"><div class="empty">No programs in corpus.</div></td></tr>';
+          <td>
+            <button type="button" class="btn btn--ghost btn--compact" data-action="compare-row" data-program-hash="${p.program_hash}">Compare</button>
+          </td>
+        </tr>`).join("") || '<tr><td colspan="6"><div class="empty">No programs in corpus.</div></td></tr>';
       body.querySelectorAll("tr[data-hash]").forEach(row => {
-        row.addEventListener("click", () => loadDetail(row.dataset.hash));
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("[data-action]")) return;
+          loadDetail(row.dataset.hash);
+        });
       });
       updateRowHighlight();
       updatePager();
@@ -217,33 +389,161 @@
       const meta = document.getElementById("detailMeta");
       view.innerHTML = '<span class="muted"><span class="spinner"></span> Loading…</span>';
       meta.textContent = `hash=${programHash} (loading…)`;
-      const data = await fetchJSON(`/api/corpus-programs/${encodeURIComponent(programHash)}`);
-      const sm = data.source_mutators != null ? JSON.stringify(data.source_mutators) : "";
-      const ct = data.contributors != null ? JSON.stringify(data.contributors) : "";
-      meta.textContent = [
-        `hash=${data.program_hash}`,
-        `fuzzer_id=${data.fuzzer_id}`,
-        `inserted_at=${data.inserted_at}`,
-        `created_at=${data.created_at}`,
-        `parent_program_hash=${data.parent_program_hash || ""}`,
-        "",
-        `source_mutators=${sm}`,
-        `contributors=${ct}`,
-      ].join("\n");
+      const data = await fetchProgram(programHash);
+      state.selectedData = data;
+      meta.textContent = formatMeta(data);
       const code = data.javascript_code || "";
       view.innerHTML = window.HL ? window.HL.highlight(code) : escapeHtml(code);
       updateRowHighlight();
+      syncLocationQuery();
+      if (state.compareHash) {
+        await loadComparison();
+      }
     }
 
     function readHashFromQuery() {
       const q = new URLSearchParams(window.location.search).get("hash");
-      return q && /^[a-fA-F0-9]{64}$/.test(q) ? q : null;
+      return isFullHash(q) ? q : null;
+    }
+
+    function readCompareFromQuery() {
+      const q = new URLSearchParams(window.location.search).get("compare");
+      return isFullHash(q) ? q : null;
+    }
+
+    function clearPrimary() {
+      state.selectedHash = null;
+      state.selectedData = null;
+      document.getElementById("jsView").textContent = "";
+      document.getElementById("detailMeta").textContent = "Select a row to load the lifted program.";
+      updateRowHighlight();
+      syncLocationQuery();
+      renderComparison();
+    }
+
+    function clearComparison() {
+      state.compareHash = "";
+      state.compareData = null;
+      document.getElementById("compareHashInput").value = "";
+      syncLocationQuery();
+      renderComparison();
+    }
+
+    function highlightCode(text) {
+      return window.HL ? window.HL.highlight(text) : escapeHtml(text);
+    }
+
+    function diffRows(aText, bText) {
+      const aLines = String(aText || "").split("\n");
+      const bLines = String(bText || "").split("\n");
+      const n = aLines.length;
+      const m = bLines.length;
+      const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          dp[i][j] = aLines[i] === bLines[j]
+            ? dp[i + 1][j + 1] + 1
+            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+      const rows = [];
+      let i = 0;
+      let j = 0;
+      while (i < n && j < m) {
+        if (aLines[i] === bLines[j]) {
+          rows.push({
+            a: { text: aLines[i], type: "same" },
+            b: { text: bLines[j], type: "same" },
+          });
+          i++;
+          j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+          rows.push({
+            a: { text: aLines[i], type: "removed" },
+            b: { text: "", type: "placeholder" },
+          });
+          i++;
+        } else {
+          rows.push({
+            a: { text: "", type: "placeholder" },
+            b: { text: bLines[j], type: "added" },
+          });
+          j++;
+        }
+      }
+      while (i < n) {
+        rows.push({ a: { text: aLines[i], type: "removed" }, b: { text: "", type: "placeholder" } });
+        i++;
+      }
+      while (j < m) {
+        rows.push({ a: { text: "", type: "placeholder" }, b: { text: bLines[j], type: "added" } });
+        j++;
+      }
+      return rows;
+    }
+
+    function renderComparison() {
+      const summary = document.getElementById("compareSummary");
+      const metaA = document.getElementById("compareMetaA");
+      const metaB = document.getElementById("compareMetaB");
+      const diff = document.getElementById("compareDiff");
+
+      if (!state.selectedData) {
+        metaA.textContent = "No primary program selected.";
+        metaB.textContent = state.compareData ? formatMeta(state.compareData) : "No compare target loaded.";
+        diff.innerHTML = '<div class="empty" style="padding:14px; background:var(--panel-2);">Select a primary program first.</div>';
+        summary.textContent = "Load a primary hash and a second hash to compare lifted JavaScript, mutators, contributors, and metadata.";
+        return;
+      }
+
+      metaA.textContent = formatMeta(state.selectedData);
+      metaB.textContent = state.compareData ? formatMeta(state.compareData) : "No compare target loaded.";
+      if (!state.compareData) {
+        diff.innerHTML = '<div class="empty" style="padding:14px; background:var(--panel-2);">No comparison loaded.</div>';
+        summary.textContent = "Enter a second exact hash to compare against the selected program.";
+        return;
+      }
+
+      const rows = diffRows(state.selectedData.javascript_code || "", state.compareData.javascript_code || "");
+      const changedRows = rows.filter(row => row.a.type !== "same" || row.b.type !== "same").length;
+      summary.textContent = `${rows.length} diff row(s), ${changedRows} changed. Primary hash ${state.selectedData.program_hash} vs compare hash ${state.compareData.program_hash}.`;
+      diff.innerHTML = rows.map(row => `
+        <div class="diff-row">
+          <div class="diff-cell diff-cell--${row.a.type}">${highlightCode(row.a.text)}</div>
+          <div class="diff-cell diff-cell--${row.b.type}">${highlightCode(row.b.text)}</div>
+        </div>`).join("");
+    }
+
+    async function loadComparison() {
+      const compareHash = currentCompareHash();
+      if (!compareHash) {
+        clearComparison();
+        return;
+      }
+      if (!isFullHash(compareHash)) {
+        showMessage("Comparison requires a full 64-character hash.", true);
+        return;
+      }
+      state.compareHash = compareHash;
+      document.getElementById("compareSummary").textContent = "Loading comparison…";
+      try {
+        state.compareData = await fetchProgram(compareHash);
+        syncLocationQuery();
+        renderComparison();
+      } catch (err) {
+        state.compareData = null;
+        showMessage(err.message, true);
+        renderComparison();
+      }
     }
 
     async function refreshList() {
       try {
         hideMessage();
         await loadList();
+        if (isFullHash(currentHashFilter())) {
+          await loadDetail(currentHashFilter());
+        }
       } catch (err) {
         showMessage(err.message, true);
       }
@@ -253,12 +553,23 @@
       try {
         hideMessage();
         state.selectedHash = null;
+        state.selectedData = null;
+        state.compareData = null;
+        state.compareHash = "";
         state.offset = 0;
         document.getElementById("jsView").textContent = "";
         document.getElementById("detailMeta").textContent = "Select a row to load the lifted program.";
-        await loadList();
         const fromUrl = readHashFromQuery();
+        const compareFromUrl = readCompareFromQuery();
+        if (fromUrl) document.getElementById("hashFilter").value = fromUrl;
+        if (compareFromUrl) {
+          document.getElementById("compareHashInput").value = compareFromUrl;
+          state.compareHash = compareFromUrl;
+        }
+        await loadList();
         if (fromUrl) await loadDetail(fromUrl);
+        if (compareFromUrl) await loadComparison();
+        else renderComparison();
       } catch (err) {
         showMessage(err.message, true);
       }
@@ -285,6 +596,45 @@
       if (e.key === "Enter") {
         state.offset = 0;
         refreshList();
+      }
+    });
+    document.getElementById("hashFilter").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        state.offset = 0;
+        refreshList();
+      }
+    });
+    document.getElementById("compareHashInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        loadComparison();
+      }
+    });
+    document.getElementById("compareBtn").addEventListener("click", loadComparison);
+    document.getElementById("clearCompareBtn").addEventListener("click", clearComparison);
+    document.getElementById("swapCompareBtn").addEventListener("click", async () => {
+      if (!state.selectedHash || !state.compareHash) return;
+      const nextPrimary = state.compareHash;
+      const nextCompare = state.selectedHash;
+      document.getElementById("compareHashInput").value = nextCompare;
+      state.compareHash = nextCompare;
+      await loadDetail(nextPrimary);
+    });
+    document.getElementById("clearPrimaryBtn").addEventListener("click", clearPrimary);
+    document.body.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      if (button.dataset.action === "compare-row") {
+        const rowHash = button.dataset.programHash;
+        if (!state.selectedHash) {
+          await loadDetail(rowHash);
+          return;
+        }
+        if (rowHash === state.selectedHash) {
+          showMessage("Select a different hash to compare against the current primary program.", true);
+          return;
+        }
+        document.getElementById("compareHashInput").value = rowHash;
+        await loadComparison();
       }
     });
 

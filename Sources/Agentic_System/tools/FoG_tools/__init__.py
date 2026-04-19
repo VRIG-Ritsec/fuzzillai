@@ -7,9 +7,9 @@ from .path_fs import (
     run_python_tool,
     get_v8_path_tool,
     get_realpath_tool,
-    tree_tool,
-    ripgrep_tool,
-    fuzzy_finder_tool,
+    list_dir_tool,
+    glob_search_tool,
+    grep_search_tool,
     read_file_tool,
 )
 from .agent_memory import (
@@ -39,9 +39,9 @@ from .template_search import (
     similar_template_fuzzil_tool,
 )
 from .swift_fs import (
-    swift_fuzzy_finder_tool,
-    swift_tree_tool,
-    swift_ripgrep_tool,
+    swift_list_dir_tool,
+    swift_glob_search_tool,
+    swift_grep_search_tool,
     swift_read_file_tool,
 )
 from .program_template import (
@@ -57,9 +57,9 @@ __all__ = [
     "run_python_tool",
     "get_v8_path_tool",
     "get_realpath_tool",
-    "tree_tool",
-    "ripgrep_tool",
-    "fuzzy_finder_tool",
+    "list_dir_tool",
+    "glob_search_tool",
+    "grep_search_tool",
     "read_file_tool",
     "write_agent_memory_tool",
     "read_agent_memory_tool",
@@ -79,9 +79,9 @@ __all__ = [
     "get_random_template_fuzzil_tool",
     "similar_template_swift_tool",
     "similar_template_fuzzil_tool",
-    "swift_fuzzy_finder_tool",
-    "swift_tree_tool",
-    "swift_ripgrep_tool",
+    "swift_list_dir_tool",
+    "swift_glob_search_tool",
+    "swift_grep_search_tool",
     "swift_read_file_tool",
     "edit_program_template_file_tool",
     "list_program_templates_tool",

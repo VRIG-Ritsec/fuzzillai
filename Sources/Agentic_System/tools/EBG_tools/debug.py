@@ -3,6 +3,7 @@ Debug tools: GDB/MI/pwndbg wrappers as IkaTools.
 """
 
 from IkaCore.tools import IkaTools
+from tools.fs_tools import READ_FILE_MAX_LINES_IN_SLICE, READ_FILE_MIN_LINES_IN_SLICE
 
 from tools._shared import (
     read_file,
@@ -23,13 +24,44 @@ from tools._shared import (
 )
 
 read_file_tool = IkaTools(
+    id="read_file",
     name="read_file",
-    description="Read file contents for debugging. Returns up to 3000 lines per section. Use section parameter to paginate large files.",
+    description=(
+        "Reads file contents under V8_PATH for debugging. Small files: omit line_start/line_end "
+        "to read the whole file. Files larger than the configured byte limit cannot be read in full; "
+        "use line_start and line_end (1-based inclusive line numbers). Each paged read returns exactly "
+        f"{READ_FILE_MIN_LINES_IN_SLICE} lines when possible (smaller spans are expanded); "
+        f"at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
+    ),
     parameters={
-        "file_path": {"type": "string", "description": "Absolute or V8-relative path to the file", "required": True},
-        "section": {"type": "number", "description": "Section index for files over 3000 lines (1-based)", "required": False},
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the file relative to V8_PATH. An optional 'v8/' prefix is also accepted; absolute paths are allowed only when still under V8_PATH.",
+            },
+            "line_start": {
+                "type": "integer",
+                "description": (
+                    "Optional. First line to return (1-based). With line_end, defines the slice; "
+                    "if line_end - line_start + 1 is below the minimum window, line_end is extended. "
+                    "If omitted but line_end is set, defaults to 1. If both are omitted, reads the entire file "
+                    "when under the size limit."
+                ),
+            },
+            "line_end": {
+                "type": "integer",
+                "description": (
+                    "Optional. Last line to return (1-based, inclusive). If line_start is set and this "
+                    "is omitted, it defaults to line_start + "
+                    f"{READ_FILE_MAX_LINES_IN_SLICE - 1} (capped by max lines per call). "
+                    "Required for controlled access when the tool reports the file is too large for a full read."
+                ),
+            },
+        },
+        "required": ["file_path"],
     },
-    execute_function=lambda x: read_file(x["file_path"], x.get("section")),
+    execute_function=lambda x: read_file(x["file_path"], x.get("line_start"), x.get("line_end")),
 )
 
 start_mi_debug_session_tool = IkaTools(

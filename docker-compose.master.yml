@@ -1,3 +1,8 @@
+# Postgres reachable from other machines over Tailscale:
+#   Use this host's Tailscale IP (tailscale ip -4) in POSTGRES_URL, e.g.
+#   postgresql://fuzzilli:fuzzilli123@100.x.y.z:5432/fuzzilli_master
+# Optional: bind only on Tailscale (avoid exposing 5432 on other interfaces):
+#   POSTGRES_PUBLISH=<tailscale-ip> docker compose -f docker-compose.master.yml up -d
 
 services:
   postgres-master:
@@ -9,11 +14,18 @@ services:
       POSTGRES_USER: fuzzilli
       POSTGRES_PASSWORD: fuzzilli123
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PUBLISH:-0.0.0.0}:5432:5432"
     volumes:
       - /mnt/vdc/new_postgres_data/:/var/lib/postgresql/data
       - /mnt/vdc/fuzzillai/Sources/Agentic_System/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /mnt/vdc/fuzzillai/Sources/Agentic_System/docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fuzzilli -d fuzzilli_master"]
       interval: 10s

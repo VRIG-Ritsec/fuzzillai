@@ -1,9 +1,8 @@
 """
-FoG Swift filesystem tools: swift_fuzzy_finder, swift_tree, swift_ripgrep, swift_read_file.
+FoG Swift filesystem tools: swift_list_dir, swift_glob_search,
+swift_grep_search, swift_read_file.
 """
 
-import os
-import shlex
 from pathlib import Path
 
 _agentic_dir = Path(__file__).resolve().parent.parent.parent
@@ -13,213 +12,131 @@ if str(_ikacore_src) not in sys.path:
     sys.path.insert(0, str(_ikacore_src))
 
 from IkaCore.tools import IkaTools
+from tools.fs_tools import (
+    glob_search_in_base,
+    grep_search_in_base,
+    list_dir_in_base,
+    read_file_from_base,
+    READ_FILE_MAX_LINES_IN_SLICE,
+    READ_FILE_MIN_LINES_IN_SLICE,
+)
 
-from ._shared import SWIFT_PATH, FUZZILLI_PATH, run_command, get_output, is_valid_regex
-
-
-def _swift_fuzzy_finder_executor(params: dict) -> str:
-    pattern = params.get("pattern", "")
-    options = params.get("options", "")
-    if not pattern:
-        return "Error: pattern parameter is required"
-    file_list_cmd = "rg --hidden --no-follow --no-ignore-vcs --files 2>/dev/null"
-    options = options.strip() if options else ""
-    quoted_pattern = shlex.quote(pattern)
-    if "--filter" in options:
-        fzf_cmd = f"fzf {options}"
-    else:
-        fzf_cmd = f"fzf {options} --filter {quoted_pattern}".strip()
-    cmd = f"cd {shlex.quote(SWIFT_PATH)} && {file_list_cmd} | {fzf_cmd} | head -n 1000"
-    return get_output(run_command(cmd, timeout=60))
+from ._shared import SWIFT_PATH, FUZZILLI_PATH
 
 
-def _swift_tree_executor(params: dict) -> str:
-    options = params.get("options", "")
-    depth = 2
-    target_path = "."
-    tokens = []
-    if options:
-        try:
-            tokens = shlex.split(options)
-        except ValueError:
-            tokens = options.split()
-    i = 0
-    while i < len(tokens):
-        token = tokens[i]
-        if token == "-L":
-            if i + 1 < len(tokens):
-                try:
-                    depth = int(tokens[i + 1])
-                except ValueError:
-                    depth = 2
-                i += 2
-                continue
-        elif token.startswith("-L") and len(token) > 2:
-            try:
-                depth = int(token[2:])
-            except ValueError:
-                depth = 2
-            i += 1
-            continue
-        elif not token.startswith("-"):
-            target_path = token
-        i += 1
-    depth = max(1, min(depth, 2))
-    candidate = os.path.join(SWIFT_PATH, target_path) if not os.path.isabs(target_path) else target_path
-    if not os.path.isdir(candidate):
-        target_path = "."
-    final_opts = f"-L {depth} -f {shlex.quote(target_path)}"
-    return get_output(run_command(f"cd {shlex.quote(SWIFT_PATH)} && tree {final_opts} | head -n 300"))
+def _swift_list_dir_executor(params: dict) -> str:
+    return list_dir_in_base(params, SWIFT_PATH)
 
 
-def _swift_ripgrep_executor(params: dict) -> str:
-    pattern = params.get("pattern", "")
-    options = params.get("options", "")
-    if not pattern:
-        return "Error: pattern parameter is required"
-    valid, error = is_valid_regex(pattern)
-    if not valid:
-        return f"Invalid regex: {error}"
-    if "ProgramTemplate" in pattern:
-        resolved_path = os.path.join(SWIFT_PATH, "CodeGen")
-    else:
-        resolved_path = SWIFT_PATH
-    if not options:
-        return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' | head -n 10000", timeout=60))
-    parts = options.split()
-    flags = []
-    i = 0
-    while i < len(parts):
-        part = parts[i]
-        if part.startswith("-"):
-            if part in ["--context", "-C", "--before-context", "-B", "--after-context", "-A"] and i + 1 < len(parts):
-                try:
-                    ctx_val = int(parts[i + 1])
-                    flags.append(part)
-                    flags.append(str(min(ctx_val, 5)))
-                    i += 2
-                    continue
-                except ValueError:
-                    pass
-            elif part.startswith("--context="):
-                try:
-                    ctx_val = int(part.split("=", 1)[1])
-                    flags.append(f"--context={min(ctx_val, 5)}")
-                    i += 1
-                    continue
-                except ValueError:
-                    pass
-            elif part.startswith("--before-context="):
-                try:
-                    ctx_val = int(part.split("=", 1)[1])
-                    flags.append(f"--before-context={min(ctx_val, 5)}")
-                    i += 1
-                    continue
-                except ValueError:
-                    pass
-            elif part.startswith("--after-context="):
-                try:
-                    ctx_val = int(part.split("=", 1)[1])
-                    flags.append(f"--after-context={min(ctx_val, 5)}")
-                    i += 1
-                    continue
-                except ValueError:
-                    pass
-            elif part.startswith("-C") and len(part) > 2 and part[2:].isdigit():
-                flags.append(f"-C{min(int(part[2:]), 5)}")
-                i += 1
-                continue
-            elif part.startswith("-B") and len(part) > 2 and part[2:].isdigit():
-                flags.append(f"-B{min(int(part[2:]), 5)}")
-                i += 1
-                continue
-            elif part.startswith("-A") and len(part) > 2 and part[2:].isdigit():
-                flags.append(f"-A{min(int(part[2:]), 5)}")
-                i += 1
-                continue
-            flags.append(part)
-            if part in ["--type", "--glob"] and i + 1 < len(parts):
-                next_part = parts[i + 1]
-                if not next_part.startswith("-") and not next_part.startswith("v8/"):
-                    i += 1
-                    flags.append(parts[i])
-        else:
-            flags.append(part)
-        i += 1
-    flags_str = " ".join(flags) if flags else ""
-    return get_output(run_command(f"cd {resolved_path} && rg '{pattern}' {flags_str} | head -n 1000", timeout=60))
+def _swift_glob_search_executor(params: dict) -> str:
+    return glob_search_in_base(params, SWIFT_PATH)
+
+
+def _swift_grep_search_executor(params: dict) -> str:
+    return grep_search_in_base(params, SWIFT_PATH)
 
 
 def _swift_read_file_executor(params: dict) -> str:
-    file_path = params.get("file_path", "")
-    section = params.get("section")
+    normalized = dict(params)
+    file_path = normalized.get("file_path", "")
     if not file_path:
-        return "Error: file_path parameter is required"
+        return "Error: file_path is required"
     if file_path.startswith("Sources/") or file_path.startswith("Fuzzilli/"):
-        resolved_path = os.path.join(FUZZILLI_PATH, file_path)
-    elif not os.path.isabs(file_path):
-        resolved_path = os.path.join(SWIFT_PATH, file_path)
+        base_path = FUZZILLI_PATH
     else:
-        resolved_path = file_path
-    line_count_result = get_output(run_command(f"wc -l '{resolved_path}'"))
-    try:
-        line_count = int(line_count_result.strip().split()[0])
-    except Exception:
-        return f"Could not determine file line count. wc -l output: {line_count_result}"
-    lines_per_section = 3000
-    num_sections = (line_count + lines_per_section - 1) // lines_per_section
-    if line_count <= lines_per_section:
-        return get_output(run_command(f"cat '{resolved_path}'"))
-    if section is None:
-        try:
-            section = int(params.get("section", 0))
-        except (ValueError, TypeError):
-            section = 0
-    if section < 1 or section > num_sections:
-        return (
-            f"File '{file_path}' has {line_count} lines and is divided into {num_sections} sections. "
-            f"Please specify a section number between 1 and {num_sections}."
-        )
-    start_line = 1 + (section - 1) * lines_per_section
-    end_line = min(start_line + lines_per_section - 1, line_count)
-    content = get_output(run_command(f"sed -n '{start_line},{end_line}p' '{resolved_path}'"))
-    return f"Section {section}/{num_sections} (lines {start_line}-{end_line}) of '{file_path}':\n{content}"
+        base_path = SWIFT_PATH
+    return read_file_from_base(normalized, base_path)
 
 
-swift_fuzzy_finder_tool = IkaTools(
-    name="swift_fuzzy_finder",
-    description="Fuzzy-search file paths in the Fuzzilli Swift source. Use when you need to find a file by partial name. Output capped at 1000 lines.",
+swift_list_dir_tool = IkaTools(
+    id="swift_list_dir",
+    name="swift_list_dir",
+    description="List entries in a Fuzzilli Swift directory. Use targeted relative directories like '.' or 'CodeGen'. Returns JSON names only.",
     parameters={
-        "pattern": {"type": "string", "description": "Partial filename or path to match (e.g., 'ProgramTemplate', 'CodeGen')", "required": True},
-        "options": {"type": "string", "description": "Optional fzf flags (e.g., '-e' for exact match)", "required": False},
+        "type": "object",
+        "properties": {
+            "target_directory": {
+                "type": "string",
+                "description": "Directory relative to SWIFT_PATH to inspect.",
+            }
+        },
+        "required": [],
+    },
+    execute_function=_swift_list_dir_executor,
+)
+
+swift_glob_search_tool = IkaTools(
+    id="swift_glob_search",
+    name="swift_glob_search",
+    description="Searches for files matching a glob pattern under SWIFT_PATH.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pattern": {
+                "type": "string",
+                "description": "The glob pattern to search for relative to SWIFT_PATH (for example, '**/*.swift').",
+            }
+        },
+        "required": ["pattern"],
     },
     limit_calls=12,
-    execute_function=_swift_fuzzy_finder_executor,
+    execute_function=_swift_glob_search_executor,
 )
 
-swift_tree_tool = IkaTools(
-    name="swift_tree",
-    description="Show directory tree of Fuzzilli Swift sources. Use to explore layout before navigating. Max depth 2, max 300 lines output.",
-    parameters={"options": {"type": "string", "description": "Optional tree flags (e.g., '-L 1' for shallow)", "required": False}},
-    execute_function=_swift_tree_executor,
-)
-
-swift_ripgrep_tool = IkaTools(
-    name="swift_ripgrep",
-    description="Search text/regex in Fuzzilli Swift sources. Use to find usages, definitions, or strings. Output capped at 1000 lines.",
+swift_grep_search_tool = IkaTools(
+    id="swift_grep_search",
+    name="swift_grep_search",
+    description="Searches for a regex pattern in files under SWIFT_PATH.",
     parameters={
-        "pattern": {"type": "string", "description": "String or regex to search (e.g., 'ProgramTemplate', 'class.*Builder')", "required": True},
-        "options": {"type": "string", "description": "Optional ripgrep flags (e.g., '-i' case-insensitive)", "required": False},
+        "type": "object",
+        "properties": {
+            "pattern": {
+                "type": "string",
+                "description": "The regex pattern to search for.",
+            }
+        },
+        "required": ["pattern"],
     },
-    execute_function=_swift_ripgrep_executor,
+    execute_function=_swift_grep_search_executor,
 )
 
 swift_read_file_tool = IkaTools(
+    id="swift_read_file",
     name="swift_read_file",
-    description="Read a Swift source file from Fuzzilli. Paths are relative to Fuzzilli root. Large files split into 3000-line sections.",
+    description=(
+        "Reads file contents under SWIFT_PATH or FUZZILLI_PATH. Small files: omit line_start/line_end "
+        "to read the whole file. Files larger than the configured byte limit cannot be read in full; "
+        "use line_start and line_end (1-based inclusive line numbers). Each paged read returns exactly "
+        f"{READ_FILE_MIN_LINES_IN_SLICE} lines when possible (smaller spans are expanded); "
+        f"at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
+    ),
     parameters={
-        "file_path": {"type": "string", "description": "Path relative to Fuzzilli (e.g., 'Sources/Fuzzilli/CodeGen/ProgramTemplates.swift')", "required": True},
-        "section": {"type": "integer", "description": "Section index (1-based) for files exceeding 3000 lines", "required": False},
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the file relative to SWIFT_PATH or FUZZILLI_PATH. Absolute paths are allowed only when still under those roots.",
+            },
+            "line_start": {
+                "type": "integer",
+                "description": (
+                    "Optional. First line to return (1-based). With line_end, defines the slice; "
+                    "if line_end - line_start + 1 is below the minimum window, line_end is extended. "
+                    "If omitted but line_end is set, defaults to 1. If both are omitted, reads the entire file "
+                    "when under the size limit."
+                ),
+            },
+            "line_end": {
+                "type": "integer",
+                "description": (
+                    "Optional. Last line to return (1-based, inclusive). If line_start is set and this "
+                    "is omitted, it defaults to line_start + "
+                    f"{READ_FILE_MAX_LINES_IN_SLICE - 1} (capped by max lines per call). "
+                    "Required for controlled access when the tool reports the file is too large for a full read."
+                ),
+            },
+        },
+        "required": ["file_path"],
     },
     execute_function=_swift_read_file_executor,
 )

@@ -16,13 +16,13 @@ Using the information received from the calling agent, proceed onto `STAGE 1`
 
 ## STAGE 1
 Following the reasoning and proof specified in the caller's prompt regarding the cause of the crash,
-use your sub-agent `V8Search` to perform variant analysis on the cause of the crash. 
-Look for similar instances of the crashing code across the codebase. 
+use your sub-agent `V8Search` to perform variant analysis on the root cause of the crash. 
+Look for similar instances of the crashing code and data-flow semantics across the codebase. 
 
 
 ## STAGE 2
-Go through the returned RAG entries of V8Search and validate variants, if you can confirm the same bug
-exists in the code, please save the code as valid_variant to the RAG. 
+Go through the returned RAG entries of V8Search and validate variants, if you can confirm the same behavior
+exists elsewhere in the code, please save the code as valid_variant to the RAG. 
 
 Evidence priority during validation:
 1) raw runtime crash artifacts from d8 runs (stderr/signal/fatal line/stack)
@@ -32,11 +32,11 @@ Evidence priority during validation:
 ## STAGE 3
 After performing variant analysis, use `JSGenerator` and `Debugger` to create programs 
 that crash in a similar manner.
-You should run d8 with trace flags for crash confirmation context before declaring a variant valid.
-For every candidate variant marked valid, you must include one trace_v8_analysis or traced execute_javascript_program result with:
+You should run d8 with trace flags for crash confirmation context for every variant.
+For every candidate variant marked valid, you must include a trace_v8_analysis or traced execute_javascript_program result with:
 - flags used
 - return code
-- stderr/stdout crash evidence
+- stderr/stdout crash evidence.
 
 When you call `JSGenerator`, require it to:
 - save every generated candidate into the generate folder via `create_generate_folder` / `write_to_generate_folder`
@@ -53,8 +53,8 @@ Do not run debugger loops when there is no reproducible crash signal.
 
 
 ## STAGE 4
-Using the same information provided to you in STAGE 1, look for completely different code paths 
-that reach the same crashing code. Then perform STAGE 2.
+Using the same information provided to you in STAGE 1, look for completely different code paths and data-flows
+that reach the same crashing code (references). Then perform STAGE 2.
 
 ## STAGE 5
 Using `JSGenerator` and `Debugger`, create program(s) that crash in a dissimilar manner to original 

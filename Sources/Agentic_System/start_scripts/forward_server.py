@@ -15,6 +15,7 @@ import logging
 import argparse
 import subprocess
 import re
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,14 +61,39 @@ def _safe_agent_log_stem(label: str) -> str:
 # -- DB helpers ----------------------------------------------------------------
 
 def _connect() -> psycopg2.extensions.connection:
-    return psycopg2.connect(
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        dbname=POSTGRES_DB,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        connect_timeout=10,
-    )
+    hosts: list[str] = [str(POSTGRES_HOST)]
+
+    # If localhost is not bound, try machine IPs (common with docker publishes
+    # to a specific interface such as 100.x.x.x:5432).
+    if str(POSTGRES_HOST) in {"localhost", "127.0.0.1", "::1"}:
+        candidate_hosts: list[str] = []
+        try:
+            infos = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET)
+            for info in infos:
+                ip = info[4][0]
+                if ip and not ip.startswith("127.") and ip not in candidate_hosts:
+                    candidate_hosts.append(ip)
+        except Exception:
+            candidate_hosts = []
+        hosts.extend(candidate_hosts)
+
+    last_error: Exception | None = None
+    for host in hosts:
+        try:
+            return psycopg2.connect(
+                host=host,
+                port=POSTGRES_PORT,
+                dbname=POSTGRES_DB,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                connect_timeout=10,
+            )
+        except Exception as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("No PostgreSQL host candidates available")
 
 
 def _query(conn, sql: str, params=()) -> list[dict]:

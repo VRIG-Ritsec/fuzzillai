@@ -55,9 +55,9 @@ from tools.EBG_tools import (
     read_file_tool,
 )
 from tools.FoG_tools import (
-    fuzzy_finder_tool,
-    ripgrep_tool,
-    tree_tool,
+    glob_search_tool,
+    grep_search_tool,
+    list_dir_tool,
     get_realpath_tool,
     execute_javascript_program_tool,
     list_d8_flags_tool,
@@ -121,20 +121,20 @@ class EBG_Crash(Agent):
             crash_program_hash = "Manual File System Scanning"
         checkpoint_kwargs = self.get_checkpoint_kwargs("ebg_crash")
 
-        root_manager_prompt = self.get_prompt("variant_manager.txt")
+        root_manager_prompt = self.get_prompt("crash_manager.txt")
         root_manager_prompt = root_manager_prompt.replace("[ENTER SELECTED CRASH NAME]", crash_program_hash)
 
         v8_sys = self.get_prompt("v8_search.txt") + "THIS IS THE CURRENT V8 PATH ASSUMING YOU ARE INSIDE THE V8 SOURCE CODE DIRECTORY FOR ALL TOOL CALLS ALREADY: " + get_v8_path()
 
         self.agents['v8_search'] = IkaBaseAgent(
             name="V8Search",
-            description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
+            description="L2 Worker responsible for searching V8 source code using glob, directory, regex, and compilation tools",
             prompt=v8_sys,
             system_prompt="You are V8Search.",
             tools=[
-                fuzzy_finder_tool,
-                ripgrep_tool,
-                tree_tool,
+                glob_search_tool,
+                grep_search_tool,
+                list_dir_tool,
                 read_agent_memory_tool,
                 write_agent_memory_tool,
                 read_file_tool,
@@ -296,6 +296,11 @@ class EBG_Crash(Agent):
                 delete_files_from_generate_folder_tool,
                 list_generate_folder_tool,
                 create_generate_folder_tool,
+                db_query_tool,
+                db_store_generated_program_tool,
+                db_get_crash_program_as_js_tool,
+                db_list_programs_tool,
+                db_get_crash_diversity_tool,
             ],
             model_id=MANAGER_MODEL,
             api_key=self.api_key,

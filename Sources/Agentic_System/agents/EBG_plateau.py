@@ -47,9 +47,9 @@ from tools.EBG_tools import (
 from tools.RAG_tools import search_v8_source_rag_tool, search_v8_source_rag_hybrid_tool, get_v8_source_rag_doc_tool
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 from tools.FoG_tools import (
-    fuzzy_finder_tool,
-    ripgrep_tool,
-    tree_tool,
+    glob_search_tool,
+    grep_search_tool,
+    list_dir_tool,
     get_realpath_tool,
     execute_javascript_program_tool,
     list_d8_flags_tool,
@@ -113,13 +113,13 @@ class EBG_Plateau(Agent):
 
         self.agents['v8_search'] = IkaBaseAgent(
             name="V8Search",
-            description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
+            description="L2 Worker responsible for searching V8 source code using glob, directory, regex, and compilation tools",
             prompt=v8_sys,
             system_prompt="You are V8Search.",
             tools=[
-                fuzzy_finder_tool,
-                ripgrep_tool,
-                tree_tool,
+                glob_search_tool,
+                grep_search_tool,
+                list_dir_tool,
                 read_agent_memory_tool,
                 write_agent_memory_tool,
                 read_file_tool,
@@ -168,9 +168,9 @@ class EBG_Plateau(Agent):
                 pwndbg_nearpc_tool,
                 read_file_tool,
                 get_realpath_tool,
-                fuzzy_finder_tool,
-                ripgrep_tool,
-                tree_tool,
+                glob_search_tool,
+                grep_search_tool,
+                list_dir_tool,
                 search_v8_source_rag_tool,
                 search_v8_source_rag_hybrid_tool,
                 get_v8_source_rag_doc_tool,

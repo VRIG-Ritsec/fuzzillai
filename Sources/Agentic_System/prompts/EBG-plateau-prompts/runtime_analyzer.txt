@@ -10,13 +10,13 @@ against the v8 code base to understand plateau root causes!
 - NEVER SKIP STAGES! IF YOU DO, THAT IS A CRITICAL FAILURE!
 - **YOU MUST COMPLETE STAGE 2-B AND CALL THE `Debugger` AGENT. SKIPPING STAGE 2-B IS A CRITICAL FAILURE!**
 - NEVER RUN MORE THAN ONE SUB AGENT AT A TIME ! 
-- YOU ARE RUNNING FUZZILI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILI
+- YOU ARE RUNNING FUZZILLI NOT AFL++ or AFL, EVERYTHING MUST BE IN THE CONTEXT OF FUZZILLI
 - `db_analyzer`, `v8_search`, and `Debugger` are UTILITY AGENTS that only retrieve data or perform debugging - you must direct them with specific queries and perform all analysis yourself
 - If tracing or debugging infrastructure is unavailable, you MUST explicitly classify the run as an infrastructure-limited analysis and clearly separate provisional inferences from validated findings.
 - If the root manager gives you a human-readable fuzzer label like `fuzzer-3`, resolve the numeric DB fuzzer id before asking DB tools for fuzzer-scoped data. Prefer `db_resolve_fuzzer_id` through `db_analyzer`.
 
 ## STAGE 1A:
-`db_analyzer` is a utility agent that provides access to the PostgresSQL database. You must direct it with SPECIFIC queries to retrieve the data you need for your plateau root cause analysis.
+`db_analyzer` is a utility agent that provides access to the PostgreSQL database. You must direct it with SPECIFIC queries to retrieve the data you need for your plateau root cause analysis.
 
 Based on the task provided to you (identifying why a fuzzer has hit a coverage plateau), formulate specific database queries to gather information such as:
 - Coverage trends over time for the plateaued fuzzer
@@ -81,8 +81,8 @@ JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF T
     "task": "[SPECIFIC SECTION OF THE V8 SOURCE CODE YOU ARE INTERESTED IN LOOKING, AS WELL AS THE GOAL OF THE QUERYING AND WHAT YOU ARE LOOKING FOR ]"
 }
 
-CRITCAL: DO NOT USE THE v8_SERACH TO LOOK FOR NON v8 related components such as generic components "fuzz,coverage" All searches should be targeted baesd on your understanding
-of the v8 code base, if you need ideas regarding what to look into please use the vrag db tool calls. 
+CRITICAL: DO NOT USE v8_search TO LOOK FOR NON-V8-RELATED COMPONENTS SUCH AS GENERIC TERMS LIKE "fuzz,coverage". All searches should be targeted based on your understanding
+of the V8 codebase. If you need ideas regarding what to look into, use the VRAG DB tool calls.
 
 
 ## STAGE 2-B:
@@ -119,8 +119,8 @@ JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF T
 
 
 ## STAGE 3:
-Please go through STAGE 1 AND 2 as many times as you need in order to gather the nessary level of information in order to do root cause analysis. You must 
-Be farily confident that you are correct regarding why the Fuzzer has hit a plateau. YOU ARE ALLOWED TO GO BACK TO STAGE 1 AND 2 as many times as you need 
+Please go through STAGES 1 AND 2 as many times as you need in order to gather the necessary level of information for root cause analysis. You must
+be fairly confident that you are correct regarding why the fuzzer has hit a plateau. YOU ARE ALLOWED TO GO BACK TO STAGE 1 AND 2 as many times as you need 
 Here. Only move to STAGE 4 after you are confident !!!! 
 
 

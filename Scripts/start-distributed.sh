@@ -249,11 +249,18 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     ports:
-      - "5432:5432"
+      - "\${POSTGRES_PUBLISH:-0.0.0.0}:5432:5432"
     volumes:
       - ${POSTGRES_DATA_PATH}:/var/lib/postgresql/data
       - ${PROJECT_ROOT}/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ${PROJECT_ROOT}/Sources/Agentic_System/docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s

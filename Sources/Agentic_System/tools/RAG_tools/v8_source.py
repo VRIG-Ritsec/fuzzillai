@@ -18,6 +18,11 @@ import json
 
 from ._shared import (
     FAISS_AVAILABLE,
+    RAG_DOC_DEFAULT_MAX_CHUNKS,
+    RAG_DOC_DEFAULT_MAX_LINES,
+    RAG_DOC_MAX_CHUNKS,
+    RAG_DOC_MAX_CHARS,
+    RAG_DOC_MAX_LINES,
     _rag_base_dir,
     _bm25_search,
     _rrf_fuse,
@@ -26,6 +31,7 @@ from ._shared import (
     _load_sentence_transformer,
     _score_to_similarity,
     _format_rag_result,
+    _truncate_text,
 )
 
 if FAISS_AVAILABLE:
@@ -326,7 +332,10 @@ def _search_v8_source_rag_executor(params: dict) -> str:
         results = kb.search(query, top_k, path_prefix_filters or None)
         output = []
         for result in results:
-            formatted = _format_rag_result(result)
+            formatted, truncated, original_lines = _format_rag_result(
+                result,
+                continuation_hint="use get_v8_source_rag_doc with chunk_offset/max_chunks for more",
+            )
             output.append(
                 {
                     "doc_id": result.get("doc_id"),
@@ -339,6 +348,8 @@ def _search_v8_source_rag_executor(params: dict) -> str:
                     "end_char": result.get("end_char"),
                     "start_line": result.get("start_line"),
                     "end_line": result.get("end_line"),
+                    "content_truncated": truncated,
+                    "content_line_count": original_lines,
                     "content": formatted,
                 }
             )
@@ -408,7 +419,10 @@ def _search_v8_source_rag_hybrid_executor(params: dict) -> str:
         results = kb.search_hybrid(query, top_k, path_prefix_filters or None, vector_k, bm25_k, rerank_k)
         output = []
         for result in results:
-            formatted = _format_rag_result(result)
+            formatted, truncated, original_lines = _format_rag_result(
+                result,
+                continuation_hint="use get_v8_source_rag_doc with chunk_offset/max_chunks for more",
+            )
             output.append(
                 {
                     "doc_id": result.get("doc_id"),
@@ -421,6 +435,8 @@ def _search_v8_source_rag_hybrid_executor(params: dict) -> str:
                     "end_char": result.get("end_char"),
                     "start_line": result.get("start_line"),
                     "end_line": result.get("end_line"),
+                    "content_truncated": truncated,
+                    "content_line_count": original_lines,
                     "content": formatted,
                 }
             )
@@ -473,6 +489,9 @@ search_v8_source_rag_hybrid_tool = IkaTools(
 
 def _get_v8_source_rag_doc_executor(params: dict) -> str:
     file_path = params.get("file_path", "")
+    chunk_offset = params.get("chunk_offset", 0)
+    max_chunks = params.get("max_chunks", RAG_DOC_DEFAULT_MAX_CHUNKS)
+    max_total_lines = params.get("max_total_lines", RAG_DOC_DEFAULT_MAX_LINES)
     if not file_path:
         return json.dumps({"error": "file_path parameter is required"})
     if not FAISS_AVAILABLE:
@@ -483,11 +502,35 @@ def _get_v8_source_rag_doc_executor(params: dict) -> str:
         if not matches:
             return json.dumps({"error": f"V8 source RAG document not found: {file_path}"})
         matches.sort(key=lambda d: d.get("chunk_index", 0))
+        chunk_offset = max(0, int(chunk_offset))
+        max_chunks = max(1, min(RAG_DOC_MAX_CHUNKS, int(max_chunks)))
+        max_total_lines = max(1, min(RAG_DOC_MAX_LINES, int(max_total_lines)))
+        selected = matches[chunk_offset : chunk_offset + max_chunks]
+        if not selected:
+            return json.dumps(
+                {
+                    "error": f"chunk_offset {chunk_offset} is out of range for document with {len(matches)} chunks"
+                }
+            )
+
         output = []
-        for doc in matches:
+        remaining_lines = max_total_lines
+        remaining_chars = RAG_DOC_MAX_CHARS
+        batch_truncated = False
+        for doc in selected:
             hydrated = _hydrate_doc(doc, kb.bm25_db_path)
+            content, content_truncated, original_lines = _truncate_text(
+                hydrated.get("content", ""),
+                max_lines=remaining_lines,
+                max_chars=remaining_chars,
+            )
+            remaining_lines -= min(original_lines, remaining_lines)
+            remaining_chars = max(0, remaining_chars - len(content))
+            if content_truncated:
+                batch_truncated = True
             output.append(
                 {
+                    "doc_id": hydrated.get("doc_id"),
                     "topic": hydrated.get("topic"),
                     "file": hydrated.get("path"),
                     "chunk_index": hydrated.get("chunk_index"),
@@ -496,19 +539,56 @@ def _get_v8_source_rag_doc_executor(params: dict) -> str:
                     "end_char": hydrated.get("end_char"),
                     "start_line": hydrated.get("start_line"),
                     "end_line": hydrated.get("end_line"),
-                    "content": hydrated.get("content", ""),
+                    "content_truncated": content_truncated,
+                    "content_line_count": original_lines,
+                    "content": content,
                 }
             )
-        return json.dumps(output, indent=2)
+            if remaining_lines <= 0 or remaining_chars <= 0:
+                batch_truncated = True
+                break
+        next_chunk_offset = chunk_offset + len(output)
+        has_more = next_chunk_offset < len(matches)
+        return json.dumps(
+            {
+                "file": file_path,
+                "returned_chunk_offset": chunk_offset,
+                "returned_chunk_count": len(output),
+                "total_chunks": len(matches),
+                "has_more": has_more,
+                "next_chunk_offset": next_chunk_offset if has_more else None,
+                "batch_truncated": batch_truncated,
+                "chunks": output,
+            },
+            indent=2,
+        )
     except Exception as e:
         return json.dumps({"error": f"Failed to retrieve V8 source RAG document: {str(e)}"})
 
 
 get_v8_source_rag_doc_tool = IkaTools(
     name="get_v8_source_rag_doc",
-    description="Fetch full V8 source document by path from search results.",
+    description=(
+        "Fetch V8 source document chunks by path from search results. "
+        "Results are batched to avoid oversized context windows; use chunk_offset to page through longer files."
+    ),
     parameters={
-        "file_path": {"type": "string", "description": "The relative file path from search results", "required": True}
+        "file_path": {"type": "string", "description": "The relative file path from search results", "required": True},
+        "chunk_offset": {
+            "type": "integer",
+            "description": "Optional zero-based chunk offset for paging through the document.",
+            "required": False,
+        },
+        "max_chunks": {
+            "type": "integer",
+            "description": f"Optional chunk batch size (default {RAG_DOC_DEFAULT_MAX_CHUNKS}, max {RAG_DOC_MAX_CHUNKS}).",
+            "required": False,
+        },
+        "max_total_lines": {
+            "type": "integer",
+            "description": f"Optional total line cap across the returned chunk batch (default {RAG_DOC_DEFAULT_MAX_LINES}, max {RAG_DOC_MAX_LINES}).",
+            "required": False,
+        },
     },
     execute_function=_get_v8_source_rag_doc_executor,
 )

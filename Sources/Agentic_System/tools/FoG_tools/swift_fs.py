@@ -18,7 +18,6 @@ from tools.fs_tools import (
     list_dir_in_base,
     read_file_from_base,
     READ_FILE_MAX_LINES_IN_SLICE,
-    READ_FILE_MIN_LINES_IN_SLICE,
 )
 
 from ._shared import SWIFT_PATH, FUZZILLI_PATH
@@ -106,9 +105,7 @@ swift_read_file_tool = IkaTools(
     description=(
         "Reads file contents under SWIFT_PATH or FUZZILLI_PATH. Small files: omit line_start/line_end "
         "to read the whole file. Files larger than the configured byte limit cannot be read in full; "
-        "use line_start and line_end (1-based inclusive line numbers). Each paged read returns exactly "
-        f"{READ_FILE_MIN_LINES_IN_SLICE} lines when possible (smaller spans are expanded); "
-        f"at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
+        f"use line_start and line_end (1-based inclusive line numbers). Each paged read returns at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
     ),
     parameters={
         "type": "object",
@@ -121,7 +118,6 @@ swift_read_file_tool = IkaTools(
                 "type": "integer",
                 "description": (
                     "Optional. First line to return (1-based). With line_end, defines the slice; "
-                    "if line_end - line_start + 1 is below the minimum window, line_end is extended. "
                     "If omitted but line_end is set, defaults to 1. If both are omitted, reads the entire file "
                     "when under the size limit."
                 ),

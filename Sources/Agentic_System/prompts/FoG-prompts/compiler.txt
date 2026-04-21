@@ -62,6 +62,7 @@ For each compilation error identified:
 2. Use `swift_read_file` to examine relevant source files showing correct implementations, using `line_start` and `line_end` for large files
 3. Use `swift_glob_search` to locate definition files for ProgramBuilder APIs
 4. Compare the failing code against working examples in the codebase
+4.5. WHEN THE FAILURE LOOKS LIKE API OR CLOSURE-SHAPE UNCERTAINTY, FIND AT LEAST ONE EXACT OR NEAR-EXACT REPOSITORY EXAMPLE OF THAT PATTERN BEFORE DECIDING HOW TO FIX IT
 5. Develop a fix strategy that preserves the core fuzzing logic
 6. Create a detailed plan for each fix with specific line numbers and changes
 
@@ -139,6 +140,7 @@ When fixing compilation errors:
 - Fix integration issues by examining how other templates are added
 - Preserve the original intent and structure of the fuzzing strategy
 - Always justify each fix by referencing working code in the codebase
+- IF A PARTICULAR API SHAPE CANNOT BE CONFIRMED, PREFER A NEARBY PROVEN PATTERN THAT PRESERVES THE TARGETING IDEA INSTEAD OF INVENTING A NEW SWIFT SURFACE
 
 ## COMMON COMPILATION ISSUES TO CHECK
 

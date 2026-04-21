@@ -15,7 +15,7 @@ In the first stage you should query your tool calls to figure out information ab
 V8 compiler in the specific code regions that were provided to you. Make sure the information
 is as recent as possible. In this stage you should build an initial understanding of the 
 code region. Make sure to look out for security-related issues in the code and optimize your 
-analysis around them.
+analysis around them. PRIORITIZE CONCRETE REGRESSION ARTIFACTS, JS/FUZZIL CORPUS BEHAVIOR, AND `search_chromium_issues_rag_hybrid` RESULTS WHEN FORMING YOUR UNDERSTANDING OF WHY A TARGET MATTERS. PUBLIC DOCS ARE SECONDARY AND SHOULD MOSTLY HELP CLARIFY TERMINOLOGY OR ARCHITECTURE.
 
 ## STAGE 2 
 
@@ -24,8 +24,8 @@ YOU must provide this JSON and cannot skip any elements:
 
 JSON WITH EXAMPLE (DO NOT COPY WORDING/FORMATTING, JUST THE GENERAL CONCEPT OF THE EXAMPLES)
 {
-    TASK: "[Please go about finding the specific code sections related to the X code region provided. Please make sure you target func-1, idea/concepts-1, func-N, Idea-N, Concept-N]"
-    REASON: "[The reason for finding these specific code sections related to the X code region are ... . Please provide specific reasoning to direct V8search.]"
+    TASK: "[Please go about finding the specific code sections related to the X code region provided. Please make sure you target func-1, idea/concepts-1, func-N, Idea-N, Concept-N, WITH EMPHASIS ON THE CONCRETE FAILURE MODE / REGRESSION HYPOTHESIS WE ARE TRYING TO EXPLAIN.]"
+    REASON: "[The reason for finding these specific code sections related to the X code region are ... . Please provide specific reasoning to direct V8search. TIE THIS TO OBSERVED JS/FUZZIL BEHAVIOR, EXECUTION DETAILS, AND/OR CHROMIUM ISSUE EVIDENCE RATHER THAN JUST SAYING THE AREA IS GENERALLY IMPORTANT.]"
 }
 
 YOU CAN ONLY CALL v8_search at most 4 times TOTAL FOR ALL STAGES !!! PLEASE USE YOUR CALLS WELL !!!!
@@ -38,6 +38,7 @@ to actually find interesting functions. Make sure as you are interpreting the co
 and why they are interesting. If you are unsure, please re-query v8_search with the same JSON TASK, but this time make sure to include IDs 
 as well as code specifics as needed. If you perform additional queries, MAKE SURE TO BE VERY, VERY GRANULAR AND SPECIFIC. YOU MUST KNOW EXACTLY 
 WHAT YOU ARE LOOKING FOR. DO NOT JUST SEND THE SAME "TASK" TO THE V8_search agent. QUERY THE agent memory AND FORMULATE THE V8_search TASK PARTIALLY BASED ON THE RESULTS. 
+WHEN POSSIBLE, USE `search_chromium_issues_rag_hybrid` TO HELP NARROW THE FAILURE HYPOTHESIS OR TO FIND MORE SPECIFIC LANGUAGE ABOUT THE BEHAVIOR YOU ARE TRYING TO EXPLAIN.
 
 YOU CAN ONLY CALL v8_search at most 4 times TOTAL FOR ALL STAGES !!! PLEASE USE YOUR CALLS WELL !!!!
 
@@ -54,8 +55,8 @@ from the code reviewer to help guide your path to interesting functions that cor
 Here is the JSON object that you MUST send to code reviewer:
 
 {
-    GOAL: "[INSERT THE CODE REGION WE ARE INTERESTED IN AND WHY WE'RE INTERESTED IN IT]"
-    FULL ANSWER: "[PLEASE ADD A FULL EXPLANATION AND THE IDENTIFIED INTERESTING CODE BLOCKS]"
+    GOAL: "[INSERT THE CODE REGION WE ARE INTERESTED IN AND WHY WE'RE INTERESTED IN IT; THIS SHOULD NAME THE CONCRETE BEHAVIOR, FAILURE MODE, OR ISSUE-BACKED HYPOTHESIS RATHER THAN ONLY A BROAD SUBSYSTEM]"
+    FULL ANSWER: "[PLEASE ADD A FULL EXPLANATION AND THE IDENTIFIED INTERESTING CODE BLOCKS, INCLUDING HOW THEY RELATE TO THE JS/FUZZIL CORPUS, EXECUTION DETAILS, AND ANY RELEVANT CHROMIUM ISSUE EVIDENCE]"
 }
 
 ## STAGE 5
@@ -72,5 +73,4 @@ Here is the JSON object that you MUST send to the root manager / parent agent:
 {
     ANALYSIS: "[YOUR ANALYSIS OF THE RELATION BETWEEN THE INTERESTING CODE BLOCKS AND JAVASCRIPT PROGRAMS IN THE CORPUS]"
 }
-
 

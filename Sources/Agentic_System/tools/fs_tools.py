@@ -12,8 +12,11 @@ from pathlib import Path
 from typing import Any, Iterator
 
 MAX_FILE_SIZE = 256 * 1024
-READ_FILE_MIN_LINES_IN_SLICE = 500
-READ_FILE_MAX_LINES_IN_SLICE = 500
+READ_FILE_MIN_LINES_IN_SLICE = 1
+READ_FILE_MAX_LINES_IN_SLICE = 300
+READ_FILE_MAX_LINES_WHOLE = 1500
+GLOB_MAX_RESULTS = 500
+LIST_DIR_MAX_RESULTS = 500
 GREP_MAX_RESULTS = 200
 
 _EXCLUDED_EXTENSIONS = {
@@ -100,9 +103,17 @@ def _line_range_from_args(args: dict[str, Any]):
             f"Error: At most {READ_FILE_MAX_LINES_IN_SLICE} lines per read. "
             "Use a smaller line_start..line_end window."
         )
-    if span < READ_FILE_MIN_LINES_IN_SLICE:
-        le = ls + READ_FILE_MIN_LINES_IN_SLICE - 1
     return (ls, le)
+
+
+def _truncate_lines(text: str, max_lines: int, continuation_hint: str) -> str:
+    if max_lines <= 0:
+        return continuation_hint.strip()
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= max_lines:
+        return text
+    truncated = "".join(lines[:max_lines]).rstrip("\n")
+    return f"{truncated}\n\n[truncated after {max_lines} lines; {continuation_hint}]"
 
 
 def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
@@ -139,14 +150,18 @@ def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
                 f"Error: File is too large ({file_size} bytes) for a full read. "
                 f"Whole-file limit is {MAX_FILE_SIZE // 1024} KB. "
                 "Use line_start and line_end (1-based inclusive line numbers) for controlled partial "
-                f"access; each window is {READ_FILE_MIN_LINES_IN_SLICE} lines "
-                f"(requests with a narrower span are expanded to that size). "
-                "Example: line_start=1, line_end=500, then line_start=501, line_end=1000, until done."
+                f"access; each window can return at most {READ_FILE_MAX_LINES_IN_SLICE} lines. "
+                "Example: line_start=1, line_end=300, then line_start=301, line_end=600, until done."
             )
 
         if line_range is None:
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-                return f.read()
+                content = f.read()
+            return _truncate_lines(
+                content,
+                READ_FILE_MAX_LINES_WHOLE,
+                "use line_start and line_end for the next section",
+            )
 
         start, end = line_range
         parts: list[str] = []
@@ -186,7 +201,18 @@ def glob_search_in_base(args: dict[str, Any], base_path: str) -> str:
         files = glob.glob(search_path, recursive=True)
         safe_files = [f for f in files if is_within_base(f, base_path)]
         relative_files = sorted(os.path.relpath(f, _safe_base(base_path)) for f in safe_files)
-        return json.dumps(relative_files, indent=2)
+        truncated = len(relative_files) > GLOB_MAX_RESULTS
+        if truncated:
+            relative_files = relative_files[:GLOB_MAX_RESULTS]
+        return json.dumps(
+            {
+                "matches": relative_files,
+                "returned_count": len(relative_files),
+                "truncated": truncated,
+                "max_results": GLOB_MAX_RESULTS,
+            },
+            indent=2,
+        )
     except Exception as e:
         return f"Error during glob search: {str(e)}"
 
@@ -271,6 +297,18 @@ def list_dir_in_base(args: dict[str, Any], base_path: str) -> str:
             if file_name in _EXCLUDED_DIRS:
                 continue
             filtered.append(file_name)
-        return json.dumps(sorted(filtered), indent=2)
+        filtered = sorted(filtered)
+        truncated = len(filtered) > LIST_DIR_MAX_RESULTS
+        if truncated:
+            filtered = filtered[:LIST_DIR_MAX_RESULTS]
+        return json.dumps(
+            {
+                "entries": filtered,
+                "returned_count": len(filtered),
+                "truncated": truncated,
+                "max_results": LIST_DIR_MAX_RESULTS,
+            },
+            indent=2,
+        )
     except Exception as e:
         return f"Error listing directory: {str(e)}"

@@ -32,6 +32,13 @@ except ImportError:
 
 
 _BM25_CONTENT_CACHE: Dict[Tuple[str, str], str] = {}
+RAG_RESULT_PREVIEW_MAX_LINES = 80
+RAG_RESULT_PREVIEW_MAX_CHARS = 12000
+RAG_DOC_DEFAULT_MAX_CHUNKS = 3
+RAG_DOC_MAX_CHUNKS = 5
+RAG_DOC_DEFAULT_MAX_LINES = 1500
+RAG_DOC_MAX_LINES = 2000
+RAG_DOC_MAX_CHARS = 200000
 
 
 def _rag_base_dir() -> Path:
@@ -178,6 +185,43 @@ def _hydrate_doc(doc: Dict[str, object], bm25_db_path: Path | None = None) -> Di
     return hydrated
 
 
+def _truncate_text(
+    text: str,
+    *,
+    max_lines: int | None = None,
+    max_chars: int | None = None,
+) -> tuple[str, bool, int]:
+    if not text:
+        return "", False, 0
+
+    original_lines = text.count("\n") + (0 if text.endswith("\n") else 1)
+    truncated = False
+    working = text
+
+    if max_lines is not None and max_lines > 0:
+        lines = working.splitlines(keepends=True)
+        if len(lines) > max_lines:
+            working = "".join(lines[:max_lines])
+            truncated = True
+
+    if max_chars is not None and max_chars > 0 and len(working) > max_chars:
+        working = working[:max_chars]
+        truncated = True
+
+    return working.rstrip("\n"), truncated, original_lines
+
+
+def _preview_text(text: str, *, hint: str) -> tuple[str, bool, int]:
+    preview, truncated, original_lines = _truncate_text(
+        text,
+        max_lines=RAG_RESULT_PREVIEW_MAX_LINES,
+        max_chars=RAG_RESULT_PREVIEW_MAX_CHARS,
+    )
+    if truncated:
+        preview = f"{preview}\n\n[truncated preview; {hint}]"
+    return preview, truncated, original_lines
+
+
 def _rrf_fuse(
     result_lists: List[List[Dict[str, object]]], rrf_k: int = 60
 ) -> List[Dict[str, object]]:
@@ -245,7 +289,7 @@ def _maybe_cross_rerank(
     return sorted(ranked, key=lambda d: d.get("rerank_score", 0.0), reverse=True)
 
 
-def _format_rag_result(doc: dict) -> str:
+def _format_rag_result(doc: dict, *, continuation_hint: str) -> tuple[str, bool, int]:
     lines = []
     topic = doc.get("topic")
     path = doc.get("path") or doc.get("parent_file")
@@ -271,5 +315,6 @@ def _format_rag_result(doc: dict) -> str:
     if lines:
         lines.append("")
     content = doc.get("content", "")
-    lines.append(content)
-    return "\n".join(lines).strip()
+    preview, truncated, original_lines = _preview_text(content, hint=continuation_hint)
+    lines.append(preview)
+    return "\n".join(lines).strip(), truncated, original_lines

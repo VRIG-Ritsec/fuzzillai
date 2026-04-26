@@ -3,7 +3,7 @@ Debug tools: GDB/MI/pwndbg wrappers as IkaTools.
 """
 
 from IkaCore.tools import IkaTools
-from tools.fs_tools import READ_FILE_MAX_LINES_IN_SLICE
+from tools.fs_tools import MAX_TOOL_RESULT_BYTES, READ_FILE_MAX_LINES_IN_SLICE
 
 from tools._shared import (
     read_file,
@@ -28,7 +28,7 @@ read_file_tool = IkaTools(
     name="read_file",
     description=(
         "Reads file contents under V8_PATH for debugging. Small files: omit line_start/line_end "
-        "to read the whole file. Files larger than the configured byte limit cannot be read in full; "
+        f"to read the whole file. Reads are capped at {MAX_TOOL_RESULT_BYTES} bytes. Files or slices beyond that limit cannot be read in full; "
         f"use line_start and line_end (1-based inclusive line numbers). Each paged read returns at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
     ),
     parameters={

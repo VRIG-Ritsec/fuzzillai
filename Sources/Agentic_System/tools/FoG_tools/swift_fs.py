@@ -17,10 +17,12 @@ from tools.fs_tools import (
     grep_search_in_base,
     list_dir_in_base,
     read_file_from_base,
+    MAX_TOOL_RESULT_BYTES,
     READ_FILE_MAX_LINES_IN_SLICE,
 )
 
 from ._shared import SWIFT_PATH, FUZZILLI_PATH
+from .file_patch import record_swift_file_read
 
 
 def _swift_list_dir_executor(params: dict) -> str:
@@ -44,7 +46,13 @@ def _swift_read_file_executor(params: dict) -> str:
         base_path = FUZZILLI_PATH
     else:
         base_path = SWIFT_PATH
-    return read_file_from_base(normalized, base_path)
+    result = read_file_from_base(normalized, base_path)
+    if not result.startswith("Error:"):
+        try:
+            record_swift_file_read(file_path)
+        except Exception:
+            pass
+    return result
 
 
 swift_list_dir_tool = IkaTools(
@@ -85,14 +93,31 @@ swift_glob_search_tool = IkaTools(
 swift_grep_search_tool = IkaTools(
     id="swift_grep_search",
     name="swift_grep_search",
-    description="Searches for a regex pattern in files under SWIFT_PATH.",
+    description=(
+        "Searches for a regex pattern in files under SWIFT_PATH. Results are capped at "
+        f"{MAX_TOOL_RESULT_BYTES} bytes; if the cap is hit, retry with a narrower pattern, "
+        "file_path, or file_path plus line_start/line_end. When file_path is a directory, "
+        "line_start/line_end applies to each searched file in that directory."
+    ),
     parameters={
         "type": "object",
         "properties": {
             "pattern": {
                 "type": "string",
                 "description": "The regex pattern to search for.",
-            }
+            },
+            "file_path": {
+                "type": "string",
+                "description": "Optional file or directory relative to SWIFT_PATH to restrict the search.",
+            },
+            "line_start": {
+                "type": "integer",
+                "description": "Optional first line to search. With a directory target, this applies per file.",
+            },
+            "line_end": {
+                "type": "integer",
+                "description": "Optional last line to search. With a directory target, this applies per file.",
+            },
         },
         "required": ["pattern"],
     },
@@ -104,7 +129,7 @@ swift_read_file_tool = IkaTools(
     name="swift_read_file",
     description=(
         "Reads file contents under SWIFT_PATH or FUZZILLI_PATH. Small files: omit line_start/line_end "
-        "to read the whole file. Files larger than the configured byte limit cannot be read in full; "
+        f"to read the whole file. Reads are capped at {MAX_TOOL_RESULT_BYTES} bytes. Files or slices beyond that limit cannot be read in full; "
         f"use line_start and line_end (1-based inclusive line numbers). Each paged read returns at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
     ),
     parameters={

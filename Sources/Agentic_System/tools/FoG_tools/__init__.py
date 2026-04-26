@@ -44,6 +44,22 @@ from .swift_fs import (
     swift_grep_search_tool,
     swift_read_file_tool,
 )
+from .file_patch import (
+    swift_patch_file_tool,
+    swift_multi_patch_file_tool,
+    v8_patch_file_tool,
+    v8_multi_patch_file_tool,
+    upsert_program_template_tool,
+    remove_program_template_tool,
+)
+from .run_hygiene import (
+    fog_template_preflight_tool,
+    fog_template_restore_baseline_tool,
+    fog_template_postrun_report_tool,
+    prepare_clean_fog_run,
+    restore_template_baseline,
+    write_postrun_hygiene_report,
+)
 from .program_template import (
     edit_program_template_file_tool,
     list_program_templates_tool,
@@ -83,6 +99,18 @@ __all__ = [
     "swift_glob_search_tool",
     "swift_grep_search_tool",
     "swift_read_file_tool",
+    "swift_patch_file_tool",
+    "swift_multi_patch_file_tool",
+    "v8_patch_file_tool",
+    "v8_multi_patch_file_tool",
+    "upsert_program_template_tool",
+    "remove_program_template_tool",
+    "fog_template_preflight_tool",
+    "fog_template_restore_baseline_tool",
+    "fog_template_postrun_report_tool",
+    "prepare_clean_fog_run",
+    "restore_template_baseline",
+    "write_postrun_hygiene_report",
     "edit_program_template_file_tool",
     "list_program_templates_tool",
     "compile_program_template_tool",

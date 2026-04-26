@@ -11,13 +11,14 @@ import re
 from pathlib import Path
 from typing import Any, Iterator
 
-MAX_FILE_SIZE = 256 * 1024
+MAX_TOOL_RESULT_BYTES = 100 * 1024
+MAX_FILE_SIZE = MAX_TOOL_RESULT_BYTES
 READ_FILE_MIN_LINES_IN_SLICE = 1
-READ_FILE_MAX_LINES_IN_SLICE = 300
+READ_FILE_MAX_LINES_IN_SLICE = 500
 READ_FILE_MAX_LINES_WHOLE = 1500
 GLOB_MAX_RESULTS = 500
 LIST_DIR_MAX_RESULTS = 500
-GREP_MAX_RESULTS = 200
+GREP_MAX_RESULTS = 400
 
 _EXCLUDED_EXTENSIONS = {
     ".a",
@@ -76,6 +77,37 @@ def resolve_path(base_path: str, target_path: str) -> str:
     return os.path.abspath(os.path.join(_safe_base(base_path), target_path))
 
 
+def _base_path_error(base_path: str) -> str | None:
+    safe_base = _safe_base(base_path)
+    if not os.path.isdir(safe_base):
+        return f"Error: Tool base path is not a directory: {safe_base}"
+
+    base = Path(safe_base)
+    build_markers = ("build.ninja", ".ninja_deps", ".ninja_log")
+    if any((base / marker).exists() for marker in build_markers):
+        return (
+            "Error: Tool base path is not a source root. "
+            f"It points at a V8 build/output directory ({safe_base}). "
+            "Set V8_PATH to the V8 source root before using list_dir, glob_search, "
+            "grep_search, or read_file. No path fallback was applied."
+        )
+
+    return None
+
+
+def _byte_len(text: str) -> int:
+    return len(text.encode("utf-8", errors="replace"))
+
+
+def _size_limit_hint(tool_name: str) -> str:
+    return (
+        f"{tool_name} went beyond its max result budget of {MAX_TOOL_RESULT_BYTES} bytes. "
+        "Retry with more specific information: for read_file, provide a smaller "
+        "line_start/line_end window; for grep_search, provide a narrower pattern and, "
+        "when possible, file_path plus optional line_start/line_end."
+    )
+
+
 def _line_range_from_args(args: dict[str, Any]):
     """Return None for whole-file read, (start, end) 1-based inclusive for a slice, or str on error."""
     ls_raw = args.get("line_start")
@@ -100,7 +132,7 @@ def _line_range_from_args(args: dict[str, Any]):
     span = le - ls + 1
     if span > READ_FILE_MAX_LINES_IN_SLICE:
         return (
-            f"Error: At most {READ_FILE_MAX_LINES_IN_SLICE} lines per read. "
+            f"Error: At most {READ_FILE_MAX_LINES_IN_SLICE} lines per line_start..line_end window. "
             "Use a smaller line_start..line_end window."
         )
     return (ls, le)
@@ -121,6 +153,10 @@ def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
     if not file_path:
         return "Error: file_path is required"
 
+    base_error = _base_path_error(base_path)
+    if base_error:
+        return base_error
+
     range_or_err = _line_range_from_args(args)
     if isinstance(range_or_err, str):
         return range_or_err
@@ -135,8 +171,6 @@ def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
     if "immutable" in Path(full_path).parts:
         return "Error: Access to 'immutable' directory is restricted."
 
-    max_return_chars = max(MAX_FILE_SIZE * 4, READ_FILE_MAX_LINES_IN_SLICE * 4096)
-
     try:
         if not os.path.exists(full_path):
             return f"Error: File {file_path} does not exist."
@@ -147,21 +181,33 @@ def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
 
         if file_size > MAX_FILE_SIZE and line_range is None:
             return (
-                f"Error: File is too large ({file_size} bytes) for a full read. "
-                f"Whole-file limit is {MAX_FILE_SIZE // 1024} KB. "
+                f"Error: read_file went beyond its max full-read budget. "
+                f"File is {file_size} bytes; full-read limit is {MAX_FILE_SIZE} bytes. "
                 "Use line_start and line_end (1-based inclusive line numbers) for controlled partial "
                 f"access; each window can return at most {READ_FILE_MAX_LINES_IN_SLICE} lines. "
-                "Example: line_start=1, line_end=300, then line_start=301, line_end=600, until done."
+                "Example: line_start=1, line_end=300. You can also use grep_search with "
+                "file_path and a narrower pattern to locate specific lines first."
             )
 
         if line_range is None:
             with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
-            return _truncate_lines(
+            if _byte_len(content) > MAX_TOOL_RESULT_BYTES:
+                return (
+                    f"Error: {_size_limit_hint('read_file')} "
+                    "The decoded file content exceeded the byte limit; retry with line_start and line_end."
+                )
+            result = _truncate_lines(
                 content,
                 READ_FILE_MAX_LINES_WHOLE,
                 "use line_start and line_end for the next section",
             )
+            if _byte_len(result) > MAX_TOOL_RESULT_BYTES:
+                return (
+                    f"Error: {_size_limit_hint('read_file')} "
+                    "The truncated full-file result still exceeded the byte limit; retry with line_start and line_end."
+                )
+            return result
 
         start, end = line_range
         parts: list[str] = []
@@ -172,11 +218,13 @@ def read_file_from_base(args: dict[str, Any], base_path: str) -> str:
                     continue
                 if i > end:
                     break
-                total += len(line)
-                if total > max_return_chars:
+                total += _byte_len(line)
+                if total > MAX_TOOL_RESULT_BYTES:
                     return (
-                        "Error: Selected slice exceeds the return size cap. "
-                        "Use a smaller line_start..line_end range or shorter lines."
+                        f"Error: {_size_limit_hint('read_file')} "
+                        f"Selected slice lines {start}-{end} exceeded the budget. "
+                        "Use a smaller line_start..line_end range or use grep_search "
+                        "with file_path and a narrower pattern to find exact lines."
                     )
                 parts.append(line)
 
@@ -192,6 +240,10 @@ def glob_search_in_base(args: dict[str, Any], base_path: str) -> str:
     pattern = args.get("pattern")
     if not pattern:
         return "Error: pattern is required"
+
+    base_error = _base_path_error(base_path)
+    if base_error:
+        return base_error
 
     if os.path.isabs(pattern) or ".." in pattern:
         return "Error: Pattern cannot be absolute or contain '..'"
@@ -217,22 +269,73 @@ def glob_search_in_base(args: dict[str, Any], base_path: str) -> str:
         return f"Error during glob search: {str(e)}"
 
 
-def _get_grep_file_list(base_path: str) -> Iterator[tuple[str, str]]:
+def _is_searchable_file(path: str) -> bool:
+    name = os.path.basename(path)
+    ext = os.path.splitext(name)[1].lower()
+    if name in {".ninja_deps", ".ninja_log"}:
+        return False
+    return ext not in _EXCLUDED_EXTENSIONS
+
+
+def _get_grep_file_list(base_path: str, start_path: str | None = None) -> Iterator[tuple[str, str]]:
     safe_base = _safe_base(base_path)
-    for root, dirs, files in os.walk(safe_base):
+    search_root = start_path or safe_base
+    if os.path.isfile(search_root):
+        if _is_searchable_file(search_root) and is_within_base(search_root, safe_base):
+            yield search_root, os.path.splitext(search_root)[1].lower()
+        return
+
+    for root, dirs, files in os.walk(search_root):
         dirs[:] = sorted(
             d
             for d in dirs
             if d not in _EXCLUDED_DIRS and "immutable" not in Path(root, d).parts
         )
         for name in sorted(files):
-            ext = os.path.splitext(name)[1].lower()
-            if ext in _EXCLUDED_EXTENSIONS:
-                continue
             full_path = os.path.join(root, name)
+            ext = os.path.splitext(name)[1].lower()
+            if not _is_searchable_file(full_path):
+                continue
             if not is_within_base(full_path, safe_base):
                 continue
             yield full_path, ext
+
+
+def _grep_result(
+    matches: list[dict[str, Any]],
+    *,
+    truncated: bool = False,
+    truncation_reason: str | None = None,
+    omitted_match: dict[str, Any] | None = None,
+) -> str:
+    returned_matches = list(matches)
+    dropped_for_budget = 0
+
+    while True:
+        payload: dict[str, Any] = {
+            "matches": returned_matches,
+            "returned_count": len(returned_matches),
+            "truncated": truncated,
+            "max_results": GREP_MAX_RESULTS,
+            "max_bytes": MAX_TOOL_RESULT_BYTES,
+        }
+        if truncation_reason:
+            payload["truncation_reason"] = truncation_reason
+        if omitted_match:
+            payload["first_omitted_match"] = omitted_match
+        if dropped_for_budget:
+            payload["dropped_returned_matches_for_budget"] = dropped_for_budget
+        if truncated:
+            payload["continuation_hint"] = _size_limit_hint("grep_search")
+
+        result = json.dumps(payload, indent=2)
+        if _byte_len(result) <= MAX_TOOL_RESULT_BYTES or not returned_matches:
+            return result
+
+        truncated = True
+        truncation_reason = truncation_reason or "result would exceed max_bytes"
+        returned_matches.pop()
+        dropped_for_budget += 1
 
 
 def grep_search_in_base(args: dict[str, Any], base_path: str) -> str:
@@ -240,8 +343,27 @@ def grep_search_in_base(args: dict[str, Any], base_path: str) -> str:
     if not pattern:
         return "Error: pattern is required"
 
+    base_error = _base_path_error(base_path)
+    if base_error:
+        return base_error
+
     safe_base = _safe_base(base_path)
-    matches = []
+    target = args.get("file_path") or args.get("target_path") or args.get("target_directory")
+    full_target = None
+    if target:
+        full_target = resolve_path(safe_base, str(target))
+        if not is_within_base(full_target, safe_base):
+            return "Error: Access denied. grep_search target is outside the service directory."
+        if "immutable" in Path(full_target).parts:
+            return "Error: Access to 'immutable' directory is restricted."
+        if not os.path.exists(full_target):
+            return f"Error: grep_search target {target} does not exist."
+
+    range_or_err = _line_range_from_args(args)
+    if isinstance(range_or_err, str):
+        return range_or_err
+    line_range = range_or_err
+    matches: list[dict[str, Any]] = []
 
     try:
         regex = re.compile(pattern)
@@ -249,33 +371,72 @@ def grep_search_in_base(args: dict[str, Any], base_path: str) -> str:
         return f"Error: Invalid regex pattern - {str(e)}"
 
     try:
-        for file_path, _ext in _get_grep_file_list(safe_base):
-            if len(matches) >= GREP_MAX_RESULTS:
-                break
+        truncated = False
+        truncation_reason = None
+        omitted_match = None
+        for file_path, _ext in _get_grep_file_list(safe_base, full_target):
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     for line_number, line in enumerate(f, start=1):
+                        if line_range is not None:
+                            start, end = line_range
+                            if line_number < start:
+                                continue
+                            if line_number > end:
+                                break
                         if regex.search(line):
                             relative_path = os.path.relpath(file_path, safe_base)
-                            matches.append(
+                            candidate = {
+                                "file": relative_path,
+                                "line_number": line_number,
+                                "line": line.strip(),
+                            }
+                            candidate_result = json.dumps(
                                 {
+                                    "matches": matches + [candidate],
+                                    "returned_count": len(matches) + 1,
+                                    "truncated": False,
+                                    "max_results": GREP_MAX_RESULTS,
+                                    "max_bytes": MAX_TOOL_RESULT_BYTES,
+                                },
+                                indent=2,
+                            )
+                            if _byte_len(candidate_result) > MAX_TOOL_RESULT_BYTES:
+                                truncated = True
+                                truncation_reason = "result would exceed max_bytes"
+                                omitted_match = {
                                     "file": relative_path,
                                     "line_number": line_number,
-                                    "line": line.strip(),
                                 }
-                            )
-                            if len(matches) >= GREP_MAX_RESULTS:
                                 break
+                            matches.append(candidate)
+                            if len(matches) >= GREP_MAX_RESULTS:
+                                truncated = True
+                                truncation_reason = "result reached max_results"
+                                break
+                    if truncated:
+                        break
             except OSError:
                 continue
+            if truncated:
+                break
 
-        return json.dumps(matches, indent=2)
+        return _grep_result(
+            matches,
+            truncated=truncated,
+            truncation_reason=truncation_reason,
+            omitted_match=omitted_match,
+        )
     except Exception as e:
         return f"Error during grep search: {str(e)}"
 
 
 def list_dir_in_base(args: dict[str, Any], base_path: str) -> str:
     target_directory = args.get("target_directory", ".") or "."
+
+    base_error = _base_path_error(base_path)
+    if base_error:
+        return base_error
 
     safe_base = _safe_base(base_path)
     full_path = resolve_path(safe_base, str(target_directory))

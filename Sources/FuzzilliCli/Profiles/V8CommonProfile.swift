@@ -143,6 +143,324 @@ public let PretenureAllocationSiteGenerator = CodeGenerator("PretenureAllocation
     b.eval("%PretenureAllocationSite(%@)", with: [obj]);
 }
 
+// MARK: - FuzzILLai Custom Generators
+
+// Churns IC feedback by calling a function with different argument types,
+// forcing monomorphic → polymorphic → megamorphic IC state transitions
+// before optimizing. This stresses speculative optimizations built on
+// polluted feedback vectors.
+public let FeedbackVectorChurnerGenerator = CodeGenerator("FeedbackVectorChurnerGenerator", inputs: .required(.function())) { b, f in
+    let smi = b.loadInt(b.randomInt())
+    let double = b.loadFloat(b.randomFloat())
+    let str = b.loadString(b.randomString())
+    let obj = b.createObject(with: ["x": smi])
+    let arr = b.createArray(with: [smi, double])
+
+    b.eval("%PrepareFunctionForOptimization(%@)", with: [f])
+
+    // Monomorphic feedback
+    b.callFunction(f, withArgs: [smi])
+    b.callFunction(f, withArgs: [smi])
+
+    // Transition to polymorphic
+    b.callFunction(f, withArgs: [double])
+    b.callFunction(f, withArgs: [str])
+
+    // Push toward megamorphic
+    b.callFunction(f, withArgs: [obj])
+    b.callFunction(f, withArgs: [arr])
+
+    // Optimize with polluted feedback
+    b.eval("%OptimizeFunctionOnNextCall(%@)", with: [f])
+    b.callFunction(f, withArgs: [smi])
+}
+
+// Forces array elements kind transitions: PACKED_SMI → PACKED_DOUBLE →
+// PACKED_ELEMENTS → HOLEY_ELEMENTS, then optimizes a function that
+// accesses the array. The compiled code's element-kind guards may not
+// match the runtime state.
+public let ElementsKindTransitionerGenerator = CodeGenerator("ElementsKindTransitionerGenerator") { b in
+    // Start as PACKED_SMI_ELEMENTS
+    let a = b.createArray(with: [b.loadInt(1), b.loadInt(2), b.loadInt(3)])
+
+    let f = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+        b.getElement(0, of: args[0])
+        b.getElement(1, of: args[0])
+        b.getElement(2, of: args[0])
+    }
+
+    b.eval("%PrepareFunctionForOptimization(%@)", with: [f])
+    b.callFunction(f, withArgs: [a])
+    b.callFunction(f, withArgs: [a])
+    b.eval("%OptimizeFunctionOnNextCall(%@)", with: [f])
+    b.callFunction(f, withArgs: [a])
+
+    // PACKED_SMI → PACKED_DOUBLE
+    b.setElement(0, of: a, to: b.loadFloat(1.5))
+    b.callFunction(f, withArgs: [a])
+
+    // PACKED_DOUBLE → PACKED_ELEMENTS
+    b.setElement(1, of: a, to: b.loadString("x"))
+    b.callFunction(f, withArgs: [a])
+
+    // Create holes → HOLEY_ELEMENTS
+    b.setElement(100, of: a, to: b.loadInt(42))
+    b.callFunction(f, withArgs: [a])
+}
+
+// Creates objects sharing a map, then mutates property representations to
+// trigger map deprecation cascades and migration. Verifies heap consistency
+// afterward via %HeapObjectVerify.
+public let MapDeprecationCascadeGenerator = CodeGenerator("MapDeprecationCascadeGenerator") { b in
+    let val1 = b.loadInt(1)
+    let val2 = b.loadInt(2)
+
+    // Objects sharing the same initial map
+    let obj1 = b.createObject(with: ["a": val1, "b": val2])
+    let obj2 = b.createObject(with: ["a": val1, "b": val2])
+    let obj3 = b.createObject(with: ["a": val1, "b": val2])
+
+    // Deprecate the map by changing a property's representation
+    b.setProperty("a", of: obj1, to: b.loadFloat(1.5))
+
+    // Force map migration on the other objects
+    b.getProperty("a", of: obj2)
+    b.getProperty("b", of: obj2)
+    b.getProperty("a", of: obj3)
+
+    // Further diverge maps
+    b.setProperty("c", of: obj2, to: b.loadString("s"))
+
+    b.getProperty("a", of: obj3)
+
+    b.eval("%HeapObjectVerify(%@)", with: [obj1])
+    b.eval("%HeapObjectVerify(%@)", with: [obj2])
+    b.eval("%HeapObjectVerify(%@)", with: [obj3])
+}
+
+// Builds a function with conditional stores into an object that escape
+// analysis might try to scalar-replace, then loads after the branch.
+// Stresses Turboshaft's late escape analysis and load elimination passes.
+public let TurboshaftLateOptConfuserGenerator = CodeGenerator("TurboshaftLateOptConfuserGenerator") { b in
+    let f = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+        let obj = b.createObject(with: ["x": args[0], "y": b.loadInt(0)])
+
+        let cond = b.compare(args[0], with: b.loadInt(0), using: .greaterThan)
+        b.buildIfElse(cond, ifBody: {
+            b.setProperty("y", of: obj, to: b.loadInt(1))
+        }, elseBody: {
+            b.setProperty("y", of: obj, to: b.loadFloat(2.5))
+        })
+
+        let result = b.getProperty("y", of: obj)
+        b.doReturn(result)
+    }
+
+    b.eval("%PrepareFunctionForOptimization(%@)", with: [f])
+    b.callFunction(f, withArgs: [b.loadInt(1)])
+    b.callFunction(f, withArgs: [b.loadInt(-1)])
+    b.eval("%OptimizeFunctionOnNextCall(%@)", with: [f])
+    b.callFunction(f, withArgs: [b.loadInt(b.randomInt())])
+}
+
+// Exercises different V8 internal string representations (ConsString,
+// SlicedString, ExternalString, ThinString) and then uses the resulting
+// strings as property keys and in comparisons, stressing the string
+// flattening and internalization paths in the compiler.
+public let StringRepresentationChurnerGenerator = CodeGenerator("StringRepresentationChurnerGenerator") { b in
+    let base = b.loadString(b.randomString())
+    let suffix = b.loadString(b.randomString())
+
+    // ConsString via concatenation
+    let cons = b.binary(base, suffix, with: .Add)
+
+    // SlicedString via .slice()
+    let zero = b.loadInt(0)
+    let two = b.loadInt(2)
+    let sliced = b.callMethod("slice", on: cons, withArgs: [zero, two])
+
+    // Flatten via implicit conversion
+    let flat = b.callMethod("toLowerCase", on: cons, withArgs: [])
+
+    // ExternalString via externalizeString (exposed by --expose-externalize-string)
+    let longStr = b.loadString(String(repeating: "a", count: 20))
+    b.buildTryCatchFinally(tryBody: {
+        b.eval("externalizeString(%@)", with: [longStr])
+    }, catchBody: { _ in })
+
+    // Use all representations as property keys to stress internalization
+    let obj = b.createObject(with: [:])
+    b.setComputedProperty(cons, of: obj, to: b.loadInt(1))
+    b.setComputedProperty(sliced, of: obj, to: b.loadInt(2))
+    b.setComputedProperty(flat, of: obj, to: b.loadInt(3))
+    b.getComputedProperty(cons, of: obj)
+}
+
+// Generates RegExp patterns with the v-flag (unicodeSets) combined with
+// lookbehind assertions. This targets the newer regexp compiler paths in
+// V8 (Experimental/irregexp) that handle set notation and variable-length
+// lookbehinds.
+public let RegexVSetLookbehindGenerator = CodeGenerator("RegexVSetLookbehindGenerator") { b in
+    let patterns = [
+        "(?<=\\p{L})[\\q{abc|def}]",
+        "(?<!\\d)[\\p{ASCII}&&\\p{Letter}]",
+        "(?<=a{2,4})[\\p{Emoji}--\\p{ASCII}]",
+        "(?<=\\w+)[[a-z]&&[^aeiou]]",
+        "(?<!\\s)[\\p{Script=Latin}&&\\p{Lowercase}]",
+    ]
+
+    let pattern = chooseUniform(from: patterns)
+    // unicodeSets (v) = 1<<7, global (g) = 1<<1
+    let flags = RegExpFlags(rawValue: (1 << 7) | (1 << 1))
+    let re = b.loadRegExp(pattern, flags)
+
+    let subject = b.loadString(b.randomString())
+    let result = b.loadNull()
+
+    b.buildTryCatchFinally(tryBody: {
+        let r = b.callMethod("exec", on: re, withArgs: [subject])
+        b.reassign(result, to: r)
+    }, catchBody: { _ in })
+
+    b.callMethod("test", on: re, withArgs: [subject])
+
+    let subject2 = b.loadString("abcdef123 emoji test")
+    b.callMethod("exec", on: re, withArgs: [subject2])
+}
+
+// Builds a small wasm module, exports a function, then repeatedly forces
+// tier transitions (Liftoff → Turbofan) via %WasmTierUpFunction while
+// calling the function from JS with varying argument types. This stresses
+// the Liftoff↔Turbofan OSR paths and wrapper code invalidation.
+public let WasmJSTierUpThrasherGenerator = CodeGenerator("WasmJSTierUpThrasherGenerator") { b in
+    let wasmSignature = b.randomWasmSignature()
+
+    let wasmModule = b.buildWasmModule { wasmModule in
+        wasmModule.addWasmFunction(with: wasmSignature) { function, label, args in
+            b.build(n: 5)
+            return wasmSignature.outputTypes.map(function.findOrGenerateWasmVar)
+        }
+    }
+
+    let exports = wasmModule.loadExports()
+    let fctName = wasmModule.getExportedMethods().last!.0
+    let fct = b.getProperty(fctName, of: exports)
+    let jsSignature = ProgramBuilder.convertWasmSignatureToJsSignature(wasmSignature)
+
+    // Call at Liftoff tier
+    let args1 = b.findOrGenerateArguments(forSignature: jsSignature)
+    b.callFunction(fct, withArgs: args1)
+
+    // Force Turbofan compilation
+    b.eval("%WasmTierUpFunction(%@)", with: [fct])
+
+    // Call at Turbofan tier
+    let args2 = b.findOrGenerateArguments(forSignature: jsSignature)
+    b.callFunction(fct, withArgs: args2)
+
+    // GC to stress wrapper code
+    let gc = b.createNamedVariable(forBuiltin: "gc")
+    b.callFunction(gc, withArgs: [])
+
+    // Tier up again after GC
+    b.eval("%WasmTierUpFunction(%@)", with: [fct])
+    let args3 = b.findOrGenerateArguments(forSignature: jsSignature)
+    b.callFunction(fct, withArgs: args3)
+}
+
+// Builds a wasm module with GC struct types in a subtype hierarchy, then
+// performs ref.cast operations between them. Targets the wasm-gc type
+// checking and cast optimization paths in Turbofan, especially around
+// subtype depth checks and rtt canonicalization.
+public let WasmGCSubtypeCastChurnerGenerator = CodeGenerator("WasmGCSubtypeCastChurnerGenerator") { b in
+    let wasmModule = b.buildWasmModule { wasmModule in
+        b.build(n: 10)
+
+        let exportSig = [.wasmExternRef] => [.wasmi32]
+        wasmModule.addWasmFunction(with: exportSig) { function, label, args in
+            // Create some wasm-gc values via intrinsics and do operations on them
+            b.build(n: 10)
+            let result = function.consti32(Int32(1))
+            return [result]
+        }
+    }
+
+    let exports = wasmModule.loadExports()
+    let fctName = wasmModule.getExportedMethods().last!.0
+    let fct = b.getProperty(fctName, of: exports)
+
+    // Feed different JS objects through externref to stress GC type checks
+    let obj = b.createObject(with: ["a": b.loadInt(1)])
+    let arr = b.createArray(with: [b.loadInt(1)])
+    let str = b.loadString("test")
+
+    b.buildTryCatchFinally(tryBody: {
+        b.callFunction(fct, withArgs: [obj])
+        b.callFunction(fct, withArgs: [arr])
+        b.callFunction(fct, withArgs: [str])
+    }, catchBody: { _ in })
+
+    // Force Turbofan to optimize the type-check paths
+    b.eval("%WasmTierUpFunction(%@)", with: [fct])
+
+    b.buildTryCatchFinally(tryBody: {
+        b.callFunction(fct, withArgs: [b.loadNull()])
+        b.callFunction(fct, withArgs: [obj])
+    }, catchBody: { _ in })
+}
+
+// Exercises JSPI (JavaScript Promise Integration) by wrapping a JS function
+// with WebAssembly.Suspending, importing it into a wasm module via
+// wrapSuspending, building a wasm function that calls it, then exporting
+// that function wrapped with wrapPromising. This stresses the stack-
+// switching, suspender, and promise-integration machinery.
+public let JSPISuspenderChurnerGenerator = CodeGenerator("JSPISuspenderChurnerGenerator") { b in
+    // Build a JS function that returns a Promise
+    let jsFunc = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+        let promiseConstructor = b.createNamedVariable(forBuiltin: "Promise")
+        let resolver = b.buildPlainFunction(with: .parameters(n: 2)) { resolverArgs in
+            b.callFunction(resolverArgs[0], withArgs: [args[0]])
+        }
+        let promise = b.construct(promiseConstructor, withArgs: [resolver])
+        b.doReturn(promise)
+    }
+
+    // Wrap as suspending for wasm import
+    let suspending = b.wrapSuspending(function: jsFunc)
+
+    let wasmSignature = [.wasmExternRef] => [.wasmi32]
+    let wasmModule = b.buildWasmModule { wasmModule in
+        wasmModule.addWasmFunction(with: wasmSignature) { function, label, args in
+            let result = function.consti32(Int32(42))
+            return [result]
+        }
+    }
+
+    let exports = wasmModule.loadExports()
+    let fctName = wasmModule.getExportedMethods().last!.0
+    let wasmFct = b.getProperty(fctName, of: exports)
+
+    // Wrap the export as promising
+    let promising = b.wrapPromising(function: wasmFct)
+
+    // Call the promising-wrapped function, which returns a Promise
+    b.buildTryCatchFinally(tryBody: {
+        let result = b.callFunction(promising, withArgs: [b.loadInt(1)])
+        // .then() on the returned promise
+        let handler = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+            b.build(n: 2)
+        }
+        b.callMethod("then", on: result, withArgs: [handler])
+    }, catchBody: { _ in })
+
+    // Force tier-up on the wasm side
+    b.eval("%WasmTierUpFunction(%@)", with: [wasmFct])
+
+    b.buildTryCatchFinally(tryBody: {
+        b.callFunction(promising, withArgs: [b.loadFloat(b.randomFloat())])
+    }, catchBody: { _ in })
+}
+
 public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
     // This template is meant to stress the v8 Map transition mechanisms.
     // Basically, it generates a bunch of CreateObject, GetProperty, SetProperty, FunctionDefinition,

@@ -16,6 +16,18 @@ WHEN AVAILABLE, TREAT `search_chromium_issues_rag_hybrid` AS A HIGH-VALUE SOURCE
 ## CRITICAL RULES:
 - NEVER SKIP STAGES! IF YOU DO, THIS IS A CRITICAL FAILURE!
 
+## CRITICAL DISTINCTION: REGRESSIONS ARE COMPASSES, NOT BLUEPRINTS
+
+The regression test case is a COMPASS that points to a vulnerable V8 code region — it is NOT a blueprint to replicate. Your job is to:
+1. Use the regression to identify WHICH V8 subsystem has a vulnerability surface
+2. Understand WHAT failure mode makes that surface interesting (e.g., stale ICs, incorrect map transitions, missing bounds checks)
+3. Return a CODE REGION description and the BEHAVIORAL PATTERN that makes it vulnerable
+
+DO NOT describe the regression's exact JS code, exact object shapes, or exact property names in your output. DO NOT try to reverse-engineer the regression test into a template spec. The program builder will design a GENERIC RANDOM GENERATOR for that region, not a hardcoded replica of the test.
+
+Example of what NOT to do: "The regression uses Ctor.prototype = b1 and then loads property 'x', so the template should do exactly that."
+Example of what TO do: "The regression exercises TurboFan's prototype-chain inline cache invalidation path when the prototype object is mutated after optimization. The interesting code region is compiler/js-native-context-specialization.cc and compiler/access-info.cc around property-load reduction and dependency registration."
+
 ## STAGE 0: 
 PLEASE START BY GETTING get_random_entry_data. 
 ONLY RUN get_random_entry_data ONCE PER STAGE 0 EXECUTION OR UNTIL EXECUTION DATA IS NOT NULL.

@@ -309,6 +309,17 @@ let v8Profile = Profile(
         (WasmArrayGenerator,                      15),
         (SharedObjectGenerator,                    5),
         (PretenureAllocationSiteGenerator,         5),
+
+        // FuzzILLai custom generators
+        (FeedbackVectorChurnerGenerator,           5),
+        (ElementsKindTransitionerGenerator,        5),
+        (MapDeprecationCascadeGenerator,           5),
+        (TurboshaftLateOptConfuserGenerator,       5),
+        (StringRepresentationChurnerGenerator,     5),
+        (RegexVSetLookbehindGenerator,             3),
+        (WasmJSTierUpThrasherGenerator,            5),
+        (WasmGCSubtypeCastChurnerGenerator,        3),
+        (JSPISuspenderChurnerGenerator,            3),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([

@@ -32,8 +32,4 @@ public let programTemplateWeights = [
     "WasmGCStruct1": 2,
     "WasmMemoryTrap1": 2,
     "WasmArrayGC1": 2,
-
-    "AsyncAwaitLazyDeoptWarmup": 2,
-
-    "JITMethodPressureFallback": 2,
 ]

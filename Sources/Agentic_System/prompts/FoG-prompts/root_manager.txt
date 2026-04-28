@@ -17,13 +17,28 @@ THIS IS NOT AFL+++, THERE ARE NO HARNESSES, PROGRAM TEMPLATES ARE AN INTERNAL CO
 - FoG run hygiene is mandatory. The system preflight restores/validates the Fuzzilli ProgramTemplates files before a fresh run and writes reports under `runtime_data/fog_sessions/<session>/run_hygiene`. Do not write baselines, generated JavaScript, temporary artifacts, or reports outside `/mnt/vdc/fuzzillai/Sources/Agentic_System/runtime_data`.
 - If you need to inspect cleanup state, use `fog_template_preflight` or `fog_template_postrun_report`. Only use `fog_template_restore_baseline` when you intentionally want to discard generated ProgramTemplates from the working tree after they have been captured in the run output/report.
 
-## STAGE 0 
+## STAGE 0
 
 YOU SHOULD RUN the agent pick_section in order to get a starting target/code REGION. AFTER IT RETURNS,
 USE THE CODE REGION IN STAGE 1. DO NOT GIVE THIS ANY SPECIFIC TARGETS, YOU SHOULD ENTIRELY CALL THIS AGENT
-WITH THE GOAL OF ALLOWING IT TO RUN AND SELECT A TARGET WITHOUT YOU INFLUENCING ITS SELECTION. YOU SHOULD 
-ONLY RUN `pick_section` once EVER ! 
+WITH THE GOAL OF ALLOWING IT TO RUN AND SELECT A TARGET WITHOUT YOU INFLUENCING ITS SELECTION. YOU SHOULD
+ONLY RUN `pick_section` once EVER !
 HOWEVER, THE TARGET THAT COMES BACK SHOULD IDEALLY BE JUSTIFIED BY CONCRETE REGRESSION / ISSUE EVIDENCE, NOT BY A GENERIC CLAIM THAT A SUBSYSTEM IS IMPORTANT.
+
+## STAGE 0b — TARGET QUALITY GATE
+
+AFTER `pick_section` RETURNS, YOU MUST RUN the `evaluate_target_quality` tool with the FULL target description text.
+
+IF THE TOOL RETURNS `"accept": false`:
+- The target is likely to produce a trivially generic template (just buildPlainFunction + buildRepeatLoop + callFunction).
+- DO NOT PROCEED TO STAGE 1 — it will waste the entire run budget on a template that will fail the Stage 5 semantic check.
+- INSTEAD: re-run `pick_section` (this is the ONE exception to the "only run pick_section once" rule), telling it WHY the previous target was rejected and asking it to select a target with a JIT/compiler optimization angle, or a target that maps to known ProgramBuilder feature APIs (wasm, async, generators, classes, etc.).
+- You may retry up to 2 times. If all retries are rejected, proceed with the best available target but note the risk.
+
+IF THE TOOL RETURNS `"accept": true`:
+- Proceed to STAGE 1 normally.
+
+THE PURPOSE OF THIS GATE IS TO CATCH TARGETS THAT SOUND SPECIFIC (e.g. "Array.prototype.toSpliced fast/slow copy paths") BUT WILL INEVITABLY DEGRADE TO GENERIC JIT SCAFFOLDING BECAUSE PROGRAMBUILDER LACKS DIRECT APIS FOR THOSE BUILTINS. GOOD TARGETS EITHER HAVE A COMPILER/OPTIMIZATION ANGLE (turbofan lowering, maglev graph building, deopt guards) OR MAP TO KNOWN PROGRAMBUILDER FEATURE APIS (wasm, async/await, generators, classes, private fields).
 
 
 ## STAGE 1
@@ -46,7 +61,7 @@ OBJECT PLEASE USE THIS EXACT TEMPLATE DO NOT SKIP THIS:
 
 ## STAGE 2
 AFTER YOU RECEIVE THE DATA BACK FROM STAGE 1 PLEASE USE list_agent_memory_ids TO LIST ALL CREATED AGENT MEMORY ENTRY IDS (THEN read_agent_memory AS NEEDED). 
-USE THIS LIST TO GO THROUGH THE DATABASE ENTRIES ALONG WITH THE RECEIVED SUMMARIES OF THE IDS FROM STAGE 1.
+USE THIS LIST TO GO THROUGH THE DATABASE ENTRIES ALONG WITH THE RECEIVED SUMMARIES OF THE IDS FROM STAGE 1. (If none were returned, ignore this section).
 YOUR GOAL IS TO ACTUALLY FIGURE OUT WHAT THE IMPORTANT PARTS OF THE CODEBASE ARE, RELATING BACK TO THE TARGET
 CODE REGION, THAT HAVE A HIGH LIKELIHOOD OF BEING VULNERABLE. IF YOU ARE UNSURE ABOUT SOMETHING OR WANT MORE INFORMATION 
 PLEASE CALL THE code_analyzer AGENT AS MANY TIMES AS YOU WANT. PREFER TARGETS THAT CAN BE EXPLAINED IN TERMS OF SPECIFIC ISSUE SYMPTOMS, JS/FUZZIL CORPUS SIDE EFFECTS, AND CONCRETE ENGINE STATES RATHER THAN A VAGUE INTEREST IN A WHOLE SUBSYSTEM. AFTER YOU HAVE A STRONG UNDERSTANDING OF THE CODE MOVE ON TO STAGE 3
@@ -125,7 +140,7 @@ SUFFICES TO REACH YOUR VISION. RUN THIS MANDATORY SEMANTIC CHECK:
    - Target contains "destructure" / "destruct" / "rest" → MUST use `destruct`
 
 ### Generic / JIT Targets
-   - Target contains "JIT" / "turbofan" / "maglev" / "compiler" / "optimization" → `buildPlainFunction` + `buildRepeatLoop` + `callFunction` is acceptable
+   - Target contains "JIT" / "turbofan" / "maglev" / "compiler" / "optimization" → `buildPlainFunction` + `buildRepeatLoop` + `callFunction` is acceptable AS THE OUTER STRUCTURE, but the function body MUST contain at least one target-specific API call beyond `b.build(n:)` and `b.doReturn(b.randomJsVariable())`. A function body that is only random code generation is a JIT1Function clone and MUST be rejected.
    - Target contains "generic" / "broad" / "random" → generic patterns are acceptable
 
 3. If the semantic check FAILS, you MUST NOT accept the template. Re-call `program_builder` with explicit instructions:
@@ -134,19 +149,31 @@ SUFFICES TO REACH YOUR VISION. RUN THIS MANDATORY SEMANTIC CHECK:
    - "If these APIs are unavailable, report TARGET UNACHIEVABLE instead of fabricating a fallback."
    - Then go back to STAGE 4.
 
-IF THIS VERIFICATION PASSES, YOU ARE SATISFIED WITH THE GENERATED TEMPLATE, MOVE ON TO STAGE 6.
+4. **MANDATORY STRUCTURAL NOVELTY CHECK**: Call `check_template_novelty` with the full Swift template source.
+   - If it returns `"novel": false`, the template is a JIT1Function clone with no target-specific logic in the function body. It MUST be rejected.
+   - Re-call `program_builder` with: "Your template is a JIT1Function clone — the function body contains only b.build(n:X) and b.doReturn(). You must add target-specific logic inside the hot function body: property manipulation, object creation, conditional branches, nested functions, or other ProgramBuilder APIs relevant to [the target]."
+   - Then go back to STAGE 4.
+   - If it returns `"novel": true`, proceed.
+
+IF BOTH THE SEMANTIC CHECK AND NOVELTY CHECK PASS, MOVE ON TO STAGE 6.
 PRESERVE THE CORE TARGETING IDEA WHEN IT IS GOOD; ASK FOR RE-GROUNDING OF SYNTAX OR API CHOICES RATHER THAN COLLAPSING TO AN OVERLY GENERIC TEMPLATE UNLESS THE EARLIER IDEA ITSELF WAS UNSOUND.
 
 
-## STAGE 6 — FINAL GATE
+## STAGE 6 — FINAL GATE & DIFF EXPORT
 
 YOU MUST HAVE CREATED A VALIDATED, COMPILED PROGRAM TEMPLATE BEFORE REACHING THIS POINT.
 IF YOU DO NOT HAVE ONE: GO BACK TO STAGE 3 AND RE-CALL `program_builder`. DO NOT CALL `agent_end`.
 
-WHEN YOU DO HAVE A VALIDATED TEMPLATE, YOUR FINAL RESPONSE MUST INCLUDE:
-- THE NAME OF THE TEMPLATE THAT WAS COMPILED
-- CONFIRMATION THAT BOTH static_verfication AND compiler APPROVED IT
-- THE SWIFT CODE OF THE TEMPLATE (or a reference to it)
+WHEN YOU DO HAVE A VALIDATED TEMPLATE:
+1. Call `save_template_diff` with the template name, full Swift source, and a brief target description.
+   This saves the template as a .fogdiff file in FoG_generated_templates/ so it can be reviewed and
+   applied independently later. The system will also restore the baseline ProgramTemplates.swift
+   after the run completes, so the diff is the primary artifact.
+2. YOUR FINAL RESPONSE MUST INCLUDE:
+   - THE NAME OF THE TEMPLATE THAT WAS COMPILED
+   - CONFIRMATION THAT BOTH static_verfication AND compiler APPROVED IT
+   - THE SWIFT CODE OF THE TEMPLATE (or a reference to it)
+   - THE DIFF PATH WHERE THE TEMPLATE WAS SAVED
 
 CALLING `agent_end` WITHOUT A VALIDATED TEMPLATE IS FORBIDDEN. THE SYSTEM WILL AUTOMATICALLY RETRY YOU IF YOU DO.
 

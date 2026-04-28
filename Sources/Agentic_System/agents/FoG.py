@@ -47,6 +47,13 @@ from tools.FoG_tools import (
     compile_program_template_tool,
     execute_javascript_program_tool,
     list_d8_flags_tool,
+    save_template_diff_tool,
+    apply_template_diff_tool,
+    list_template_diffs_tool,
+    evaluate_target_tool,
+    evaluate_target_quality,
+    check_template_novelty_tool,
+    save_template_as_diff,
 )
 from tools.RAG_tools import (
     search_knowledge_base_tool,
@@ -147,6 +154,24 @@ def _check_program_builder_produced_template(output: Dict[str, Any]) -> bool:
         if phrase in text_lower:
             _prepare_for_retry()
             return False
+    return True
+
+
+def _check_pick_section_target_quality(output: Dict[str, Any]) -> bool:
+    """Validate that PickSection selected a target likely to produce a non-trivial
+    ProgramTemplate.  Targets that reference specific JS builtins without a
+    JIT/compiler optimization angle tend to degrade to generic scaffolding and
+    waste the entire run.  Returns False (triggering a retry) for low-quality
+    targets."""
+    text = _safe_text(output).lower()
+    if not text.strip():
+        return False
+    result = evaluate_target_quality(text)
+    if not result["accept"]:
+        logger.info(
+            "PickSection target rejected by quality gate: %s", result["reason"]
+        )
+        return False
     return True
 
 
@@ -370,6 +395,7 @@ class Father(Agent):
                 search_regex_template_fuzzil_tool,
                 similar_template_swift_tool,
                 similar_template_fuzzil_tool,
+                check_template_novelty_tool,
             ],
             model_id=MANAGER_MODEL,
             api_key=self.api_key,
@@ -404,6 +430,8 @@ class Father(Agent):
             api_key=self.api_key,
             maxsteps=30,
             logging_level=self.logging_level,
+            final_answer_check=[_check_pick_section_target_quality],
+            max_final_check_retries=3,
             **checkpoint_kwargs,
         )
         self.agents['pick_section']._base_prompt = self.get_prompt("pick_section.txt")
@@ -426,6 +454,10 @@ class Father(Agent):
                 web_search_tool,
                 search_chromium_issues_rag_tool,
                 search_chromium_issues_rag_hybrid_tool,
+                evaluate_target_tool,
+                check_template_novelty_tool,
+                save_template_diff_tool,
+                list_template_diffs_tool,
             ],
             model_id=ROOT_MODEL,
             api_key=self.api_key,
@@ -487,7 +519,7 @@ class Father(Agent):
                 postrun = write_postrun_hygiene_report(
                     run_completed=result.get("completed"),
                     run_error=result.get("error"),
-                    restore_after_report=False,
+                    restore_after_report=result.get("completed", False),
                 )
             except Exception as exc:
                 postrun = {"status": "ERROR", "error": str(exc)}

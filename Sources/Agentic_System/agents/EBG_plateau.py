@@ -72,8 +72,9 @@ from typing import Optional
 import logging
 from agent_logging import configure_process_logging
 
-MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4")
-WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5-mini")
+MANAGER_MODEL = os.environ.get("EBG_MANAGER_MODEL", "gpt-5.4-mini")
+WORKER_MODEL = os.environ.get("EBG_WORKER_MODEL", "gpt-5.4-mini")
+ROOT_MODEL = os.environ.get("EBG_ROOT_MODEL", "gpt-5.4")
 TOKENS = 30000 # 10k max output in an given message
 
 FUZZILLI_PATH = os.environ.get("FUZZILLI_PATH", str(Path(__file__).resolve().parents[3]))
@@ -108,6 +109,7 @@ class EBG_Plateau(Agent):
 
         worker_model = self.model_id if "/" in self.model_id else WORKER_MODEL
         manager_model = self.model_id if "/" in self.model_id else MANAGER_MODEL
+        root_model = self.model_id if "/" in self.model_id else ROOT_MODEL
 
         self.agents['v8_search'] = IkaBaseAgent(
             name="V8Search",
@@ -314,7 +316,7 @@ class EBG_Plateau(Agent):
             prompt=root_manager_prompt,
             system_prompt="You are RootManager.",
             tools=[],
-            model_id=manager_model,
+            model_id=root_model,
             api_key=self.api_key,
             subagents=root_managed,
             maxsteps=60,

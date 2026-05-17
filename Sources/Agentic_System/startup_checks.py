@@ -24,12 +24,16 @@ def _check_path_value(var_name: str, raw: str, expected: str) -> str | None:
     return None
 
 
-def collect_runtime_preflight(check_debugger: bool = False) -> tuple[list[str], list[str]]:
+def collect_runtime_preflight(
+    check_debugger: bool = False,
+    warn_only_vars: tuple[str, ...] = (),
+) -> tuple[list[str], list[str]]:
     add_fuzzillai_repo_venv_site_packages()
     errors = []
     warnings = []
     resolved_paths = get_runtime_paths()
     apply_runtime_paths()
+    warn_only = set(warn_only_vars)
 
     for var_name, expected in (
         ("V8_PATH", "dir"),
@@ -40,7 +44,10 @@ def collect_runtime_preflight(check_debugger: bool = False) -> tuple[list[str], 
         raw = resolved_paths.get(var_name, os.getenv(var_name, "").strip())
         issue = _check_path_value(var_name, raw, expected)
         if issue:
-            errors.append(issue)
+            if var_name in warn_only:
+                warnings.append(issue)
+            else:
+                errors.append(issue)
 
     if check_debugger:
         if importlib.util.find_spec("pygdbmi") is None:

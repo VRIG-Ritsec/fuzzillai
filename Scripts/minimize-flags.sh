@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CRASH_JS="${1:-$SCRIPT_DIR/crash_repro.js}"
-D8="${2:-${D8_PATH:-/mnt/vdc/v8_vrig/v8/out/fuzzbuild/d8}}"
+D8="${2:-${D8_PATH:-/mnt/vdc/v8_vrig/v8/out/fuzzbuild_dbg/d8}}"
 
 FLAGS=(
   --expose-gc
@@ -24,23 +24,25 @@ FLAGS=(
   --wasm-staging
   --wasm-fast-api
   --expose-fast-api
-  --experimental-wasm-rab-integration
   --wasm-test-streaming
 )
+# --experimental-wasm-rab-integration
+
 
 if [ ! -f "$CRASH_JS" ]; then
   echo "Creating crash reproducer at $CRASH_JS"
   mkdir -p "$(dirname "$CRASH_JS")"
   cat > "$CRASH_JS" << 'CRASH_EOF'
-async function* f0(a1, a2, a3) {
-    function F4(a6, a7) {
-        if (!new.target) { throw 'must be called with new'; }
-    }
-    function F8(a10, a11, a12) {
-        if (!new.target) { throw 'must be called with new'; }
-        try { this(F4); } catch (e) {}
-    }
-    return a3;
+const v1 = Set(Set);
+function f2(a3, a4, a5) {
+    const v10 = {
+        get c() {
+            eval();
+            v1?.__proto__;
+            return v1;
+        },
+    };
+    return a5;
 }
 CRASH_EOF
 fi

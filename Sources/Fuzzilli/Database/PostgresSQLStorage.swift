@@ -483,8 +483,50 @@ public actor PostgresSQLStorage {
             try await self._storeProgramsBatchImpl(programInputs: programInputs, fuzzerId: fuzzerId)
         }
     }
+
+    /// Adds in-memory ancestor programs to this flush so `parent_program_hash` can reference rows in the same batch.
+    private func expandedBatchIncludingAncestors(programInputs: [ProgramInput], fuzzerId: Int) -> [ProgramInput] {
+        let maxAncestorDepth = 32
+        var expanded = programInputs
+        var knownHashes = Set<String>()
+        for pi in programInputs {
+            if let h = try? DatabaseUtils.calculateProgramHash(program: pi.program) {
+                knownHashes.insert(h)
+            }
+        }
+        var i = 0
+        while i < expanded.count {
+            let pi = expanded[i]
+            var parentOpt = pi.program.parent
+            var depth = 0
+            while let parent = parentOpt, depth < maxAncestorDepth {
+                depth += 1
+                guard let parentHash = try? DatabaseUtils.calculateProgramHash(program: parent) else { break }
+                if knownHashes.contains(parentHash) {
+                    break
+                }
+                guard (try? DatabaseUtils.encodeProgramToBase64(program: parent)) != nil else { break }
+                knownHashes.insert(parentHash)
+                let names = parent.contributors.map { $0.name }
+                let mutatorNames = names.filter { $0.contains("Mutator") }
+                let contributorNames = names.filter { $0.contains("Contributor") }
+                expanded.append(
+                    ProgramInput(
+                        program: parent,
+                        fuzzerId: fuzzerId,
+                        mutatorNames: mutatorNames,
+                        contributorNames: contributorNames
+                    )
+                )
+                parentOpt = parent.parent
+            }
+            i += 1
+        }
+        return expanded
+    }
     
     private func _storeProgramsBatchImpl(programInputs: [ProgramInput], fuzzerId: Int) async throws -> [String] {
+        let expandedInputs = expandedBatchIncludingAncestors(programInputs: programInputs, fuzzerId: fuzzerId)
         // Pre-calculate all hashes and sort to ensure consistent lock ordering
         struct PreparedProgram {
             let hash: String
@@ -495,7 +537,7 @@ public actor PostgresSQLStorage {
         
         var preparedPrograms: [PreparedProgram] = []
         
-        for programInput in programInputs {
+        for programInput in expandedInputs {
             let program = programInput.program
             
             // Calculate program hash

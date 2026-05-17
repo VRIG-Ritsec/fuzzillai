@@ -9,7 +9,9 @@ import startup_checks
 
 class TestStartupChecks(unittest.TestCase):
     def test_collect_runtime_preflight_reports_missing_required_paths(self):
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True), patch(
+            "startup_checks.get_runtime_paths", return_value={}
+        ), patch("startup_checks.apply_runtime_paths", return_value={}):
             errors, warnings = startup_checks.collect_runtime_preflight(check_debugger=False)
 
         self.assertEqual(warnings, [])
@@ -51,6 +53,32 @@ class TestStartupChecks(unittest.TestCase):
             "gdb is not available on PATH; breakpoint-driven validation will be unavailable",
             warnings,
         )
+
+    def test_collect_runtime_preflight_can_downgrade_specific_missing_paths_to_warnings(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            v8_dir = temp_path / "src"
+            v8_dir.mkdir()
+            fuzzilli_dir = temp_path / "fuzzilli"
+            fuzzilli_dir.mkdir()
+            fuzzilli_tool = temp_path / "FuzzILTool"
+            fuzzilli_tool.write_text("")
+
+            env = {
+                "V8_PATH": str(v8_dir),
+                "D8_PATH": str(temp_path / "missing-d8"),
+                "FUZZILLI_PATH": str(fuzzilli_dir),
+                "FUZZILLI_TOOL_BIN": str(fuzzilli_tool),
+            }
+
+            with patch.dict(os.environ, env, clear=True):
+                errors, warnings = startup_checks.collect_runtime_preflight(
+                    check_debugger=False,
+                    warn_only_vars=("D8_PATH",),
+                )
+
+        self.assertEqual(errors, [])
+        self.assertIn("D8_PATH does not point to an existing file", warnings[0])
 
 
 if __name__ == "__main__":

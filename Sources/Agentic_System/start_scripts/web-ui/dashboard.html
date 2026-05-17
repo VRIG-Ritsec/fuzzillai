@@ -6,17 +6,103 @@
   <title>Fuzzilli Control Panel</title>
   <link rel="stylesheet" href="/assets/app.css">
   <style>
-    /* Dashboard-specific layout on top of app.css */
     .grid {
       display: grid;
       grid-template-columns: repeat(12, 1fr);
       gap: 16px;
     }
-    .card.summary-card { grid-column: span 12; padding: 16px; }
-    .fuzzers { grid-column: span 7; }
-    .detail  { grid-column: span 5; }
-    .triggers { grid-column: span 12; }
-    .queue    { grid-column: span 12; }
+    .card.summary-card,
+    .card.search-card,
+    .card.alerts,
+    .card.triggers,
+    .card.crash-groups,
+    .card.queue-aging,
+    .card.queue {
+      grid-column: span 12;
+    }
+    .fuzzers { grid-column: span 5; }
+    .detail { grid-column: span 7; }
+    .detail-programs { grid-column: span 7; }
+    .detail-queue { grid-column: span 5; }
+
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search-bar input { flex: 1 1 360px; min-width: 220px; }
+    .search-results {
+      margin-top: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .search-result {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel-2);
+    }
+    .search-result strong { display: block; margin-bottom: 4px; }
+    .search-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .alert-list {
+      display: grid;
+      gap: 10px;
+    }
+    .alert-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      background: var(--panel-2);
+    }
+    .alert-item--danger {
+      border-color: rgba(239, 68, 68, 0.35);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .alert-item--warn {
+      border-color: rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .alert-item__meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .alert-item__actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .detail-grid .chart-wrap { margin-bottom: 0; }
+    .chart-wrap.tall .chart { height: 240px; }
+
+    .panel-stack {
+      display: grid;
+      gap: 12px;
+    }
+    .panel-subtle {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .panel-subtle h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
 
     .triggers__grid {
       display: grid;
@@ -32,14 +118,42 @@
       background: var(--panel-2);
     }
     .trigger-form strong { font-size: 13px; color: var(--muted-strong); letter-spacing: 0.02em; }
-    .trigger-form__row { display: flex; gap: 8px; }
+    .trigger-form__row { display: flex; gap: 8px; flex-wrap: wrap; }
     .trigger-form__row input { flex: 1 1 auto; }
+    .trigger-form__hint { color: var(--muted); font-size: 12px; }
 
-    .stats-bar { margin-top: 12px; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 14px; }
-    .stats-bar span strong { color: var(--text); font-weight: 600; }
+    .actions-cell {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn.btn--compact {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .mono-link {
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .stats-bar {
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .stats-bar strong { color: var(--text); }
 
     @media (max-width: 1180px) {
-      .fuzzers, .detail, .triggers, .queue { grid-column: span 12; }
+      .fuzzers,
+      .detail,
+      .detail-programs,
+      .detail-queue,
+      .triggers {
+        grid-column: span 12;
+      }
       .triggers__grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -74,6 +188,28 @@
         <div class="summary" id="summaryCards"></div>
       </section>
 
+      <section class="card search-card">
+        <div class="section-title">
+          <h2>Global Search</h2>
+          <span class="muted">Fuzzers, hashes, crash groups, queue items, and log filenames</span>
+        </div>
+        <div class="search-bar">
+          <input type="search" id="globalSearch" placeholder="Search fuzzer ID, program hash, or log filename">
+          <button type="button" class="btn" id="clearSearch">Clear</button>
+        </div>
+        <div id="searchResults" class="search-results">
+          <div class="empty">Type to search across current dashboard data and available log files.</div>
+        </div>
+      </section>
+
+      <section class="card alerts">
+        <div class="section-title">
+          <h2>Operational Alerts</h2>
+          <span class="muted">Stale fuzzers, flat coverage, and aging queue items</span>
+        </div>
+        <div id="alertList" class="alert-list"></div>
+      </section>
+
       <section class="card fuzzers">
         <div class="section-title">
           <h2>Fuzzers</h2>
@@ -102,31 +238,88 @@
           <h2 id="detailTitle">Fuzzer detail</h2>
           <span id="detailMeta" class="muted"></span>
         </div>
-        <div class="chart-wrap">
-          <canvas class="chart" id="coverageChart"></canvas>
+        <div class="detail-grid">
+          <div class="chart-wrap">
+            <canvas class="chart" id="coverageChart"></canvas>
+          </div>
+          <div id="chartMeta" class="muted">Coverage chart will load with the selected fuzzer.</div>
+          <div class="chart-wrap tall">
+            <canvas class="chart" id="outcomeChart"></canvas>
+          </div>
+          <div id="outcomeMeta" class="muted">Outcome breakdown chart will load with the selected fuzzer.</div>
+          <div class="panel-subtle">
+            <h3>Fuzzer stats</h3>
+            <div id="detailStats" class="stats-bar">Select a fuzzer to load details.</div>
+          </div>
+          <div class="panel-subtle">
+            <h3>Recent executions</h3>
+            <div style="overflow:auto; max-height:420px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Outcome</th>
+                    <th>Coverage</th>
+                    <th>Edges</th>
+                    <th>New edge</th>
+                    <th>Program</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="detailExecs"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <div id="chartMeta" class="muted" style="margin-bottom:12px;">Coverage chart will load with the selected fuzzer.</div>
-        <div id="detailStats" class="muted" style="margin-bottom:12px;">Select a fuzzer to load details.</div>
+      </section>
+
+      <section class="card detail-programs">
+        <div class="section-title">
+          <h2>Top Programs</h2>
+          <span class="muted">Highest edge discovery and coverage for the selected fuzzer</span>
+        </div>
         <div style="overflow:auto; max-height:420px;">
           <table>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Outcome</th>
-                <th>Coverage</th>
-                <th>New edges</th>
-                <th>New coverage</th>
                 <th>Program</th>
+                <th>Execs</th>
+                <th>New edges</th>
+                <th>Crashes</th>
+                <th>Coverage</th>
+                <th>Last execution</th>
+                <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="detailExecs"></tbody>
+            <tbody id="topProgramsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card detail-queue">
+        <div class="section-title">
+          <h2>Queued Programs</h2>
+          <span class="muted">Pending generated queue for the selected fuzzer</span>
+        </div>
+        <div style="overflow:auto; max-height:420px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Program</th>
+                <th>Created</th>
+                <th>Source</th>
+                <th>Meta</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="detailQueueBody"></tbody>
           </table>
         </div>
       </section>
 
       <section class="card triggers">
         <div class="section-title">
-          <h2>Manual triggers</h2>
+          <h2>Manual Triggers</h2>
           <span class="muted">Dispatch plateau or crash agents on demand</span>
         </div>
         <div class="triggers__grid">
@@ -144,13 +337,58 @@
               <input name="program_hash" placeholder="Crash program hash" required>
               <button type="submit" class="btn btn--warn">Dispatch</button>
             </div>
+            <div class="trigger-form__hint">Replay helpers below will prefill this form with a selected hash.</div>
           </form>
+        </div>
+      </section>
+
+      <section class="card crash-groups">
+        <div class="section-title">
+          <h2>Crash Triage</h2>
+          <span class="muted">Grouped by program hash, limited to the last 30 days</span>
+        </div>
+        <div style="overflow:auto; max-height:520px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Program</th>
+                <th>Crashes</th>
+                <th>Fuzzers</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th>Best coverage</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="crashGroupsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card queue-aging">
+        <div class="section-title">
+          <h2>Queue Aging</h2>
+          <span class="muted">Per-fuzzer queue depth and oldest waiting item</span>
+        </div>
+        <div style="overflow:auto; max-height:360px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Fuzzer</th>
+                <th>Queued</th>
+                <th>Oldest queued</th>
+                <th>Newest queued</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="queueAgingBody"></tbody>
+          </table>
         </div>
       </section>
 
       <section class="card queue">
         <div class="section-title">
-          <h2>Generated queue &amp; recent crashes</h2>
+          <h2>Generated Queue &amp; Recent Crashes</h2>
           <span class="muted">Newest items first</span>
         </div>
         <div style="overflow:auto; max-height:520px;">
@@ -162,6 +400,7 @@
                 <th>Program</th>
                 <th>Created</th>
                 <th>Meta</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="queueBody"></tbody>
@@ -173,12 +412,47 @@
 
   <script src="/assets/chart.umd.js"></script>
   <script>
-    const state = { auto: true, selectedFuzzer: null, timer: null };
+    const state = {
+      auto: true,
+      selectedFuzzer: null,
+      timer: null,
+      overview: null,
+      detail: null,
+      logs: [],
+      searchTerm: "",
+    };
     let coverageChart = null;
+    let outcomeChart = null;
 
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     function escapeHtml(v) {
       return String(v ?? "").replace(/[&<>"']/g, ch => ESC_MAP[ch]);
+    }
+
+    function parseDate(value) {
+      if (!value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function formatAge(value) {
+      const date = parseDate(value);
+      if (!date) return "n/a";
+      const diffMs = Date.now() - date.getTime();
+      if (diffMs < 0) return "just now";
+      const minutes = Math.floor(diffMs / 60000);
+      if (minutes < 1) return "under 1m";
+      if (minutes < 60) return `${minutes}m`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ${minutes % 60}m`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h`;
+    }
+
+    function minutesSince(value) {
+      const date = parseDate(value);
+      if (!date) return Infinity;
+      return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
     }
 
     async function fetchJSON(url, options = {}) {
@@ -206,9 +480,49 @@
       document.getElementById("messages").innerHTML = "";
     }
 
+    function corpusUrl(programHash, compareHash = "") {
+      const q = new URLSearchParams();
+      q.set("hash", programHash);
+      if (compareHash) q.set("compare", compareHash);
+      return `/corpus?${q.toString()}`;
+    }
+
+    function corpusHashLink(programHash, compareHash = "") {
+      const hash = escapeHtml(programHash);
+      const href = corpusUrl(programHash, compareHash);
+      return `<a class="mono-link" href="${href}">${hash}</a>`;
+    }
+
+    function actionButton(label, attrs, className = "btn btn--ghost btn--compact") {
+      return `<button type="button" class="${className}" ${attrs}>${escapeHtml(label)}</button>`;
+    }
+
+    function prefillCrashForm(fuzzerId, programHash) {
+      const form = document.getElementById("crashForm");
+      form.elements.fuzzer_id.value = fuzzerId != null ? String(fuzzerId) : "";
+      form.elements.program_hash.value = programHash || "";
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    async function dispatchCrashReplay(fuzzerId, programHash) {
+      await triggerAction("/trigger/crash", {
+        fuzzer_id: Number(fuzzerId),
+        program_hash: String(programHash),
+      });
+    }
+
+    function updateSelectedFuzzerRow() {
+      document.querySelectorAll("#fuzzersBody tr[data-fuzzer-id]").forEach(row => {
+        row.classList.toggle("active", state.selectedFuzzer && Number(row.dataset.fuzzerId) === Number(state.selectedFuzzer));
+      });
+    }
+
     function renderSummary(overview) {
       const s = overview.summary || {};
       const ms = overview.monitor_status || {};
+      const oldestQueued = (overview.fuzzers || [])
+        .filter(f => f.oldest_queued_at)
+        .sort((a, b) => minutesSince(b.oldest_queued_at) - minutesSince(a.oldest_queued_at))[0];
       const cards = [
         ["Total fuzzers", s.total_fuzzers ?? 0],
         ["Active fuzzers", s.active_fuzzers ?? 0],
@@ -217,6 +531,9 @@
         ["Crashes 24h", s.crashes_last_24h ?? 0],
         ["New edges 24h", s.new_edges_last_24h ?? 0],
       ];
+      if (oldestQueued) {
+        cards.push(["Oldest queued age", formatAge(oldestQueued.oldest_queued_at)]);
+      }
       document.getElementById("summaryCards").innerHTML = cards
         .map(([k, v]) => `<div class="stat"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div></div>`)
         .join("");
@@ -226,6 +543,59 @@
         &middot; Auto agents: ${escapeHtml(autoAgents)}
         &middot; Last poll: ${escapeHtml(ms.last_poll || "never")}
         &middot; Latest exec: ${escapeHtml(s.latest_execution_at || "n/a")}`;
+    }
+
+    function buildAlerts(overview) {
+      const alerts = [];
+      for (const f of overview.fuzzers || []) {
+        const staleMinutes = minutesSince(f.last_activity);
+        if (f.status === "active" && staleMinutes >= 15) {
+          alerts.push({
+            level: staleMinutes >= 60 ? "danger" : "warn",
+            title: `Fuzzer ${f.fuzzer_id} looks stale`,
+            meta: `Last activity ${formatAge(f.last_activity)} ago.`,
+            actions: [{ kind: "focus-fuzzer", fuzzerId: f.fuzzer_id, label: "Open fuzzer" }],
+          });
+        }
+        if ((f.executions_last_hour || 0) >= 50 && (f.new_edges_found || 0) === 0) {
+          alerts.push({
+            level: "warn",
+            title: `Fuzzer ${f.fuzzer_id} is flat on edge discovery`,
+            meta: `${f.executions_last_hour} executions in the last hour with no new edges.`,
+            actions: [{ kind: "focus-fuzzer", fuzzerId: f.fuzzer_id, label: "Inspect history" }],
+          });
+        }
+        if ((f.queued_programs || 0) > 0 && minutesSince(f.oldest_queued_at) >= 10) {
+          alerts.push({
+            level: minutesSince(f.oldest_queued_at) >= 60 ? "danger" : "warn",
+            title: `Queue is aging for fuzzer ${f.fuzzer_id}`,
+            meta: `${f.queued_programs} queued program(s). Oldest item waiting ${formatAge(f.oldest_queued_at)}.`,
+            actions: [
+              { kind: "focus-fuzzer", fuzzerId: f.fuzzer_id, label: "Open queue" },
+            ],
+          });
+        }
+      }
+      return alerts
+        .sort((a, b) => (a.level === "danger" ? -1 : 0) - (b.level === "danger" ? -1 : 0))
+        .slice(0, 12);
+    }
+
+    function renderAlerts(overview) {
+      const alerts = buildAlerts(overview);
+      const body = document.getElementById("alertList");
+      if (!alerts.length) {
+        body.innerHTML = '<div class="empty">No stale fuzzer, flat-coverage, or stuck-queue alerts right now.</div>';
+        return;
+      }
+      body.innerHTML = alerts.map((item, index) => `
+        <div class="alert-item alert-item--${item.level}">
+          <strong>${escapeHtml(item.title)}</strong>
+          <div class="alert-item__meta">${escapeHtml(item.meta)}</div>
+          <div class="alert-item__actions">
+            ${(item.actions || []).map(action => actionButton(action.label, `data-action="${action.kind}" data-fuzzer-id="${action.fuzzerId}"`)).join("")}
+          </div>
+        </div>`).join("");
     }
 
     function renderFuzzers(overview) {
@@ -244,6 +614,31 @@
       body.querySelectorAll("tr[data-fuzzer-id]").forEach(row => {
         row.addEventListener("click", () => loadFuzzer(row.dataset.fuzzerId));
       });
+      updateSelectedFuzzerRow();
+    }
+
+    function renderQueueAging(overview) {
+      const rows = (overview.fuzzers || [])
+        .filter(f => (f.queued_programs || 0) > 0)
+        .sort((a, b) => minutesSince(b.oldest_queued_at) - minutesSince(a.oldest_queued_at))
+        .map(f => {
+          const ageMinutes = minutesSince(f.oldest_queued_at);
+          const status = ageMinutes >= 60 ? "stuck" : ageMinutes >= 10 ? "aging" : "fresh";
+          const pillClass = status === "stuck" ? "pill pill--danger" : status === "aging" ? "pill" : "pill pill--muted";
+          return `
+            <tr class="clickable" data-fuzzer-id="${f.fuzzer_id}">
+              <td><strong>${f.fuzzer_id}</strong></td>
+              <td>${f.queued_programs}</td>
+              <td>${escapeHtml(f.oldest_queued_at || "n/a")} <span class="muted">(${formatAge(f.oldest_queued_at)})</span></td>
+              <td>${escapeHtml(f.newest_queued_at || "n/a")} <span class="muted">(${formatAge(f.newest_queued_at)})</span></td>
+              <td><span class="${pillClass}">${escapeHtml(status)}</span></td>
+            </tr>`;
+        }).join("");
+      const body = document.getElementById("queueAgingBody");
+      body.innerHTML = rows || '<tr><td colspan="5"><div class="empty">No queued programs.</div></td></tr>';
+      body.querySelectorAll("tr[data-fuzzer-id]").forEach(row => {
+        row.addEventListener("click", () => loadFuzzer(row.dataset.fuzzerId));
+      });
     }
 
     function renderQueue(overview) {
@@ -251,21 +646,46 @@
         <tr>
           <td><span class="pill pill--danger">Crash</span></td>
           <td>${item.fuzzer_id}</td>
-          <td class="mono">${escapeHtml(item.program_hash)}</td>
+          <td>${corpusHashLink(item.program_hash)}</td>
           <td class="muted">${escapeHtml(item.created_at)}</td>
           <td class="muted">coverage=${item.coverage_total ?? "n/a"} edges=${item.edges_found ?? "n/a"}</td>
+          <td class="actions-cell">
+            ${actionButton("Prefill", `data-action="prefill-crash" data-fuzzer-id="${item.fuzzer_id}" data-program-hash="${item.program_hash}"`)}
+            ${actionButton("Replay", `data-action="replay-crash" data-fuzzer-id="${item.fuzzer_id}" data-program-hash="${item.program_hash}"`, "btn btn--warn btn--compact")}
+          </td>
         </tr>`);
       const queueRows = (overview.generated_queue || []).map(item => `
         <tr>
           <td><span class="pill pill--muted">Queue</span></td>
           <td>${item.target_fuzzer_id}</td>
-          <td class="mono">${escapeHtml(item.program_hash)}</td>
+          <td>${corpusHashLink(item.program_hash)}</td>
           <td class="muted">${escapeHtml(item.created_at)}</td>
           <td><pre>${escapeHtml(JSON.stringify(item.metadata || {}, null, 2))}</pre></td>
+          <td class="actions-cell">
+            ${actionButton("Prefill", `data-action="prefill-crash" data-fuzzer-id="${item.target_fuzzer_id}" data-program-hash="${item.program_hash}"`)}
+          </td>
         </tr>`);
       const all = crashRows.concat(queueRows).join("");
       document.getElementById("queueBody").innerHTML =
-        all || '<tr><td colspan="5"><div class="empty">No recent crashes or queued programs.</div></td></tr>';
+        all || '<tr><td colspan="6"><div class="empty">No recent crashes or queued programs.</div></td></tr>';
+    }
+
+    function renderCrashGroups(overview) {
+      const rows = (overview.crash_groups || []).map(item => `
+        <tr>
+          <td>${corpusHashLink(item.program_hash)}</td>
+          <td>${item.crash_count}</td>
+          <td>${escapeHtml((item.fuzzer_ids || []).join(", "))} <span class="muted">(${item.distinct_fuzzers} total)</span></td>
+          <td class="muted">${escapeHtml(item.first_seen)}</td>
+          <td class="muted">${escapeHtml(item.last_seen)}</td>
+          <td class="muted">coverage=${item.max_coverage ?? "n/a"} edges=${item.max_edges_found ?? "n/a"}</td>
+          <td class="actions-cell">
+            ${actionButton("Prefill", `data-action="prefill-crash" data-fuzzer-id="${item.last_fuzzer_id}" data-program-hash="${item.program_hash}"`)}
+            ${actionButton("Replay same fuzzer", `data-action="replay-crash" data-fuzzer-id="${item.last_fuzzer_id}" data-program-hash="${item.program_hash}"`, "btn btn--warn btn--compact")}
+          </td>
+        </tr>`).join("");
+      document.getElementById("crashGroupsBody").innerHTML =
+        rows || '<tr><td colspan="7"><div class="empty">No grouped crashes in the last 30 days.</div></td></tr>';
     }
 
     function toCoverageSeries(data) {
@@ -344,7 +764,6 @@
                 callback(value) {
                   const label = this.getLabelForValue(value);
                   if (!label) return "";
-                  if (series.label.startsWith("Recent execution")) return String(label).slice(11, 16);
                   return String(label).slice(5, 16);
                 },
               },
@@ -361,13 +780,118 @@
       });
     }
 
+    function renderOutcomeChart(data) {
+      const canvas = document.getElementById("outcomeChart");
+      const chartMeta = document.getElementById("outcomeMeta");
+      const rows = data.outcome_breakdown || [];
+      if (outcomeChart) { outcomeChart.destroy(); outcomeChart = null; }
+      if (!rows.length) {
+        chartMeta.textContent = "No recent outcome buckets available.";
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+
+      const labels = rows.map(item => String(item.time_bucket || "").slice(5, 16));
+      const crashes = rows.map(item => Number(item.crash_count || 0));
+      const successes = rows.map(item => Number(item.success_count || 0));
+      const timeouts = rows.map(item => Number(item.timeout_count || 0));
+      const others = rows.map(item => Number(item.other_count || 0));
+      const newEdges = rows.map(item => Number(item.new_edge_count || 0));
+      chartMeta.textContent = `Last ${rows.length} hourly buckets. New-edge counts overlay the stacked outcome bars.`;
+      const ctx = canvas.getContext("2d");
+      outcomeChart = new Chart(ctx, {
+        data: {
+          labels,
+          datasets: [
+            { type: "bar", label: "Success", data: successes, backgroundColor: "rgba(34, 197, 94, 0.5)", borderColor: "#22c55e", borderWidth: 1, stack: "outcomes" },
+            { type: "bar", label: "Crash", data: crashes, backgroundColor: "rgba(239, 68, 68, 0.5)", borderColor: "#ef4444", borderWidth: 1, stack: "outcomes" },
+            { type: "bar", label: "Timeout", data: timeouts, backgroundColor: "rgba(245, 158, 11, 0.5)", borderColor: "#f59e0b", borderWidth: 1, stack: "outcomes" },
+            { type: "bar", label: "Other", data: others, backgroundColor: "rgba(148, 163, 184, 0.45)", borderColor: "#94a3b8", borderWidth: 1, stack: "outcomes" },
+            { type: "line", label: "New edges", data: newEdges, borderColor: "#fb923c", backgroundColor: "rgba(251, 146, 60, 0.2)", pointRadius: 2, pointHoverRadius: 4, borderWidth: 2, yAxisID: "y1", tension: 0.2 },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: "#cbd5e1" } },
+          },
+          scales: {
+            x: {
+              stacked: true,
+              ticks: { color: "#9ca3af", maxTicksLimit: 8 },
+              grid: { color: "rgba(148, 163, 184, 0.08)" },
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { color: "#9ca3af", precision: 0 },
+              grid: { color: "rgba(148, 163, 184, 0.1)" },
+            },
+            y1: {
+              beginAtZero: true,
+              position: "right",
+              ticks: { color: "#fb923c", precision: 0 },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
+      });
+    }
+
+    function renderTopPrograms(data) {
+      const rows = (data.top_programs || []).map(item => `
+        <tr>
+          <td>${corpusHashLink(item.program_hash)}</td>
+          <td>${item.execution_count || 0}</td>
+          <td>${item.new_edges_discovered || 0}</td>
+          <td>${item.crash_count || 0}</td>
+          <td>${item.max_coverage != null ? Number(item.max_coverage).toFixed(2) : "n/a"}</td>
+          <td class="muted">${escapeHtml(item.last_execution || "n/a")}</td>
+          <td class="actions-cell">
+            ${actionButton("Open", `data-action="open-corpus" data-program-hash="${item.program_hash}"`)}
+            ${actionButton("Replay", `data-action="prefill-crash" data-fuzzer-id="${state.selectedFuzzer}" data-program-hash="${item.program_hash}"`)}
+          </td>
+        </tr>`).join("");
+      document.getElementById("topProgramsBody").innerHTML =
+        rows || '<tr><td colspan="7"><div class="empty">No ranked program data.</div></td></tr>';
+    }
+
+    function renderQueuedPrograms(data) {
+      const rows = (data.queued_programs || []).map(item => `
+        <tr>
+          <td>${corpusHashLink(item.program_hash)}</td>
+          <td class="muted">${escapeHtml(item.created_at)}</td>
+          <td>${escapeHtml(item.source || "n/a")}</td>
+          <td><pre>${escapeHtml(JSON.stringify(item.metadata || {}, null, 2))}</pre></td>
+          <td class="actions-cell">
+            ${actionButton("Prefill", `data-action="prefill-crash" data-fuzzer-id="${state.selectedFuzzer}" data-program-hash="${item.program_hash}"`)}
+          </td>
+        </tr>`).join("");
+      document.getElementById("detailQueueBody").innerHTML =
+        rows || '<tr><td colspan="5"><div class="empty">No queued programs for this fuzzer.</div></td></tr>';
+    }
+
     function renderFuzzerDetail(data, fuzzerId) {
       const d = data.details || {};
-      state.selectedFuzzer = fuzzerId;
+      state.selectedFuzzer = Number(fuzzerId);
+      state.detail = data;
       document.getElementById("detailTitle").textContent = `Fuzzer ${fuzzerId}`;
       document.getElementById("detailMeta").textContent = `status=${d.status || "unknown"} queued=${d.queued_programs || 0}`;
-      document.getElementById("detailStats").innerHTML = `started=${escapeHtml(d.fuzzer_started || "n/a")} | last activity=${escapeHtml(d.last_activity || "n/a")} | coverage=${Number(d.max_coverage || 0).toFixed(2)} | execs=${d.total_executions || 0} | crashes=${d.total_crashes || 0}`;
+      document.getElementById("detailStats").innerHTML = `
+        <span>started=<strong>${escapeHtml(d.fuzzer_started || "n/a")}</strong></span>
+        <span>last activity=<strong>${escapeHtml(d.last_activity || "n/a")}</strong></span>
+        <span>coverage=<strong>${Number(d.max_coverage || 0).toFixed(2)}</strong></span>
+        <span>avg coverage=<strong>${Number(d.avg_coverage || 0).toFixed(2)}</strong></span>
+        <span>execs=<strong>${d.total_executions || 0}</strong></span>
+        <span>crashes=<strong>${d.total_crashes || 0}</strong></span>
+        <span>new edges=<strong>${d.new_edges_found || 0}</strong></span>
+        <span>exec/s=<strong>${Number(d.execs_per_second || 0).toFixed(2)}</strong></span>`;
       renderCoverageChart(data);
+      renderOutcomeChart(data);
       document.getElementById("detailExecs").innerHTML = (data.recent_executions || []).map(x => `
         <tr>
           <td class="muted">${escapeHtml(x.created_at)}</td>
@@ -375,24 +899,135 @@
           <td>${x.coverage_total ?? "n/a"}</td>
           <td>${x.edges_found ?? "n/a"}</td>
           <td>${x.is_new_edge ? "yes" : "no"}</td>
-          <td class="mono">${escapeHtml(x.program_hash)}</td>
-        </tr>`).join("") || '<tr><td colspan="6"><div class="empty">No execution data.</div></td></tr>';
+          <td>${corpusHashLink(x.program_hash)}</td>
+          <td class="actions-cell">
+            ${actionButton("Prefill", `data-action="prefill-crash" data-fuzzer-id="${fuzzerId}" data-program-hash="${x.program_hash}"`)}
+          </td>
+        </tr>`).join("") || '<tr><td colspan="7"><div class="empty">No execution data.</div></td></tr>';
+      renderTopPrograms(data);
+      renderQueuedPrograms(data);
+      updateSelectedFuzzerRow();
+    }
+
+    function searchSources() {
+      const sources = [];
+      const overview = state.overview || {};
+      for (const f of overview.fuzzers || []) {
+        sources.push({
+          kind: "Fuzzer",
+          title: `Fuzzer ${f.fuzzer_id}`,
+          text: `fuzzer ${f.fuzzer_id} ${f.status} coverage ${f.max_coverage || 0} queued ${f.queued_programs || 0}`,
+          actions: [{ kind: "focus-fuzzer", fuzzerId: f.fuzzer_id, label: "Open fuzzer" }],
+        });
+      }
+      for (const item of overview.crash_groups || []) {
+        sources.push({
+          kind: "Crash group",
+          title: item.program_hash,
+          text: `crash group hash ${item.program_hash} crashes ${item.crash_count} fuzzers ${(item.fuzzer_ids || []).join(" ")}`,
+          meta: `last seen ${item.last_seen || "n/a"}`,
+          actions: [
+            { kind: "open-corpus", programHash: item.program_hash, label: "Open corpus" },
+            { kind: "prefill-crash", fuzzerId: item.last_fuzzer_id, programHash: item.program_hash, label: "Prefill replay" },
+          ],
+        });
+      }
+      for (const item of overview.recent_crashes || []) {
+        sources.push({
+          kind: "Recent crash",
+          title: item.program_hash,
+          text: `recent crash hash ${item.program_hash} fuzzer ${item.fuzzer_id}`,
+          meta: item.created_at,
+          actions: [
+            { kind: "open-corpus", programHash: item.program_hash, label: "Open corpus" },
+            { kind: "prefill-crash", fuzzerId: item.fuzzer_id, programHash: item.program_hash, label: "Prefill replay" },
+          ],
+        });
+      }
+      for (const item of overview.generated_queue || []) {
+        sources.push({
+          kind: "Queue item",
+          title: item.program_hash,
+          text: `queue program hash ${item.program_hash} fuzzer ${item.target_fuzzer_id} ${item.source || ""}`,
+          meta: item.created_at,
+          actions: [
+            { kind: "open-corpus", programHash: item.program_hash, label: "Open corpus" },
+            { kind: "prefill-crash", fuzzerId: item.target_fuzzer_id, programHash: item.program_hash, label: "Prefill replay" },
+          ],
+        });
+      }
+      for (const log of state.logs) {
+        sources.push({
+          kind: "Log",
+          title: log.label,
+          text: `log file ${log.label}`,
+          meta: log.modified_at,
+          actions: [{ kind: "open-log", logId: log.id, label: "Open log" }],
+        });
+      }
+      return sources;
+    }
+
+    function renderSearchResults() {
+      const term = state.searchTerm.trim().toLowerCase();
+      const body = document.getElementById("searchResults");
+      if (!term) {
+        body.innerHTML = '<div class="empty">Type to search across current dashboard data and available log files.</div>';
+        return;
+      }
+      const results = searchSources()
+        .filter(item => `${item.kind} ${item.title} ${item.text} ${item.meta || ""}`.toLowerCase().includes(term))
+        .slice(0, 20);
+      body.innerHTML = results.map(item => `
+        <div class="search-result">
+          <strong>${escapeHtml(item.kind)}: ${escapeHtml(item.title)}</strong>
+          <div>${escapeHtml(item.text)}</div>
+          ${item.meta ? `<div class="muted" style="margin-top:4px;">${escapeHtml(item.meta)}</div>` : ""}
+          <div class="search-actions">
+            ${(item.actions || []).map(action => {
+              if (action.kind === "open-corpus") {
+                return `<a class="btn btn--ghost btn--compact" href="${corpusUrl(action.programHash)}">${escapeHtml(action.label)}</a>`;
+              }
+              if (action.kind === "open-log") {
+                return `<a class="btn btn--ghost btn--compact" href="/logs?id=${encodeURIComponent(action.logId)}">${escapeHtml(action.label)}</a>`;
+              }
+              if (action.kind === "focus-fuzzer") {
+                return actionButton(action.label, `data-action="focus-fuzzer" data-fuzzer-id="${action.fuzzerId}"`);
+              }
+              if (action.kind === "prefill-crash") {
+                return actionButton(action.label, `data-action="prefill-crash" data-fuzzer-id="${action.fuzzerId}" data-program-hash="${action.programHash}"`);
+              }
+              return "";
+            }).join("")}
+          </div>
+        </div>`).join("");
+      if (!results.length) {
+        body.innerHTML = '<div class="empty">No search results.</div>';
+      }
     }
 
     async function loadOverview() {
       const overview = await fetchJSON("/api/overview");
       if (overview.error) throw new Error(overview.error);
+      state.overview = overview;
       renderSummary(overview);
+      renderAlerts(overview);
       renderFuzzers(overview);
       renderQueue(overview);
-      if (!state.selectedFuzzer && overview.fuzzers && overview.fuzzers.length) {
-        loadFuzzer(overview.fuzzers[0].fuzzer_id);
-      }
+      renderCrashGroups(overview);
+      renderQueueAging(overview);
+      renderSearchResults();
     }
 
     async function loadFuzzer(fuzzerId) {
       const data = await fetchJSON(`/api/fuzzer/${fuzzerId}`);
       renderFuzzerDetail(data, fuzzerId);
+    }
+
+    async function loadLogsForSearch() {
+      const data = await fetchJSON("/api/logs");
+      state.logs = data.logs || [];
+      renderSearchResults();
     }
 
     async function triggerAction(url, payload) {
@@ -412,6 +1047,15 @@
       try {
         hideMessage();
         await loadOverview();
+        if (!state.selectedFuzzer && state.overview && state.overview.fuzzers && state.overview.fuzzers.length) {
+          state.selectedFuzzer = state.overview.fuzzers[0].fuzzer_id;
+        }
+        if (state.selectedFuzzer) {
+          await loadFuzzer(state.selectedFuzzer);
+        }
+        if (!state.logs.length) {
+          await loadLogsForSearch();
+        }
       } catch (err) {
         showMessage(err.message, true);
       } finally {
@@ -423,6 +1067,15 @@
     document.getElementById("refreshBtn").addEventListener("click", refreshAll);
     document.getElementById("autoToggle").addEventListener("change", (e) => {
       state.auto = e.target.checked;
+    });
+    document.getElementById("globalSearch").addEventListener("input", (event) => {
+      state.searchTerm = event.target.value;
+      renderSearchResults();
+    });
+    document.getElementById("clearSearch").addEventListener("click", () => {
+      state.searchTerm = "";
+      document.getElementById("globalSearch").value = "";
+      renderSearchResults();
     });
     document.getElementById("plateauForm").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -436,6 +1089,29 @@
         fuzzer_id: Number(form.get("fuzzer_id")),
         program_hash: String(form.get("program_hash")),
       });
+    });
+    document.body.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      const action = button.dataset.action;
+      if (action === "focus-fuzzer") {
+        await loadFuzzer(button.dataset.fuzzerId);
+        return;
+      }
+      if (action === "prefill-crash") {
+        prefillCrashForm(button.dataset.fuzzerId, button.dataset.programHash);
+        return;
+      }
+      if (action === "replay-crash") {
+        const fuzzerId = button.dataset.fuzzerId;
+        const programHash = button.dataset.programHash;
+        if (!window.confirm(`Dispatch crash replay for fuzzer ${fuzzerId} and hash ${programHash}?`)) return;
+        await dispatchCrashReplay(fuzzerId, programHash);
+        return;
+      }
+      if (action === "open-corpus") {
+        window.location.href = corpusUrl(button.dataset.programHash);
+      }
     });
 
     refreshAll();

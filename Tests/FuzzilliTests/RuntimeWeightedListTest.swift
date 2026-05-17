@@ -16,62 +16,45 @@ import XCTest
 @testable import Fuzzilli
 
 class RuntimeWeightedListTests: XCTestCase {
-    
-    func testEWMAConvergence() {
+
+    func testSuccessUpdateKeepsElementSelectable() {
         // Create a list with one item
         let list = RuntimeWeightedList<String>([("Item", 1)])
         let item = list.weightedElement()
-        
-        // Initial weight is 1.0
-        // We report "success" (1.0) repeatedly
-        // The weight should stay at 1.0 (since it's already there) or converge to it if it wasn't
-        
+
+        // RuntimeWeightedList uses rewards > 1.0 as success signals.
+        for _ in 0..<10 {
+            list.update(item, reward: 1.1)
+        }
+
+        XCTAssertEqual(list.weightedElement(), "Item")
+    }
+
+    func testFailureUpdateKeepsElementSelectable() {
+        // Create a list with one item
+        let list = RuntimeWeightedList<String>([("Item", 1)])
+        let item = list.weightedElement()
+
+        // Rewards <= 1.0 are treated as failures.
         for _ in 0..<10 {
             list.update(item, reward: 1.0)
         }
-        
-        // Check internal weight (indirectly via description or by assuming implementation details)
-        // Since we can't access private properties, we can verify it doesn't explode
-        // But we can check if it's selected (trivial for 1 item)
+
         XCTAssertEqual(list.weightedElement(), "Item")
-    }
-    
-    func testEWMADecay() {
-        // Create a list with one item
-        let list = RuntimeWeightedList<String>([("Item", 1)])
-        let item = list.weightedElement()
-        
-        // Initial weight is 1.0
-        // We report "failure" (0.0) repeatedly
-        // The weight should decay: 1.0 -> 0.9 -> 0.81 -> ...
-        
-        for _ in 0..<10 {
-            list.update(item, reward: 0.0)
-        }
-        
-        // After 10 failures with alpha=0.1, weight should be approx 1.0 * (0.9)^10 = 0.34
-        // We can't verify the exact float value easily without exposing it, 
-        // but we can verify it's still selectable and hasn't crashed.
-        XCTAssertEqual(list.weightedElement(), "Item")
-        
-        // Verify description contains the weight (approx check)
+
         let desc = list.description
         XCTAssert(desc.contains("Item"))
     }
-    
+
     func testSelectionDistribution() {
-        // Two items, A (reward 1.0) and B (reward 0.0)
+        // A receives success updates and B receives failure updates.
         let list = RuntimeWeightedList<String>([("A", 1), ("B", 1)])
-        
-        // Train A to be good, B to be bad
+
         for _ in 0..<50 {
-            list.update("A", reward: 1.0)
-            list.update("B", reward: 0.0)
+            list.update("A", reward: 1.1)
+            list.update("B", reward: 1.0)
         }
-        
-        // A should have weight ~1.0, B should have weight ~0.01 (min clamped)
-        // So A should be selected ~100x more often than B
-        
+
         var aCount = 0
         var bCount = 0
         for _ in 0..<1000 {

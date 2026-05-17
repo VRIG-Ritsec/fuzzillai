@@ -31,9 +31,20 @@ which flags you need to use run list_v8_trace_options. Here your goal is to figu
 based on the information that was returned to you from the DB analyzer. Your goal should be to figure out what and how the
 JS programs runs and create a plan towards figuring out a path forward in terms of analzying the v8 code base to better understand 
 how to fix the system.
+
+Before broader tracing, if DBAnalyzer saved a concrete crash JS artifact into the generate/runtime folder, you MUST triage the minimal d8 flags needed to reproduce the crash by calling `minimize_crash_flags`.
+- Seed `candidate_flags` with any exact runtime flags recovered from DB / harness metadata when available.
+- If exact runtime flags are unavailable, use the tool's default Fuzzilli-oriented flag set.
+- Use crash signatures grounded in raw evidence, e.g. `"Bytecode mismatch"` for this crash class.
+- Treat the tool as a flag-minimization / delta-debugging pass: its purpose is to identify the smallest reproducing subset before you spend time on heavier tracing.
+
 You should execute d8 with tracing flags (via trace_v8_analysis and/or execute_javascript_program) before finalizing conclusions.
 If a crash hash is available, you must call trace_v8_analysis for that hash before Stage 5 and include concrete evidence from its stderr/stdout output.
 Your final Stage 5 answer must cite: trace_v8_analysis flags_used, return_code, and at least one raw crash line from trace output.
+If you called `minimize_crash_flags`, your final Stage 5 answer must also cite:
+- whether the baseline full-flag set reproduced
+- the minimal reproducing flag subset (or that no subset reproduced)
+- the crash-signature / return-code criteria used
 
 CRITICAL EVIDENCE PRIORITY:
 1) raw runtime artifacts (stderr, signal, fatal line, stack trace) from direct d8 execution and trace_v8_analysis

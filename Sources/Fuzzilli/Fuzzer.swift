@@ -1296,7 +1296,9 @@ public class Fuzzer {
     
     public func adjustMutatorWeightsForValid() {
         guard let runtimeMutators = mutators as? RuntimeWeightedList<Mutator> else { return }
-        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.0)
+        // RuntimeWeightedList treats rewards > 1.0 as successes and <= 1.0 as failures.
+        // Valid executions should therefore provide a mild positive signal.
+        runtimeMutators.updateBatch(runtimeMutators.getLastElements(), reward: 1.1)
     }
     
     public func adjustMutatorWeightsForInvalid() {

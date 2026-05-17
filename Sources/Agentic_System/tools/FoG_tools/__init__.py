@@ -60,6 +60,19 @@ from .run_hygiene import (
     restore_template_baseline,
     write_postrun_hygiene_report,
 )
+from .generated_templates import (
+    save_template_diff_tool,
+    apply_template_diff_tool,
+    list_template_diffs_tool,
+    evaluate_target_tool,
+    check_template_novelty_tool,
+    save_template_as_diff,
+    apply_template_diff,
+    list_template_diffs,
+    evaluate_target_quality,
+    check_template_novelty,
+    extract_template_block,
+)
 from .program_template import (
     edit_program_template_file_tool,
     list_program_templates_tool,
@@ -116,4 +129,15 @@ __all__ = [
     "compile_program_template_tool",
     "execute_javascript_program_tool",
     "list_d8_flags_tool",
+    "save_template_diff_tool",
+    "apply_template_diff_tool",
+    "list_template_diffs_tool",
+    "evaluate_target_tool",
+    "check_template_novelty_tool",
+    "save_template_as_diff",
+    "apply_template_diff",
+    "list_template_diffs",
+    "evaluate_target_quality",
+    "check_template_novelty",
+    "extract_template_block",
 ]

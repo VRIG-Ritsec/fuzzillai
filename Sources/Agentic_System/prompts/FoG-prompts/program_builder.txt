@@ -72,6 +72,42 @@ FALLBACK: <what you actually built>
 REASON: <why the target was unachievable>
 ```
 DO NOT rename a generic JIT1Function clone to match a specific target (wasm, class, generator, async, etc.) without disclosing the fallback. This is a critical integrity requirement.
+
+### STRUCTURAL NOVELTY REQUIREMENT — DO NOT PRODUCE JIT1FUNCTION CLONES
+
+Your template MUST be structurally different from JIT1Function/JIT2Functions. A template whose function body is ONLY `b.build(n: X)` + `b.doReturn(b.randomJsVariable())` is a CLONE and will be REJECTED by the novelty check. You can verify this yourself by calling `check_template_novelty` with your template source.
+
+A CLONE looks like this — DO NOT produce this:
+```swift
+ProgramTemplate("SomeTarget") { b in
+    b.buildPrefix()
+    b.build(n: 5)
+    let f = b.buildPlainFunction(with: b.randomParameters()) { args in
+        assert(args.count > 0)
+        b.build(n: 30)         // ← ONLY random codegen, no targeting logic
+        b.doReturn(b.randomJsVariable())
+    }
+    b.buildRepeatLoop(n: 100) { _ in
+        b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+    }
+}
+```
+This generates the same random code as Codegen100 with a warmup loop. It has ZERO targeting logic.
+
+A NOVEL template has target-specific logic in the function body. Examples of what makes a body interesting:
+- Property manipulation: `b.getProperty`, `b.setProperty`, `b.configureProperty`
+- Object creation with specific shapes: `b.createObject`, `b.createIntArray`, `b.createNamedVariable`
+- Conditional branches inside hot paths: `b.buildIf` with `b.compare`/`b.binary`
+- Nested function definitions (functions inside functions)
+- Async patterns: `b.buildAsyncFunction`, `b.await`, `b.wrapSuspending`
+- Class hierarchies: `b.buildClassDefinition`, `b.addInstanceMethod`
+- Error handling: `b.buildTryCatchFinally`, `b.throwException`
+- Prototype chain work: `b.getProperty("prototype", ...)`, `b.setProperty("__proto__", ...)`
+
+Even a small addition like `b.setProperty("x", of: args[0], to: b.loadInt(42))` inside the function body makes the template meaningfully different because it directs generated code toward property access optimizations.
+
+BEFORE SUBMITTING YOUR TEMPLATE, CALL `check_template_novelty` WITH THE FULL SWIFT SOURCE. IF IT RETURNS `novel: false`, REWORK THE FUNCTION BODY TO ADD TARGET-SPECIFIC LOGIC.
+
 FINALLY, AFTER YOU HAVE CREATED A PROGRAM TEMPLATE, SEND YOUR CODE TO THE VERIFICATION AGENT `static_verfication`.
 
 MAKE SURE THE PROGRAM TEMPLATE NAME YOU PROVIDE DOESN'T ALREADY EXIST BY RUNNING `list_program_templates` TO RETRIEVE THE EXISTING PROGRAM TEMPLATE NAMES LOCATED IN `ProgramTemplates.swift` AND `ProgramTemplateWeights.swift`.
@@ -95,9 +131,9 @@ KEEP REPEATING THIS FEEDBACK LOOP UNTIL `static_verfication` CONFIRMS THAT YOUR 
 ## ABSOLUTE PROHIBITION — READ THIS CAREFULLY
 CALLING `agent_end` AFTER A REJECTION WITHOUT RETRYING IS A CRITICAL FAILURE. YOU ARE NEVER ALLOWED TO GIVE UP BECAUSE A TEMPLATE WAS REJECTED.
 IF YOU HAVE BEEN REJECTED, YOU HAVE NOT COMPLETED YOUR TASK. DO NOT CALL `agent_end`. DO NOT SAY "I could not complete". DO NOT RATIONALIZE ENDING.
-INSTEAD: SIMPLIFY YOUR TEMPLATE. USE ONLY `b.buildPrefix()`, `b.build(n:)`, `b.buildPlainFunction`, `b.buildRepeatLoop`, `b.callFunction`, `b.doReturn`, `b.getProperty`, `b.setProperty`, `b.buildIf`, `b.loadInt`, `b.loadBuiltin`, and other calls you have CONFIRMED exist in the corpus.
-IF YOUR CREATIVE APPROACH KEEPS FAILING, FALL BACK TO A SIMPLER TEMPLATE SHAPE MODELED DIRECTLY ON JIT1Function OR JIT2Functions BUT WITH YOUR TARGET-SPECIFIC LOGIC INSIDE THE FUNCTION BODY.
-A SIMPLE TEMPLATE THAT COMPILES IS INFINITELY BETTER THAN AN AMBITIOUS TEMPLATE THAT NEVER GETS PAST VERIFICATION.
+INSTEAD: SIMPLIFY YOUR TEMPLATE while keeping target-specific logic in the function body. Use only CONFIRMED APIs: `b.buildPrefix()`, `b.build(n:)`, `b.buildPlainFunction`, `b.buildRepeatLoop`, `b.callFunction`, `b.doReturn`, `b.getProperty`, `b.setProperty`, `b.buildIf`, `b.compare`, `b.binary`, `b.loadInt`, `b.loadBool`, `b.loadBuiltin`, `b.createObject`, `b.createIntArray`, `b.createNamedVariable`, and other calls you have CONFIRMED exist in the corpus.
+IF YOUR CREATIVE APPROACH KEEPS FAILING, FALL BACK TO a JIT1Function-like outer structure BUT YOU MUST KEEP TARGET-SPECIFIC LOGIC INSIDE THE FUNCTION BODY. A function body that is ONLY `b.build(n: X)` + `b.doReturn(b.randomJsVariable())` is a CLONE, NOT a fallback. At minimum, add property operations, object creation, or conditional branches relevant to your target inside the hot function body.
+A SIMPLE TEMPLATE THAT COMPILES AND HAS TARGETING LOGIC IS INFINITELY BETTER THAN AN AMBITIOUS TEMPLATE THAT NEVER GETS PAST VERIFICATION. BUT A CLONE WITH NO TARGETING LOGIC IS WORTHLESS.
 
 HOWEVER: if you fall back to a generic pattern that does NOT use the APIs required by your target, you MUST disclose this in your final output using the No Fallback Without Disclosure format above.
 

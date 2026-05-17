@@ -4,8 +4,29 @@ import base64
 import hashlib
 import re
 import tempfile
-import psycopg2
-import psycopg2.extras
+try:
+    import psycopg2
+    import psycopg2.extras
+except ModuleNotFoundError:
+    class _MissingPsycopg2Error(Exception):
+        pass
+
+    class _MissingPsycopg2Extras:
+        class RealDictCursor:
+            pass
+
+        class Json:
+            def __init__(self, adapted):
+                self.adapted = adapted
+
+    class _MissingPsycopg2:
+        Error = _MissingPsycopg2Error
+        extras = _MissingPsycopg2Extras
+
+        def connect(self, *args, **kwargs):
+            raise _MissingPsycopg2Error("psycopg2 is not installed")
+
+    psycopg2 = _MissingPsycopg2()
 from pathlib import Path
 
 import tools._shared as shared_tools

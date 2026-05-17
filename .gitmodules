@@ -1,3 +1,6 @@
 [submodule "v8/v8"]
 	path = v8/v8
 	url = https://github.com/VRIG-RITSEC/v8.git
+[submodule "Sources/Agentic_System/IkaCore"]
+	path = Sources/Agentic_System/IkaCore
+	url = https://github.com/Squid-Proxy-Lovers/IkaCore.git

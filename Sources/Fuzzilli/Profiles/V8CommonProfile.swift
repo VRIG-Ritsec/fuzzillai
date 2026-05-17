@@ -473,7 +473,7 @@ public let RegexVSetLookbehindGenerator = CodeGenerator("RegexVSetLookbehindGene
 
     b.buildTryCatchFinally(tryBody: {
         let r = b.callMethod("exec", on: re, withArgs: [subject])
-        b.reassign(result, to: r)
+        b.reassign(variable: result, value: r)
     }, catchBody: { _ in })
 
     b.callMethod("test", on: re, withArgs: [subject])
@@ -530,7 +530,7 @@ public let WasmGCSubtypeCastChurnerGenerator = CodeGenerator("WasmGCSubtypeCastC
     let wasmModule = b.buildWasmModule { wasmModule in
         b.build(n: 10)
 
-        let exportSig = [.wasmExternRef] => [.wasmi32]
+        let exportSig = [.wasmExternRef()] => [.wasmi32]
         wasmModule.addWasmFunction(with: exportSig) { function, label, args in
             // Create some wasm-gc values via intrinsics and do operations on them
             b.build(n: 10)
@@ -582,7 +582,7 @@ public let JSPISuspenderChurnerGenerator = CodeGenerator("JSPISuspenderChurnerGe
     // Wrap as suspending for wasm import
     let suspending = b.wrapSuspending(function: jsFunc)
 
-    let wasmSignature = [.wasmExternRef] => [.wasmi32]
+    let wasmSignature = [.wasmExternRef()] => [.wasmi32]
     let wasmModule = b.buildWasmModule { wasmModule in
         wasmModule.addWasmFunction(with: wasmSignature) { function, label, args in
             let result = function.consti32(Int32(42))

@@ -467,8 +467,10 @@ def _compile_program_template_executor(params: dict) -> str:
         stderr = build.stderr or ""
         return_code = getattr(build, "returncode", 0)
 
-        if return_code == 0 and stdout.strip():
-            break
+        if return_code == 0:
+            if stdout.strip():
+                break
+            return "Swift build failed: FuzzILTool completed without emitting JavaScript."
 
         last_error = stderr.strip() or stdout.strip() or f"exit code {return_code}"
         is_lock_error = "lock" in last_error.lower() or "unable to load manifest" in last_error.lower()

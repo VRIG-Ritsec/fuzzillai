@@ -202,9 +202,9 @@ def trace_v8_analysis(
     if js_code.startswith("Error"):
         return json.dumps({"error": js_code})
 
-    artifact_dir = _get_varianal_folder()
+    artifact_dir = str(Path(_get_varianal_folder()).resolve())
     os.makedirs(artifact_dir, exist_ok=True)
-    filepath_js = os.path.join(artifact_dir, f"{program_hash}.js")
+    filepath_js = str((Path(artifact_dir) / f"{program_hash}.js").resolve())
     turbo_path = _normalize_runtime_output_dir(turbo_path, artifact_dir)
     with open(filepath_js, "w") as f:
         f.write(js_code)

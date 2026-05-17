@@ -148,6 +148,8 @@ SESSIONS_DIR = _runtime_data_dir / "fog_sessions"
 SESSION_DIR = SESSIONS_DIR / FOG_SESSION_ID
 GENERATED_TEMPLATE_DIR = str(SESSION_DIR / "generated_templates") + os.sep
 TEMPLATE_BACKUP_DIR = SESSION_DIR / "template_backups"
+FOG_TEMPLATE_BASELINE_DIR = _runtime_data_dir / "fog_template_baselines"
+FOG_RUN_HYGIENE_DIR = SESSION_DIR / "run_hygiene"
 SESSION_METADATA_FILE = SESSION_DIR / "metadata.json"
 
 _TEMPLATES_PATH = (_agentic_dir / "templates" / "templates.json").resolve()
@@ -156,6 +158,7 @@ _TEMPLATES_CACHE = None
 
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 os.makedirs(GENERATED_TEMPLATE_DIR, exist_ok=True)
+os.makedirs(FOG_TEMPLATE_BASELINE_DIR, exist_ok=True)
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
@@ -192,6 +195,8 @@ def _init_session() -> str:
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     Path(GENERATED_TEMPLATE_DIR).mkdir(parents=True, exist_ok=True)
     TEMPLATE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    FOG_RUN_HYGIENE_DIR.mkdir(parents=True, exist_ok=True)
+    FOG_TEMPLATE_BASELINE_DIR.mkdir(parents=True, exist_ok=True)
     Path(OUTPUT_DIRECTORY).mkdir(parents=True, exist_ok=True)
 
     orig_templates = TEMPLATE_BACKUP_DIR / "original.swift"

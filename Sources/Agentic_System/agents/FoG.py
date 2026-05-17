@@ -7,9 +7,9 @@ from tools.FoG_tools import (
     run_python_tool,
     get_v8_path_tool,
     get_realpath_tool,
-    tree_tool,
-    ripgrep_tool,
-    fuzzy_finder_tool,
+    list_dir_tool,
+    glob_search_tool,
+    grep_search_tool,
     read_file_tool,
     lift_fuzzil_to_js_tool,
     compile_js_to_fuzzil_tool,
@@ -29,10 +29,19 @@ from tools.FoG_tools import (
     get_random_template_fuzzil_tool,
     similar_template_swift_tool,
     similar_template_fuzzil_tool,
-    swift_fuzzy_finder_tool,
-    swift_tree_tool,
-    swift_ripgrep_tool,
+    swift_list_dir_tool,
+    swift_glob_search_tool,
+    swift_grep_search_tool,
     swift_read_file_tool,
+    swift_patch_file_tool,
+    swift_multi_patch_file_tool,
+    upsert_program_template_tool,
+    remove_program_template_tool,
+    fog_template_preflight_tool,
+    fog_template_restore_baseline_tool,
+    fog_template_postrun_report_tool,
+    prepare_clean_fog_run,
+    write_postrun_hygiene_report,
     edit_program_template_file_tool,
     list_program_templates_tool,
     compile_program_template_tool,
@@ -61,10 +70,114 @@ from tools.FoG_tools import get_v8_path
 from tools.FoG_tools._shared import _init_session
 from config_loader import get_openai_api_key, get_anthropic_api_key, get_deepseek_api_key
 
+import glob
 import sys
 import os
+import json
 import logging
+from typing import Dict, Any
 from agent_logging import configure_process_logging
+
+
+def _clear_spm_locks() -> None:
+    """Remove stale Swift Package Manager lock files before retrying compilation."""
+    import subprocess as _sp
+    for pattern in ["/tmp/_mnt_vdc_fuzzillai_*lock*", "/tmp/_tmp_fzlai_*lock*"]:
+        for lock_path in glob.glob(pattern):
+            try:
+                os.remove(lock_path)
+            except PermissionError:
+                try:
+                    _sp.run(["sudo", "-n", "rm", "-f", lock_path], capture_output=True, timeout=5)
+                except Exception:
+                    pass
+            except OSError:
+                pass
+
+
+def _prepare_for_retry() -> None:
+    """Clear locks so the next compilation attempt can proceed."""
+    _clear_spm_locks()
+
+
+def _safe_text(output: Dict[str, Any]) -> str:
+    """Extract a flat string from an output dict, handling both _build_final_output
+    dicts and the message_history dict passed during validation dry-runs."""
+    parts = []
+    for key in ("final_message", "summary"):
+        val = output.get(key)
+        if isinstance(val, str):
+            parts.append(val)
+        elif isinstance(val, dict):
+            parts.append(str(val.get("message", "")))
+    return " ".join(parts)
+
+
+def _check_program_builder_produced_template(output: Dict[str, Any]) -> bool:
+    """ProgramBuilder must produce a compiled template. If the output contains phrases
+    indicating failure, rejection without retry, or inability to complete, the check
+    fails and the agent will be retried with feedback. On retry you MUST simplify the
+    template to use only corpus-confirmed APIs and model it on JIT1Function structure.
+    Lock-related failures are cleared automatically before retry."""
+    text_lower = _safe_text(output).lower()
+    failure_phrases = [
+        "i could not complete",
+        "i cannot honestly report",
+        "no validated programtemplate",
+        "no approved concrete template",
+        "did not produce an approved",
+        "stage-1 approval was not obtained",
+        "i am ending here because",
+        "failed to produce a validated template",
+        "task as a whole remains incomplete",
+        "did not have a validated replacement",
+        "compiler approved: no",
+        "compiler: not approved",
+        "compiler did not pass",
+        "did not satisfy",
+        "cannot be honestly satisfied",
+        "cannot honestly claim",
+        "stage 6 cannot be",
+        "not approved due to",
+        "blocked by",
+        "workspace lock",
+        "build lock",
+    ]
+    for phrase in failure_phrases:
+        if phrase in text_lower:
+            _prepare_for_retry()
+            return False
+    return True
+
+
+def _check_root_manager_has_template(output: Dict[str, Any]) -> bool:
+    """RootManager must end with a validated ProgramTemplate. If the output indicates
+    that no template was produced or that stages 4-6 were not satisfied, the check
+    fails and the agent will be retried with feedback to re-call program_builder.
+    Lock-related failures are cleared automatically before retry."""
+    text_lower = _safe_text(output).lower()
+    failure_phrases = [
+        "no validated programtemplate was produced",
+        "i cannot honestly report successful completion",
+        "stage 4/5/6 were not satisfied",
+        "task as a whole remains incomplete",
+        "did not produce a validated template",
+        "no approved concrete template",
+        "compiler approved: no",
+        "compiler: not approved",
+        "cannot honestly claim",
+        "stage 6 cannot be",
+        "did not satisfy the mandatory final gate",
+        "did not reach a valid stage 6",
+        "this run cannot be marked successful",
+        "blocked by",
+        "build lock",
+    ]
+    for phrase in failure_phrases:
+        if phrase in text_lower:
+            _prepare_for_retry()
+            return False
+    return True
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -77,6 +190,13 @@ if not logger.handlers:
 logger.propagate = False
 logger.disabled = True
 
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
 class Father(Agent):
 
     def setup_agents(self):
@@ -88,13 +208,15 @@ class Father(Agent):
             prompt=self.get_prompt("static_verfication.txt"),
             system_prompt="You are static_verfication, the static verification worker.",
             tools=[
-                get_all_template_names_from_json_tool,
-                get_template_from_json_by_name_tool,
-                search_template_file_json_tool,
-                search_regex_template_swift_tool,
-                search_regex_template_fuzzil_tool,
-                similar_template_swift_tool,
-                similar_template_fuzzil_tool,
+                list_program_templates_tool,
+                swift_list_dir_tool,
+                swift_glob_search_tool,
+                swift_grep_search_tool,
+                swift_read_file_tool,
+                list_dir_tool,
+                glob_search_tool,
+                grep_search_tool,
+                read_file_tool,
                 web_search_tool,
                 read_agent_memory_tool,
                 list_agent_memory_ids_tool,
@@ -122,10 +244,14 @@ class Father(Agent):
             prompt=self.get_prompt("compiler.txt"),
             system_prompt="You are Compiler.",
             tools=[
-                swift_fuzzy_finder_tool,
-                swift_tree_tool,
-                swift_ripgrep_tool,
+                swift_glob_search_tool,
+                swift_list_dir_tool,
+                swift_grep_search_tool,
                 swift_read_file_tool,
+                swift_patch_file_tool,
+                swift_multi_patch_file_tool,
+                upsert_program_template_tool,
+                remove_program_template_tool,
                 edit_program_template_file_tool,
                 compile_program_template_tool,
                 execute_javascript_program_tool,
@@ -148,9 +274,9 @@ class Father(Agent):
             prompt=self.get_prompt("reviewer_of_code.txt"),
             system_prompt="You are ReviewerOfCode.",
             tools=[
-                fuzzy_finder_tool,
-                ripgrep_tool,
-                tree_tool,
+                glob_search_tool,
+                grep_search_tool,
+                list_dir_tool,
                 web_search_tool,
                 search_knowledge_base_tool,
                 search_knowledge_base_hybrid_tool,
@@ -172,13 +298,13 @@ class Father(Agent):
 
         self.agents['v8_search'] = IkaBaseAgent(
             name="V8Search",
-            description="L2 Worker responsible for searching V8 source code using fuzzy find, regex, and compilation tools",
+            description="L2 Worker responsible for searching V8 source code using glob, directory, regex, and compilation tools",
             prompt=v8_txt,
             system_prompt="You are V8Search.",
             tools=[
-                fuzzy_finder_tool,
-                ripgrep_tool,
-                tree_tool,
+                glob_search_tool,
+                grep_search_tool,
+                list_dir_tool,
                 read_agent_memory_tool,
                 write_agent_memory_tool,
                 read_file_tool,
@@ -251,6 +377,8 @@ class Father(Agent):
             maxsteps=30,
             step_timeout=9000,
             logging_level=self.logging_level,
+            final_answer_check=[_check_program_builder_produced_template],
+            max_final_check_retries=10,
             **checkpoint_kwargs,
         )
         self.agents['program_builder']._base_prompt = self.get_prompt("program_builder.txt")
@@ -289,6 +417,9 @@ class Father(Agent):
                 search_knowledge_base_tool,
                 search_knowledge_base_hybrid_tool,
                 get_knowledge_doc_tool,
+                fog_template_preflight_tool,
+                fog_template_restore_baseline_tool,
+                fog_template_postrun_report_tool,
                 search_v8_source_rag_tool,
                 search_v8_source_rag_hybrid_tool,
                 get_v8_source_rag_doc_tool,
@@ -301,6 +432,8 @@ class Father(Agent):
             subagents=[self.agents['code_analyzer'], self.agents['program_builder'], self.agents['pick_section']],
             maxsteps=30,
             logging_level=self.logging_level,
+            final_answer_check=[_check_root_manager_has_template],
+            max_final_check_retries=10,
             **checkpoint_kwargs,
         )
         self.agents['root_manager']._base_prompt = self.get_prompt("root_manager.txt")
@@ -310,16 +443,58 @@ class Father(Agent):
             return f.read()
 
     def start_system(self, checkpoint_uid=None):
-        result = self.run_task(
-            task_description="Initialize Root Manager orchestration",
-            context={
-                "PickSection": "Select a promising V8 code region to analyze",
-                "RootManager": "Primary orchestrator of the system, coordinates between analysis and program generation",
-                "CodeAnalyzer": "Analyze V8 code and knowledge bases to guide the program template building",
-                "ProgramBuilder": "Generate Fuzzilli program templates for fuzzing a specific code region"
-            },
-            checkpoint_uid=checkpoint_uid,
-        )
+        restore_before = checkpoint_uid is None and _env_flag("FOG_RESTORE_BEFORE_RUN", False)
+        preflight = prepare_clean_fog_run(restore_baseline=restore_before)
+        if preflight.get("status") in {"ERROR", "FAILED"}:
+            return {
+                "task_description": "Initialize Root Manager orchestration",
+                "completed": False,
+                "output": None,
+                "error": f"FoG template preflight failed; see {preflight.get('report_path')}",
+                "hygiene": {"preflight": preflight},
+            }
+
+        hygiene_context = {
+            "status": preflight.get("status"),
+            "action": preflight.get("preflight_action", "unknown"),
+            "report_path": preflight.get("report_path"),
+            "session_dir": preflight.get("session_dir"),
+        }
+        result = {
+            "task_description": "Initialize Root Manager orchestration",
+            "completed": False,
+            "output": None,
+            "error": None,
+        }
+        try:
+            result = self.run_task(
+                task_description="Initialize Root Manager orchestration",
+                context={
+                    "PickSection": "Select a promising V8 code region to analyze",
+                    "RootManager": "Primary orchestrator of the system, coordinates between analysis and program generation",
+                    "CodeAnalyzer": "Analyze V8 code and knowledge bases to guide the program template building",
+                    "ProgramBuilder": "Generate Fuzzilli program templates for fuzzing a specific code region",
+                    "FoGRunHygiene": (
+                        "Template preflight has already run. "
+                        f"{json.dumps(hygiene_context, sort_keys=True)}. "
+                        "All FoG artifacts, baselines, generated JavaScript, and hygiene reports must remain under runtime_data."
+                    ),
+                },
+                checkpoint_uid=checkpoint_uid,
+            )
+        finally:
+            try:
+                postrun = write_postrun_hygiene_report(
+                    run_completed=result.get("completed"),
+                    run_error=result.get("error"),
+                    restore_after_report=False,
+                )
+            except Exception as exc:
+                postrun = {"status": "ERROR", "error": str(exc)}
+            result["hygiene"] = {
+                "preflight": preflight,
+                "postrun": postrun,
+            }
         logger.info("FoG start result:")
         logger.info(f"Completed: {result['completed']}")
         if result['output']:
@@ -346,13 +521,7 @@ def main():
 
     system = Father(model=None, api_key=openai_key, anthropic_api_key=anthropic_key)
 
-    result = system.run_task(
-        task_description="Initialize corpus generation for V8 fuzzing",
-        context={
-            "CodeAnalyzer": "Analyze V8 source code for patterns. vulnerabilities. specifc components, etc...",
-            "ProgramBuilder": "Build JavaScript programs using corpus and context"
-        }
-    )
+    result = system.start_system()
 
     logger.info("Task Result:")
     logger.info(f"Completed: {result['completed']}")

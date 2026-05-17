@@ -29,4 +29,12 @@ public let programTemplateWeights = [
     "WasmReturnCalls": 2,
     "JSONFuzzer": 1,
     "MaglevResumableAwaitThenableLoops": 2,
+    "WasmSimdLoadSplat1": 2,
+    "WasmGCStruct1": 2,
+    "WasmMemoryTrap1": 2,
+    "WasmArrayGC1": 2,
+
+    "AsyncAwaitLazyDeoptWarmup": 2,
+
+    "JITMethodPressureFallback": 2,
 ]

@@ -38,6 +38,26 @@
       border-radius: 10px;
     }
 
+    .panel-subtle {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .panel-subtle h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+    .trace-box {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      max-height: 320px;
+      overflow: auto;
+    }
+
     .detail-actions {
       display: flex;
       gap: 8px;
@@ -202,6 +222,15 @@
       <div class="section-title">
         <h2>JavaScript</h2>
         <span class="muted">Lifted with syntax highlighting</span>
+      </div>
+      <div class="panel-subtle" style="margin-top: 12px;">
+        <h3>Crash reproduction flags</h3>
+        <div id="crashFlagsMeta" class="meta">Select a program to inspect crash flags when a crash execution exists.</div>
+      </div>
+      <div class="panel-subtle" style="margin-top: 12px;">
+        <h3>Crash trace</h3>
+        <div id="crashTraceMeta" class="meta">Select a program to inspect crash trace text when a crash execution exists.</div>
+        <pre id="crashTraceView" class="trace-box"></pre>
       </div>
       <div id="detailMeta" class="meta">Select a row to load the lifted program.</div>
       <div class="detail-actions">
@@ -387,11 +416,28 @@
       state.selectedHash = programHash;
       const view = document.getElementById("jsView");
       const meta = document.getElementById("detailMeta");
+      const crashFlagsMeta = document.getElementById("crashFlagsMeta");
+      const crashTraceMeta = document.getElementById("crashTraceMeta");
+      const crashTraceView = document.getElementById("crashTraceView");
       view.innerHTML = '<span class="muted"><span class="spinner"></span> Loading…</span>';
       meta.textContent = `hash=${programHash} (loading…)`;
+      crashFlagsMeta.textContent = "Loading crash reproduction flags…";
+      crashTraceMeta.textContent = "Loading crash trace…";
+      crashTraceView.textContent = "";
       const data = await fetchProgram(programHash);
       state.selectedData = data;
       meta.textContent = formatMeta(data);
+      const flags = (data.crash_repro_flags && data.crash_repro_flags.flags) || [];
+      const flagLines = flags.length ? flags.join("\n") : "No explicit d8 flags were recovered for this program.";
+      const flagSource = data.crash_repro_flags && data.crash_repro_flags.source ? `Source: ${data.crash_repro_flags.source}` : "";
+      const flagNote = data.crash_repro_flags && data.crash_repro_flags.note ? `Note: ${data.crash_repro_flags.note}` : "";
+      crashFlagsMeta.textContent = [flagLines, flagSource, flagNote].filter(Boolean).join("\n\n");
+      const trace = data.crash_trace || {};
+      crashTraceMeta.textContent = [
+        trace.source ? `Source: ${trace.source}` : "",
+        trace.note ? `Note: ${trace.note}` : "",
+      ].filter(Boolean).join("\n\n") || "Crash trace loaded.";
+      crashTraceView.textContent = trace.trace || "No crash trace text was recovered for this program.";
       const code = data.javascript_code || "";
       view.innerHTML = window.HL ? window.HL.highlight(code) : escapeHtml(code);
       updateRowHighlight();
@@ -416,6 +462,9 @@
       state.selectedData = null;
       document.getElementById("jsView").textContent = "";
       document.getElementById("detailMeta").textContent = "Select a row to load the lifted program.";
+      document.getElementById("crashFlagsMeta").textContent = "Select a program to inspect crash flags when a crash execution exists.";
+      document.getElementById("crashTraceMeta").textContent = "Select a program to inspect crash trace text when a crash execution exists.";
+      document.getElementById("crashTraceView").textContent = "";
       updateRowHighlight();
       syncLocationQuery();
       renderComparison();
@@ -559,6 +608,9 @@
         state.offset = 0;
         document.getElementById("jsView").textContent = "";
         document.getElementById("detailMeta").textContent = "Select a row to load the lifted program.";
+        document.getElementById("crashFlagsMeta").textContent = "Select a program to inspect crash flags when a crash execution exists.";
+        document.getElementById("crashTraceMeta").textContent = "Select a program to inspect crash trace text when a crash execution exists.";
+        document.getElementById("crashTraceView").textContent = "";
         const fromUrl = readHashFromQuery();
         const compareFromUrl = readCompareFromQuery();
         if (fromUrl) document.getElementById("hashFilter").value = fromUrl;

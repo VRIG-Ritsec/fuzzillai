@@ -2,10 +2,12 @@
 FoG program template tools: list, edit, compile, execute, list_d8_flags.
 """
 
+import glob
 import os
 import re
 import shlex
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +24,7 @@ from tools._shared import resolve_js_path
 
 from ._shared import (
     FOG_SESSION_ID,
+    FUZZILLI_PATH,
     GENERATED_TEMPLATE_DIR,
     PROGRAM_TEMPLATES_FILE,
     PROGRAM_WEIGHTS_FILE,
@@ -397,18 +400,86 @@ def _list_program_templates_executor(params: dict) -> str:
     return f"Found program templates: {program_templates}"
 
 
+def _clear_spm_locks() -> list[str]:
+    """Remove stale Swift Package Manager lock files that block compilation."""
+    import subprocess
+
+    patterns = [
+        "/tmp/_mnt_vdc_fuzzillai_*lock*",
+        "/tmp/_tmp_fzlai_*lock*",
+    ]
+    removed: list[str] = []
+    for pattern in patterns:
+        for lock_path in glob.glob(pattern):
+            try:
+                os.remove(lock_path)
+                removed.append(lock_path)
+            except PermissionError:
+                try:
+                    subprocess.run(
+                        ["sudo", "-n", "rm", "-f", lock_path],
+                        capture_output=True, timeout=5,
+                    )
+                    if not os.path.exists(lock_path):
+                        removed.append(lock_path)
+                except Exception:
+                    pass
+            except OSError:
+                pass
+    return removed
+
+
+def _ensure_build_writable() -> None:
+    """Make .build/ artifacts writable so swift run can update them."""
+    import subprocess
+
+    build_dir = os.path.join(FUZZILLI_PATH, ".build")
+    if not os.path.isdir(build_dir):
+        return
+    try:
+        subprocess.run(
+            ["sudo", "-n", "chmod", "-R", "a+w", build_dir],
+            capture_output=True, timeout=30,
+        )
+    except Exception:
+        pass
+
+
+_COMPILE_MAX_RETRIES = 5
+_COMPILE_RETRY_DELAY = 3
+
+
 def _compile_program_template_executor(params: dict) -> str:
     template = params.get("template", "")
     if not template:
         return "Error: template parameter is required"
-    build = run_command(f'swift run FuzzILTool --compileTemplate="{template}" fake_path')
-    stdout = build.stdout or ""
-    stderr = build.stderr or ""
-    return_code = getattr(build, "returncode", 0)
 
-    if return_code != 0:
-        details = stderr.strip() or stdout.strip() or f"exit code {return_code}"
-        return f"Swift build failed: {details}"
+    last_error = ""
+    for attempt_num in range(_COMPILE_MAX_RETRIES):
+        _clear_spm_locks()
+        _ensure_build_writable()
+
+        build = run_command(
+            f'cd {shlex.quote(FUZZILLI_PATH)} && swift run FuzzILTool --compileTemplate="{template}" fake_path',
+            timeout=180,
+        )
+        stdout = build.stdout or ""
+        stderr = build.stderr or ""
+        return_code = getattr(build, "returncode", 0)
+
+        if return_code == 0 and stdout.strip():
+            break
+
+        last_error = stderr.strip() or stdout.strip() or f"exit code {return_code}"
+        is_lock_error = "lock" in last_error.lower() or "unable to load manifest" in last_error.lower()
+        is_permission_error = "operation not permitted" in last_error.lower() or "permission denied" in last_error.lower()
+        if not is_lock_error and not is_permission_error and return_code != 0:
+            return f"Swift build failed: {last_error}"
+        if attempt_num < _COMPILE_MAX_RETRIES - 1:
+            _clear_spm_locks()
+            time.sleep(_COMPILE_RETRY_DELAY)
+    else:
+        return f"Swift build failed after {_COMPILE_MAX_RETRIES} retries: {last_error}"
 
     javascript = stdout
     if not javascript.strip():

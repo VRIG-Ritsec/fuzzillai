@@ -631,4 +631,162 @@ public let ProgramTemplates = [
         }
         b.build(n: 10)
     },
+
+    // Reference templates demonstrating advanced Wasm APIs.
+    // These serve as corpus precedent for SIMD, GC, and memory trap paths.
+
+    WasmProgramTemplate("WasmSimdLoadSplat1") { b in
+        b.buildPrefix()
+        b.build(n: 5)
+
+        let module = b.buildWasmModule { wasmModule in
+            let mem = wasmModule.addMemory(minPages: 1, maxPages: 2)
+            wasmModule.addWasmFunction(with: [] => [.wasmSimd128]) { function, label, params in
+                let offset = function.consti32(0)
+                let loaded = function.wasmSimdLoad(kind: .Load32Splat, memory: mem, dynamicOffset: offset, staticOffset: 0)
+                return [loaded]
+            }
+        }
+
+        let exports = module.loadExports()
+        b.buildRepeatLoop(n: 50) { _ in
+            b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+        }
+    },
+
+    WasmProgramTemplate("WasmGCStruct1") { b in
+        b.buildPrefix()
+        b.build(n: 5)
+
+        let types = b.wasmDefineTypeGroup {
+            let structType = b.wasmDefineStructType(
+                fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                indexTypes: [])
+            return [structType]
+        }
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, params in
+                let s = function.wasmStructNewDefault(structType: types[0])
+                let val = function.consti32(42)
+                function.wasmStructSet(theStruct: s, fieldIndex: 0, value: val)
+                let got = function.wasmStructGet(theStruct: s, fieldIndex: 0)
+                return [got]
+            }
+        }
+
+        let exports = module.loadExports()
+        b.buildRepeatLoop(n: 50) { _ in
+            b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+        }
+    },
+
+    WasmProgramTemplate("WasmMemoryTrap1") { b in
+        b.buildPrefix()
+        b.build(n: 5)
+
+        let module = b.buildWasmModule { wasmModule in
+            let mem = wasmModule.addMemory(minPages: 1, maxPages: 1)
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, params in
+                let largeOffset = function.consti32(65536)
+                let loaded = function.wasmMemoryLoad(memory: mem, dynamicOffset: largeOffset, loadType: .I32LoadMem, staticOffset: 0)
+                return [loaded]
+            }
+        }
+
+        let exports = module.loadExports()
+        b.buildRepeatLoop(n: 20) { _ in
+            b.buildTryCatchFinally {
+                b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+            } catchBody: { _ in
+                b.build(n: 3)
+            }
+        }
+    },
+
+    WasmProgramTemplate("WasmArrayGC1") { b in
+        b.buildPrefix()
+        b.build(n: 5)
+
+        let types = b.wasmDefineTypeGroup {
+            let arrayType = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true, indexType: nil)
+            return [arrayType]
+        }
+
+        let module = b.buildWasmModule { wasmModule in
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, params in
+                let size = function.consti32(10)
+                let arr = function.wasmArrayNewDefault(arrayType: types[0], size: size)
+                let idx = function.consti32(3)
+                let val = function.consti32(99)
+                function.wasmArraySet(array: arr, index: idx, element: val)
+                let got = function.wasmArrayGet(array: arr, index: idx)
+                return [got]
+            }
+        }
+
+        let exports = module.loadExports()
+        b.buildRepeatLoop(n: 50) { _ in
+            b.callMethod(module.getExportedMethod(at: 0), on: exports, withArgs: [])
+        }
+    },
+
+    ProgramTemplate("AsyncAwaitLazyDeoptWarmup") { b in
+        let smallCodeBlockSize = 5
+        let numIterations = 100
+
+        b.buildPrefix()
+        b.build(n: smallCodeBlockSize)
+
+        let f = b.buildPlainFunction(with: b.randomParameters()) { args in
+            assert(args.count > 0)
+            b.build(n: 20)
+            b.doReturn(b.randomJsVariable())
+        }
+
+        b.build(n: smallCodeBlockSize)
+
+        b.buildRepeatLoop(n: numIterations) { _ in
+            b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+        }
+
+        b.build(n: smallCodeBlockSize)
+        b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+
+        b.buildRepeatLoop(n: numIterations) { _ in
+            b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+        }
+
+        b.build(n: smallCodeBlockSize)
+        b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+    },
+
+    ProgramTemplate("JITMethodPressureFallback") { b in
+        let smallCodeBlockSize = 5
+        let numIterations = 100
+
+        b.buildPrefix()
+        b.build(n: smallCodeBlockSize)
+
+        let f = b.buildPlainFunction(with: b.randomParameters()) { _ in
+            b.build(n: 30)
+            b.doReturn(b.randomJsVariable())
+        }
+
+        b.build(n: smallCodeBlockSize)
+
+        b.buildRepeatLoop(n: numIterations) { _ in
+            b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+        }
+
+        b.build(n: smallCodeBlockSize)
+        b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+
+        b.buildRepeatLoop(n: numIterations) { _ in
+            b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+        }
+
+        b.build(n: smallCodeBlockSize)
+        b.callFunction(f, withArgs: b.randomArguments(forCalling: f))
+    },
 ]

@@ -166,6 +166,81 @@ def _read_log_source(ref: str, lines: int = 300) -> dict:
 
 _PROGRAM_HASH_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 _PROGRAM_HASH_FILTER_RE = re.compile(r"^[a-fA-F0-9]{1,64}$")
+_D8_FLAG_RE = re.compile(r"(?<![\w-])(--[A-Za-z0-9][A-Za-z0-9._-]*(?:=(?:\"[^\"]*\"|'[^']*'|[^\s\"']+))?)")
+_NON_RUNTIME_FLAG_KEYS = {"--help", "--version"}
+
+
+def _extract_d8_flags(text: str) -> list[str]:
+    if not text:
+        return []
+
+    flags: list[str] = []
+    seen: set[str] = set()
+    for match in _D8_FLAG_RE.finditer(text):
+        flag = match.group(1).strip().rstrip(".,;:)")
+        if flag.split("=", 1)[0] in _NON_RUNTIME_FLAG_KEYS:
+            continue
+        if flag not in seen:
+            seen.add(flag)
+            flags.append(flag)
+    return flags
+
+
+def _crash_repro_flags(execution_row: dict | None = None) -> dict:
+    if not execution_row:
+        return {
+            "flags": [],
+            "source": "",
+            "note": "No crash execution row was available for this program.",
+        }
+
+    parts = [
+        str(execution_row.get("stdout", "")),
+        str(execution_row.get("stderr", "")),
+        str(execution_row.get("fuzzout", "")),
+    ]
+    flags = _extract_d8_flags("\n".join(part for part in parts if part))
+
+    note = "Recovered from flag-like tokens stored in the crash execution output."
+    if not flags:
+        note = "The SQL execution row exists, but it did not store explicit d8 flags."
+
+    return {
+        "flags": flags,
+        "source": f"execution:{execution_row.get('execution_id', '')}",
+        "note": note,
+    }
+
+
+def _crash_repro_trace(execution_row: dict | None = None) -> dict:
+    if not execution_row:
+        return {
+            "trace": "",
+            "source": "",
+            "note": "No crash trace text was available for this program.",
+        }
+
+    parts = [
+        str(execution_row.get("stdout", "")),
+        str(execution_row.get("stderr", "")),
+        str(execution_row.get("fuzzout", "")),
+    ]
+    trace = "\n".join(part for part in parts if part).strip()
+    if not trace:
+        return {
+            "trace": "",
+            "source": f"execution:{execution_row.get('execution_id', '')}",
+            "note": "The crash execution row did not include stdout, stderr, or fuzzout text.",
+        }
+
+    if len(trace) > 24_000:
+        trace = trace[:24_000].rstrip() + "\n... [truncated]"
+
+    return {
+        "trace": trace,
+        "source": f"execution:{execution_row.get('execution_id', '')}",
+        "note": "Recovered from the crashing execution row.",
+    }
 
 
 def _corpus_program_list(fuzzer_id: int | None, limit: int, offset: int, program_hash: str | None = None) -> list[dict]:
@@ -223,16 +298,35 @@ def _corpus_program_detail(program_hash: str) -> dict:
             conn,
             """
             SELECT
-                program_hash,
-                fuzzer_id,
-                inserted_at,
-                created_at,
-                source_mutators,
-                contributors,
-                parent_program_hash,
-                program_base64
-            FROM program
-            WHERE program_hash = %s
+                p.program_hash,
+                p.fuzzer_id,
+                p.inserted_at,
+                p.created_at,
+                p.source_mutators,
+                p.contributors,
+                p.parent_program_hash,
+                p.program_base64
+            FROM program p
+            WHERE p.program_hash = %s
+            """,
+            (program_hash,),
+        )
+        crash_execution = forward_core._query_one(
+            conn,
+            """
+            SELECT
+                e.execution_id,
+                e.created_at,
+                eo.outcome,
+                e.stdout,
+                e.stderr,
+                e.fuzzout
+            FROM execution e
+            JOIN execution_outcome eo ON eo.id = e.execution_outcome_id
+            WHERE e.program_hash = %s
+              AND e.execution_outcome_id = 1
+            ORDER BY e.created_at DESC
+            LIMIT 1
             """,
             (program_hash,),
         )
@@ -257,6 +351,8 @@ def _corpus_program_detail(program_hash: str) -> dict:
             continue
         out[key] = value
     out["javascript_code"] = js
+    out["crash_repro_flags"] = _crash_repro_flags(crash_execution or None)
+    out["crash_trace"] = _crash_repro_trace(crash_execution or None)
     return out
 
 

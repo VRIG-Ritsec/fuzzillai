@@ -17,6 +17,11 @@ if str(_ikacore_src) not in sys.path:
     sys.path.insert(0, str(_ikacore_src))
 
 from IkaCore.tools import IkaTools
+from tools.fs_tools import (
+    read_file_from_base,
+    MAX_TOOL_RESULT_BYTES,
+    READ_FILE_MAX_LINES_IN_SLICE,
+)
 from config_loader import (
     apply_runtime_paths,
     get_d8_path,
@@ -147,32 +152,13 @@ CFG_MAP = _load_cfg_json()
 CALL_GRAPH_MAP = CALL_GRAPH_HASHMAP
 
 
-def read_file(file_path: str, section: int = None) -> str:
-    if file_path.startswith("v8/"):
-        resolved = os.path.join(V8_PATH, file_path[3:])
-    elif not os.path.isabs(file_path):
-        resolved = os.path.join(V8_PATH, file_path)
-    else:
-        resolved = file_path
-    lc = get_output(run_command(f"cd {V8_PATH} && wc -l '{resolved}'"))
-    try:
-        line_count = int(lc.strip().split()[0])
-    except Exception:
-        return f"Could not determine lines. wc output: {lc}"
-    lines_per_section = 3000
-    num_sections = (line_count + lines_per_section - 1) // lines_per_section
-    if line_count <= lines_per_section:
-        return get_output(run_command(f"cd {V8_PATH} && cat '{resolved}'"))
-    if section is None or section < 1 or section > num_sections:
-        return (
-            f"File has {line_count} lines, {num_sections} sections. "
-            f"Specify section 1-{num_sections}."
-        )
-    start = 1 + (section - 1) * lines_per_section
-    end = min(start + lines_per_section - 1, line_count)
-    content = get_output(run_command(f"cd {V8_PATH} && sed -n '{start},{end}p' '{resolved}'"))
-    return f"Section {section}/{num_sections} (lines {start}-{end}):\n{content}"
-
+def read_file(file_path: str, line_start: int = None, line_end: int = None) -> str:
+    params = {
+        "file_path": file_path[3:] if file_path.startswith("v8/") else file_path,
+        "line_start": line_start,
+        "line_end": line_end,
+    }
+    return read_file_from_base(params, V8_PATH)
 
 DEBUG_SESSION = {"js_path": "", "d8_args": ""}
 MI_CONTROLLER = None
@@ -623,7 +609,7 @@ def _get_call_graph_node_executor(params: dict) -> str:
 
 web_search_tool = IkaTools(
     name="web_search",
-    description="Search the web for V8, JavaScript, or fuzzing topics. Use for blog posts, papers, and external docs. Do NOT use to search V8 source; use ripgrep or v8_source_rag instead.",
+    description="Search the web for V8, JavaScript, or fuzzing topics. Use for blog posts, papers, and external docs. Do NOT use to search V8 source; use grep_search or v8_source_rag instead.",
     parameters={"query": {"type": "string", "description": "Natural language search question", "required": True}},
     execute_function=_web_search_executor,
 )
@@ -664,13 +650,41 @@ get_call_graph_node_tool = IkaTools(
 )
 
 read_file_tool = IkaTools(
+    id="read_file",
     name="read_file",
-    description="Read file contents. Supports large files via sectioned output (3000 lines per section). Use paths relative to V8_PATH or absolute paths.",
+    description=(
+        "Reads file contents under V8_PATH. Small files: omit line_start/line_end to read the whole file. "
+        f"Reads are capped at {MAX_TOOL_RESULT_BYTES} bytes. Files or slices beyond that limit cannot be read in full; use line_start and line_end "
+        f"(1-based inclusive line numbers). Each paged read returns at most {READ_FILE_MAX_LINES_IN_SLICE} lines per call."
+    ),
     parameters={
-        "file_path": {"type": "string", "description": "Absolute or V8-relative path", "required": True},
-        "section": {"type": "number", "description": "Section index (1-based) for chunked output", "required": False},
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the file relative to V8_PATH. An optional 'v8/' prefix is also accepted; absolute paths are allowed only when still under V8_PATH.",
+            },
+            "line_start": {
+                "type": "integer",
+                "description": (
+                    "Optional. First line to return (1-based). With line_end, defines the slice; "
+                    "If omitted but line_end is set, defaults to 1. If both are omitted, reads the entire file "
+                    "when under the size limit."
+                ),
+            },
+            "line_end": {
+                "type": "integer",
+                "description": (
+                    "Optional. Last line to return (1-based, inclusive). If line_start is set and this "
+                    "is omitted, it defaults to line_start + "
+                    f"{READ_FILE_MAX_LINES_IN_SLICE - 1} (capped by max lines per call). "
+                    "Required for controlled access when the tool reports the file is too large for a full read."
+                ),
+            },
+        },
+        "required": ["file_path"],
     },
-    execute_function=lambda x: read_file(x["file_path"], x.get("section")),
+    execute_function=lambda x: read_file(x["file_path"], x.get("line_start"), x.get("line_end")),
 )
 
 start_mi_debug_session_tool = IkaTools(

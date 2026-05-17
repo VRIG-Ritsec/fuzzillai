@@ -320,6 +320,15 @@ let v8Profile = Profile(
         (UndefinedNanGenerator, 5),
         (StringShapeGenerator, 5),
         (HeapNumberGenerator, 5),
+        (FeedbackVectorChurnerGenerator, 5),
+        (ElementsKindTransitionerGenerator, 5),
+        (MapDeprecationCascadeGenerator, 5),
+        (TurboshaftLateOptConfuserGenerator, 5),
+        (StringRepresentationChurnerGenerator, 5),
+        (RegexVSetLookbehindGenerator, 3),
+        (WasmJSTierUpThrasherGenerator, 5),
+        (WasmGCSubtypeCastChurnerGenerator, 3),
+        (JSPISuspenderChurnerGenerator, 3),
     ],
 
     additionalProgramTemplates: WeightedList<ProgramTemplate>([

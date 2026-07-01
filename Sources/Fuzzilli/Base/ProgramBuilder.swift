@@ -6326,12 +6326,12 @@ public class ProgramBuilder {
         return (dynamicOffset, alignedStaticOffset)
     }
 
-    func generateRandomWasmStructFields() -> (
+    func generateRandomWasmStructFields(upTo n: Int = 5) -> (
         fields: [WasmStructTypeDescription.Field], indexTypes: [Variable]
     ) {
         var indexTypes: [Variable] = []
 
-        let fields = (0..<Int.random(in: 0...10)).map { _ in
+        let fields = (0..<Int.random(in: 0...n)).map { _ in
             var type: ILType
             // TODO(mliedtke): Allow non-nullable reference types. Right now we can't do this as
             // the WasmStructNewGenerator might then fail to generate a struct.
@@ -6695,24 +6695,44 @@ public class ProgramBuilder {
                 isFinal: isFinal
             )
 
-        // Generate a subtype as a copy of the super type
-        // TODO(bettscheider): Support non-identical subtype generation
         case let structDesc as WasmStructTypeDescription:
             var indexTypes: [Variable] = []
             var cleanFields: [WasmStructTypeDescription.Field] = []
             for field in structDesc.fields {
-                if case .Index = field.type.wasmReferenceType?.kind {
-                    let indexType = self.getWasmTypeDef(for: field.type)
+                var fieldType = field.type
+
+                if let refType = fieldType.wasmReferenceType, case .Index = refType.kind {
+                    var indexType = self.getWasmTypeDef(for: fieldType)
+                    // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
+                    // This is not yet supported by WasmStructNewGenerator.
+                    assert(refType.nullability)
+                    fieldType = .wasmRef(.Index(), nullability: refType.nullability)
+
+                    let indexTypeDesc = type(of: indexType).wasmTypeDefinition!.description!
+                    if !field.mutability,
+                        !indexTypeDesc.hasUnresolvedSelfReferences(),
+                        !indexTypeDesc.isFinal
+                    {
+                        indexType = self.findVariable(satisfying: {
+                            guard let desc = self.type(of: $0).wasmTypeDefinition?.description
+                            else { return false }
+                            return indexTypeDesc.subsumes(desc)
+                        })!
+                    }
                     indexTypes.append(indexType)
-                    cleanFields.append(
-                        .init(
-                            type: .wasmRef(
-                                .Index(), nullability: field.type.wasmReferenceType!.nullability),
-                            mutability: field.mutability
-                        ))
-                } else {
-                    cleanFields.append(field)
                 }
+
+                cleanFields.append(
+                    .init(
+                        type: fieldType,
+                        mutability: field.mutability
+                    ))
+            }
+
+            if probability(0.5) && cleanFields.count < 12 {
+                let (newFields, newIndexTypes) = generateRandomWasmStructFields(upTo: 3)
+                cleanFields += newFields
+                indexTypes += newIndexTypes
             }
 
             return self.wasmDefineStructType(

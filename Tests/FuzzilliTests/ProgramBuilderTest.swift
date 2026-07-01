@@ -3364,6 +3364,62 @@ struct ProgramBuilderTests {
         }
     }
 
+    @Test func testWasmStructSubtypeGeneration() {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            b.wasmDefineTypeGroup { () -> [Variable] in
+                let innerStruct = b.wasmDefineStructType(
+                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                let subInnerStruct = b.generateSubtype(for: innerStruct)
+                let outerStruct = b.wasmDefineStructType(
+                    fields: [
+                        .init(type: ILType.wasmRef(.Index(), nullability: true), mutability: false)
+                    ],
+                    indexTypes: [innerStruct])
+
+                let subOuterStructs = (0..<20).map { _ in b.generateSubtype(for: outerStruct) }
+                let subOuterStructsTypeDescriptions = subOuterStructs.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmStructTypeDescription
+                }
+
+                #expect(
+                    subOuterStructsTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: outerStruct).wasmTypeDefinition?.description
+                    })
+
+                // Width subtyping
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count == 1 })
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count > 1 })
+
+                // Depth subtyping
+                let innerStructDesc = b.type(of: innerStruct).wasmTypeDefinition!.description!
+                let subInnerStructDesc = b.type(of: subInnerStruct).wasmTypeDefinition!.description!
+
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        if case .Index(let target) = $0.fields[0].type.wasmReferenceType?.kind {
+                            return target.get() == subInnerStructDesc
+                        }
+                        return false
+                    })
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        if case .Index(let target) = $0.fields[0].type.wasmReferenceType?.kind {
+                            return target.get() == innerStructDesc
+                        }
+                        return false
+                    })
+
+                return [innerStruct, subInnerStruct, outerStruct] + subOuterStructs
+            }
+        }
+    }
+
     @Test func testEmptyMemoryGenerateMemoryIndices() {
         let env = JavaScriptEnvironment()
         let config = Configuration(logLevel: .error)

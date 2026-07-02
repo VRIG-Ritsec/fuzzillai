@@ -3420,6 +3420,85 @@ struct ProgramBuilderTests {
         }
     }
 
+    @Test func testWasmSignatureSubtypeGeneration() {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            b.wasmDefineTypeGroup { () -> [Variable] in
+                let structType = b.wasmDefineStructType(
+                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                let subStructType = b.generateSubtype(for: structType)
+                let baseSignatureType = b.wasmDefineSignatureType(
+                    signature: [ILType.wasmRef(.Index(), nullability: true)] => [
+                        ILType.wasmRef(.Index(), nullability: true)
+                    ],
+                    indexTypes: [subStructType, structType])
+
+                let subSignatureTypes = (0..<20).map { _ in
+                    b.generateSubtype(for: baseSignatureType)
+                }
+                let subSignatureTypeDescriptions = subSignatureTypes.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmSignatureTypeDescription
+                }
+
+                #expect(
+                    subSignatureTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: baseSignatureType).wasmTypeDefinition?.description
+                    })
+
+                let structTypeDescription = b.type(of: structType).wasmTypeDefinition!.description!
+                let subStructTypeDescription = b.type(of: subStructType).wasmTypeDefinition!
+                    .description!
+
+                // Parameters are contravariant
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target) = $0.signature.parameterTypes[0]
+                            .wasmReferenceType?.kind
+                        {
+                            return target.get() == structTypeDescription
+                        }
+                        return false
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target) = $0.signature.parameterTypes[0]
+                            .wasmReferenceType?.kind
+                        {
+                            return target.get() == subStructTypeDescription
+                        }
+                        return false
+                    })
+
+                // Outputs are covariant
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target) = $0.signature.outputTypes[0].wasmReferenceType?
+                            .kind
+                        {
+                            return target.get() == subStructTypeDescription
+                        }
+                        return false
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        if case .Index(let target) = $0.signature.outputTypes[0].wasmReferenceType?
+                            .kind
+                        {
+                            return target.get() == structTypeDescription
+                        }
+                        return false
+                    })
+
+                return [structType, subStructType, baseSignatureType] + subSignatureTypes
+            }
+        }
+    }
+
     @Test func testEmptyMemoryGenerateMemoryIndices() {
         let env = JavaScriptEnvironment()
         let config = Configuration(logLevel: .error)

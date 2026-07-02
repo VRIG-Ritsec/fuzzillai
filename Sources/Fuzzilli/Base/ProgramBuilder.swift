@@ -6742,16 +6742,37 @@ public class ProgramBuilder {
                 isFinal: isFinal
             )
 
-        // Generate a subtype as a copy of the super type
-        // TODO(bettscheider): Support non-identical subtype generation
         case let sigDesc as WasmSignatureTypeDescription:
             var indexTypes: [Variable] = []
-            let unlinkTypes = { (types: [ILType]) -> [ILType] in
+
+            let processTypes = { (types: [ILType], isCovariant: Bool) -> [ILType] in
                 return types.map { type in
-                    if case .Index = type.wasmReferenceType?.kind {
-                        let indexType = self.getWasmTypeDef(for: type)
+                    if let refType = type.wasmReferenceType, case .Index = refType.kind {
+                        var indexType = self.getWasmTypeDef(for: type)
+
+                        let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!
+                            .description!
+                        if !indexTypeDesc.hasUnresolvedSelfReferences() && !indexTypeDesc.isFinal {
+                            if isCovariant {
+                                indexType = self.findVariable(satisfying: {
+                                    guard
+                                        let desc = self.type(of: $0).wasmTypeDefinition?.description
+                                    else { return false }
+                                    return indexTypeDesc.subsumes(desc)
+                                })!
+                            } else {
+                                indexType = self.findVariable(satisfying: {
+                                    guard
+                                        let desc = self.type(of: $0).wasmTypeDefinition?.description
+                                    else { return false }
+                                    return desc.subsumes(indexTypeDesc)
+                                })!
+                            }
+                        }
+
                         indexTypes.append(indexType)
-                        return .wasmRef(.Index(), nullability: type.wasmReferenceType!.nullability)
+                        // TODO(bettscheider): Possibly refine nullability.
+                        return .wasmRef(.Index(), nullability: refType.nullability)
                     } else {
                         return type
                     }
@@ -6759,8 +6780,8 @@ public class ProgramBuilder {
             }
 
             let unlinkedSignature =
-                unlinkTypes(sigDesc.signature.parameterTypes)
-                => unlinkTypes(sigDesc.signature.outputTypes)
+                processTypes(sigDesc.signature.parameterTypes, false)
+                => processTypes(sigDesc.signature.outputTypes, true)
 
             return self.wasmDefineSignatureType(
                 signature: unlinkedSignature, indexTypes: indexTypes,

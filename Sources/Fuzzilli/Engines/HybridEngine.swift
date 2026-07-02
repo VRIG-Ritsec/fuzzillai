@@ -110,6 +110,8 @@ public class HybridEngine: FuzzEngine {
         let template = fuzzer.programTemplates.randomElement()!
 
         let generatedProgram = generateTemplateProgram(template: template)
+        generatedProgram.checkOrDie(
+            onFailure: "Program after \(template.name) code generation is statically invalid")
 
         // Update basic codegen statistics.
         totalInstructionsGenerated += generatedProgram.size
@@ -140,6 +142,7 @@ public class HybridEngine: FuzzEngine {
         // try-catch (i.e. "guard" them), then remove the unnecessary guards after code generation based on runtime information. This is what fixup achieves.
         let refinedProgram: Program
         if let result = fixupMutator.mutate(generatedProgram, for: fuzzer) {
+            result.checkOrDie(onFailure: "Program after HybridEngine fixup is statically invalid")
             refinedProgram = result
             percentageOfGuardedOperationsAfterCodeRefining.add(
                 computePercentageOfGuardedOperations(in: refinedProgram))
@@ -159,6 +162,8 @@ public class HybridEngine: FuzzEngine {
             var mutatedProgram: Program? = nil
             for _ in 0..<maxAttempts {
                 if let result = mutator.mutate(parent, for: fuzzer) {
+                    result.checkOrDie(
+                        onFailure: "Program after \(mutator.name) is statically invalid")
                     // Success!
                     result.contributors.formUnion(parent.contributors)
                     mutator.addedInstructions(result.size - parent.size)

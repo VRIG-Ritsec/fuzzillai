@@ -29,6 +29,14 @@ public final class Program: CustomStringConvertible {
         FuzzILLifter().lift(self, withOptions: [.includeComments, .includeLineNumbers])
     }
 
+    public func checkOrDie(onFailure message: String) {
+        do {
+            try code.check()
+        } catch {
+            fatalError("\(message): \(error)\nFuzzIL program:\n\(description)")
+        }
+    }
+
     /// The immutable code of this program.
     public let code: Code
 

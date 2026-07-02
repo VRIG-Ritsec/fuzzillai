@@ -47,6 +47,8 @@ public class MutationEngine: FuzzEngine {
     public override func fuzzOne() {
         var parent = fuzzer.corpus.randomElementForMutating()
         parent = prepareForMutating(parent)
+        parent.checkOrDie(onFailure: "Parent program is statically invalid")
+
         for _ in 0..<numConsecutiveMutations {
             // TODO: factor out code shared with the HybridEngine?
             var mutator = fuzzer.mutators.randomElement()!
@@ -54,6 +56,8 @@ public class MutationEngine: FuzzEngine {
             var mutatedProgram: Program? = nil
             for _ in 0..<maxAttempts {
                 if let result = mutator.mutate(parent, for: fuzzer) {
+                    result.checkOrDie(
+                        onFailure: "Program after \(mutator.name) is statically invalid")
                     // Success!
                     result.contributors.formUnion(parent.contributors)
                     mutator.addedInstructions(result.size - parent.size)

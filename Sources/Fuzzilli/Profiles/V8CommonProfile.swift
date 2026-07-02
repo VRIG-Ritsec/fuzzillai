@@ -1124,7 +1124,6 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         "--experimental-fuzzing",
         "--js-staging",
         "--wasm-staging",
-        "--experimental-wasm-acquire-release",
         "--wasm-fast-api",
         "--expose-fast-api",
         "--wasm-test-streaming",  // WebAssembly.compileStreaming & WebAssembly.instantiateStreaming()
@@ -1312,7 +1311,7 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         args.append("--wasm-stack-switching-stack-size=\(stackSwitchingSize)")
     }
     if probability(0.5) {
-        args.append("--experimental-wasm-growable-stacks")
+        args.append("--wasm-growable-stacks")
     }
     if probability(0.5) {
         args.append("--stress-wasm-stack-switching")

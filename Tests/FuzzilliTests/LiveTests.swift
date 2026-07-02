@@ -110,7 +110,6 @@ class LiveTests: XCTestCase {
             type: .any,
             withArguments: [
                 "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
-                "--experimental-wasm-acquire-release",
             ]
         )
 

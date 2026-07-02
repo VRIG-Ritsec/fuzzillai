@@ -413,7 +413,7 @@ struct WasmAtomicsTests {
     @Test func testMemoryOrdering() throws {
         let runner = JavaScriptExecutor(
             type: .any,
-            withArguments: ["--experimental-wasm-acquire-release"])!
+            withArguments: ["--wasm-acquire-release"])!
         let js = buildAndLiftProgram { b in
             let module = b.buildWasmModule { wasmModule in
                 let memory0 = wasmModule.addMemory(minPages: 1, maxPages: 4, isShared: true)
@@ -452,7 +452,7 @@ struct WasmAtomicsTests {
     @Test func testRMWOrdering() throws {
         let runner = JavaScriptExecutor(
             type: .any,
-            withArguments: ["--experimental-wasm-acquire-release"])!
+            withArguments: ["--wasm-acquire-release"])!
         let js = buildAndLiftProgram { b in
             let module = b.buildWasmModule { wasmModule in
                 let memory = wasmModule.addMemory(minPages: 1, maxPages: 4, isShared: true)
@@ -487,7 +487,7 @@ struct WasmAtomicsTests {
     @Test func testCmpxchgOrdering() throws {
         let runner = JavaScriptExecutor(
             type: .any,
-            withArguments: ["--experimental-wasm-acquire-release"])!
+            withArguments: ["--wasm-acquire-release"])!
         let js = buildAndLiftProgram { b in
             let module = b.buildWasmModule { wasmModule in
                 let memory = wasmModule.addMemory(minPages: 1, maxPages: 4, isShared: true)

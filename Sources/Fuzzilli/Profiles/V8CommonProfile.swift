@@ -1296,6 +1296,10 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
     }
 
     if probability(0.1) {
+        args.append("--stress-descriptor-array-trimming")
+    }
+
+    if probability(0.1) {
         let stackSize = Int.random(in: 54...863)
         args.append("--stack-size=\(stackSize)")
     }

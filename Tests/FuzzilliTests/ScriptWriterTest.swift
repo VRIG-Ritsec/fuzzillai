@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Testing
 
 @testable import Fuzzilli
 
-class ScriptWriterTest: XCTestCase {
+struct ScriptWriterTests {
 
-    func testLineSplitting() {
+    @Test func testLineSplitting() {
         var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 10)
         w.emit("My name is Ozymandias, king of kings. Look on my works, ye Mighty, and despair!")
         let expected = """
@@ -33,10 +33,10 @@ class ScriptWriterTest: XCTestCase {
             despair!
 
             """
-        XCTAssertEqual(expected, w.code)
+        #expect(expected == w.code)
     }
 
-    func testLineSplittingWithIndentation() {
+    @Test func testLineSplittingWithIndentation() {
         var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 8)
         w.emit("My name is Ozymandias,")
         w.increaseIndentionLevel()
@@ -64,10 +64,10 @@ class ScriptWriterTest: XCTestCase {
               r!
 
             """
-        XCTAssertEqual(expected, w.code)
+        #expect(expected == w.code)
     }
 
-    func testLineSplittingMultiSpace() {
+    @Test func testLineSplittingMultiSpace() {
         var w = ScriptWriter(indent: 2, initialIndentionLevel: 0, maxLineLength: 8)
         let str = (0...10).map { "\($0)\(String(repeating: " ", count: $0))" }.joined()
         w.emit(str)
@@ -80,6 +80,6 @@ class ScriptWriterTest: XCTestCase {
             10
 
             """
-        XCTAssertEqual(expected, w.code)
+        #expect(expected == w.code)
     }
 }

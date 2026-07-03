@@ -98,6 +98,17 @@ func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> Void) -> String {
     return buildAndLiftProgram(withLiftingOptions: [], buildFunc: buildFunc)
 }
 
+func shouldRunCompilerTests() -> Bool {
+    guard let nodejs = JavaScriptExecutor(type: .nodejs, withArguments: ["--allow-natives-syntax"])
+    else {
+        return false
+    }
+    guard JavaScriptParser(executor: nodejs) != nil else {
+        return false
+    }
+    return true
+}
+
 @Suite struct TestUtilsTests {
 
     // Test that running a program via the JavaScriptExecutor that produces a large output succeeds.

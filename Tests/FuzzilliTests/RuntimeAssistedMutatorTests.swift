@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Foundation
+import Testing
 
 @testable import Fuzzilli
 
-class RuntimeAssistedMutatorTests: XCTestCase {
+struct RuntimeAssistedMutatorTests {
     class CrashMockScriptRunner: ScriptRunner {
         var processArguments: [String] = []
         var env: [(String, String)] = []
@@ -40,74 +41,66 @@ class RuntimeAssistedMutatorTests: XCTestCase {
     // This test checks that if *both* the instrumented and the processed programs crash,
     // we report the processed program.
 
-    func testInstrumentedAndProcessedProgramsCrash() {
+    @Test func testInstrumentedAndProcessedProgramsCrash() {
         let runner = CrashMockScriptRunner()
         let config = Configuration(logLevel: .error)
         let fuzzer = makeMockFuzzer(config: config, runner: runner)
 
-        let mutator = CrashingInstrumentationMutator()
-        let b = fuzzer.makeBuilder()
-        b.loadInt(42)
-        let program = b.finalize()
+        let semaphore = DispatchSemaphore(value: 0)
 
-        let crashEventTriggered = self.expectation(
-            description: "Crash reported on processed program")
-        fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
-            let lifted = fuzzer.lifter.lift(ev.program)
-            if lifted.contains("This is the processed program") {
-                crashEventTriggered.fulfill()
+        fuzzer.sync {
+            let mutator = CrashingInstrumentationMutator()
+            let b = fuzzer.makeBuilder()
+            b.loadInt(42)
+            let program = b.finalize()
+
+            fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
+                let lifted = fuzzer.lifter.lift(ev.program)
+                if lifted.contains("This is the processed program") {
+                    semaphore.signal()
+                }
             }
+
+            _ = mutator.mutate(program, using: b, for: fuzzer)
         }
 
-        _ = mutator.mutate(program, using: b, for: fuzzer)
-        waitForExpectations(timeout: 5, handler: nil)
+        let waitResult = semaphore.wait(timeout: .now() + 5)
+        #expect(waitResult == .success)
     }
 
     // This test checks that if *only* the instrumented program crashes, we report it.
 
-    func testOnlyInstrumentedProgramCrashes() {
+    @Test func testOnlyInstrumentedProgramCrashes() {
         let runner = CrashMockScriptRunner()
         let config = Configuration(logLevel: .error)
         let fuzzer = makeMockFuzzer(config: config, runner: runner)
 
-        let mutator = CrashingInstrumentationMutator(shouldProcessedProgramCrash: false)
-        let b = fuzzer.makeBuilder()
-        b.loadInt(42)
-        let program = b.finalize()
+        let semaphore = DispatchSemaphore(value: 0)
 
-        let crashEventTriggered = self.expectation(
-            description: "Crash reported on instrumented program")
-        fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
-            let lifted = fuzzer.lifter.lift(ev.program)
-            if !lifted.contains("This is the processed program") {
-                crashEventTriggered.fulfill()
+        fuzzer.sync {
+            let mutator = CrashingInstrumentationMutator(shouldProcessedProgramCrash: false)
+            let b = fuzzer.makeBuilder()
+            b.loadInt(42)
+            let program = b.finalize()
+
+            fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
+                let lifted = fuzzer.lifter.lift(ev.program)
+                if !lifted.contains("This is the processed program") {
+                    semaphore.signal()
+                }
             }
+
+            _ = mutator.mutate(program, using: b, for: fuzzer)
         }
 
-        _ = mutator.mutate(program, using: b, for: fuzzer)
-        waitForExpectations(timeout: 5, handler: nil)
+        let waitResult = semaphore.wait(timeout: .now() + 5)
+        #expect(waitResult == .success)
     }
 
     // This test checks that if *only* the instrumented program crashes, this program is minimized.
 
+    @Test(.enabled(if: shouldRunCompilerTests()))
     func testOnlyInstrumentedProgramCrashesAndIsMinimized() throws {
-        guard
-            let nodejs = JavaScriptExecutor(
-                type: .nodejs, withArguments: ["--allow-natives-syntax"])
-        else {
-            throw XCTSkip(
-                "Could not find NodeJS executable. See Sources/Fuzzilli/Compiler/Parser/README.md for details on how to set up the parser."
-            )
-        }
-
-        // Initialize the parser. This can fail if no node.js executable is found or if the
-        // parser's node.js dependencies are not installed. In that case, skip these tests.
-        guard JavaScriptParser(executor: nodejs) != nil else {
-            throw XCTSkip(
-                "The JavaScript parser does not appear to be working. See Sources/Fuzzilli/Compiler/Parser/README.md for details on how to set up the parser."
-            )
-        }
-
         class CrashEvaluator: MockEvaluator {
             override func hasAspects(_ execution: Execution, _ aspects: ProgramAspects) -> Bool {
                 return execution.outcome.isCrash()
@@ -118,32 +111,31 @@ class RuntimeAssistedMutatorTests: XCTestCase {
         let config = Configuration(logLevel: .error)
         let fuzzer = makeMockFuzzer(config: config, runner: runner, evaluator: CrashEvaluator())
 
-        let expectedProgramBuilder = fuzzer.makeBuilder()
-        let v0 = expectedProgramBuilder.loadString("FUZZILLI_CRASH")
-        let v1 = expectedProgramBuilder.loadInt(0)
-        let v2 = expectedProgramBuilder.createNamedVariable(forBuiltin: "fuzzilli")
-        expectedProgramBuilder.callFunction(v2, withArgs: [v0, v1])
-        let expectedProgram = expectedProgramBuilder.finalize()
+        let semaphore = DispatchSemaphore(value: 0)
 
-        let mutator = CrashingInstrumentationMutator(shouldProcessedProgramCrash: false)
-        let b = fuzzer.makeBuilder()
-        b.loadInt(42)
-        let program = b.finalize()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let v0 = b.loadString("FUZZILLI_CRASH")
+            let v1 = b.loadInt(0)
+            let v2 = b.createNamedVariable(forBuiltin: "fuzzilli")
+            b.callFunction(v2, withArgs: [v0, v1])
+            let expectedProgram = b.finalize()
 
-        let crashEventTriggered = self.expectation(
-            description: "Crash reported on instrumented program")
-        fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
-            let actualProgram = ev.program
-            XCTAssertEqual(
-                expectedProgram, actualProgram,
-                "The reported program should be the minimized version of the instrumented program.\n"
-                    + "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                    + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-            crashEventTriggered.fulfill()
+            let mutator = CrashingInstrumentationMutator(shouldProcessedProgramCrash: false)
+            b.loadInt(42)
+            let program = b.finalize()
+
+            fuzzer.registerEventListener(for: fuzzer.events.CrashFound) { ev in
+                let actualProgram = ev.program
+                #expect(expectedProgram == actualProgram)
+                semaphore.signal()
+            }
+
+            _ = mutator.mutate(program, using: b, for: fuzzer)
         }
 
-        _ = mutator.mutate(program, using: b, for: fuzzer)
-        waitForExpectations(timeout: 5, handler: nil)
+        let waitResult = semaphore.wait(timeout: .now() + 5)
+        #expect(waitResult == .success)
     }
 
     /// Extracts the generated portion from an instrumented program without
@@ -164,30 +156,32 @@ class RuntimeAssistedMutatorTests: XCTestCase {
     ) {
         let config = Configuration(forDifferentialFuzzing: true)
         let fuzzer = makeMockFuzzer(config: config)
-        let mutator = ExplorationMutator()
+        fuzzer.sync {
+            let mutator = ExplorationMutator()
 
-        mutator.varSelector = varSelector
-        mutator.argSelector = argSelector
+            mutator.varSelector = varSelector
+            mutator.argSelector = argSelector
 
-        let b = fuzzer.makeBuilder()
-        build(b)
-        let program = b.finalize()
+            let b = fuzzer.makeBuilder()
+            build(b)
+            let program = b.finalize()
 
-        guard let instrumented = mutator.instrument(program, for: fuzzer) else {
-            XCTFail("Failed to instrument program")
-            return
+            guard let instrumented = mutator.instrument(program, for: fuzzer) else {
+                Issue.record("Failed to instrument program")
+                return
+            }
+
+            let actual = fuzzer.lifter.lift(instrumented, withOptions: .includeComments)
+            let actualWithoutPrefix = extractCodeToVerify(from: actual)
+            #expect(actualWithoutPrefix == expected)
         }
-
-        let actual = fuzzer.lifter.lift(instrumented, withOptions: .includeComments)
-        let actualWithoutPrefix = extractCodeToVerify(from: actual)
-        XCTAssertEqual(actualWithoutPrefix, expected)
     }
 
-    func testExplorationMutatorInstrumentation() {
+    @Test func testExplorationMutatorInstrumentation() {
         runExplorationInstrumentationTest(
             varSelector: { untyped, typed in
                 // Only explore the first untyped variable
-                XCTAssertEqual(untyped.count, 1)
+                #expect(untyped.count == 1)
                 return untyped
             },
 
@@ -214,7 +208,7 @@ class RuntimeAssistedMutatorTests: XCTestCase {
         )
     }
 
-    func testExplorationMutatorInstrumentationVisibility() {
+    @Test func testExplorationMutatorInstrumentationVisibility() {
         runExplorationInstrumentationTest(
             varSelector: { untyped, typed in
                 // Only explore the untyped variable
@@ -249,32 +243,34 @@ class RuntimeAssistedMutatorTests: XCTestCase {
     ) {
         let config = Configuration(forDifferentialFuzzing: true)
         let fuzzer = makeMockFuzzer(config: config)
-        let mutator = ExplorationMutator()
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let mutator = ExplorationMutator()
+            let b = fuzzer.makeBuilder()
 
-        build(b)
-        let instrumentedProgram = b.finalize()
+            build(b)
+            let instrumentedProgram = b.finalize()
 
-        let encoder = JSONEncoder()
-        var output = ""
-        for action in actions {
-            let actionJson = String(data: try! encoder.encode(action), encoding: .utf8)!
-            output += "EXPLORE_ACTION: \(actionJson)\n"
+            let encoder = JSONEncoder()
+            var output = ""
+            for action in actions {
+                let actionJson = String(data: try! encoder.encode(action), encoding: .utf8)!
+                output += "EXPLORE_ACTION: \(actionJson)\n"
+            }
+
+            let (processedMaybe, outcome) = mutator.process(
+                output, ofInstrumentedProgram: instrumentedProgram, using: fuzzer.makeBuilder())
+            #expect(outcome == .success)
+            guard let processed = processedMaybe else {
+                Issue.record("Failed to process instrumented program")
+                return
+            }
+
+            let actual = fuzzer.lifter.lift(processed)
+            #expect(actual == expected)
         }
-
-        let (processedMaybe, outcome) = mutator.process(
-            output, ofInstrumentedProgram: instrumentedProgram, using: fuzzer.makeBuilder())
-        XCTAssertEqual(outcome, .success)
-        guard let processed = processedMaybe else {
-            XCTFail("Failed to process instrumented program")
-            return
-        }
-
-        let actual = fuzzer.lifter.lift(processed)
-        XCTAssertEqual(actual, expected)
     }
 
-    func testExplorationMutatorProcessing() {
+    @Test func testExplorationMutatorProcessing() {
         runExplorationProcessingTest(
             build: { b in
                 // Create an instrumented program manually for testing process()
@@ -302,7 +298,7 @@ class RuntimeAssistedMutatorTests: XCTestCase {
         )
     }
 
-    func testExplorationMutatorProcessingComplex() {
+    @Test func testExplorationMutatorProcessingComplex() {
         runExplorationProcessingTest(
             build: { b in
                 // Create an instrumented program

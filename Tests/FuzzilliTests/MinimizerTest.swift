@@ -12,675 +12,707 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Foundation
+import Testing
 
 @testable import Fuzzilli
 
-class MinimizerTests: XCTestCase {
+struct MinimizerTests {
 
-    func testMinimizationLimit() {
+    @Test func testMinimizationLimit() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        for _ in 0..<10 {
-            b.buildPrefix()
-            b.build(n: 70)
+            for _ in 0..<10 {
+                b.buildPrefix()
+                b.build(n: 70)
 
-            let preMinimization = b.finalize()
-            let limit = 0.1
+                let preMinimization = b.finalize()
+                let limit = 0.1
 
-            let result = minimize(preMinimization, with: fuzzer, limit: limit)
-            XCTAssertGreaterThanOrEqual(result.size, Int(Double(preMinimization.size) * limit))
+                let result = minimize(preMinimization, with: fuzzer, limit: limit)
+                #expect(result.size >= Int(Double(preMinimization.size) * limit))
+            }
         }
     }
 
-    func testGenericInstructionMinimization() {
+    @Test func testGenericInstructionMinimization() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var n1 = b.loadInt(42)
-        let n2 = b.loadInt(43)
-        // This will be removed and n3 replaced by n1 (an input of this instruction)
-        let n3 = b.binary(n1, n1, with: .Add)
-        let n4 = b.binary(n2, n2, with: .Add)
+            // Build input program to be minimized.
+            var n1 = b.loadInt(42)
+            let n2 = b.loadInt(43)
+            // This will be removed and n3 replaced by n1 (an input of this instruction)
+            let n3 = b.binary(n1, n1, with: .Add)
+            let n4 = b.binary(n2, n2, with: .Add)
 
-        evaluator.nextInstructionIsImportant(in: b)
-        b.loadString("foo")
-        var bar = b.loadString("bar")
-        let baz = b.loadString("baz")
-
-        var o1 = b.createObject(with: [:])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setComputedProperty(bar, of: o1, to: n3)
-        let o2 = b.createObject(with: [:])
-        b.setComputedProperty(baz, of: o2, to: n4)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        n1 = b.loadInt(42)
-        b.loadString("foo")
-        bar = b.loadString("bar")
-        o1 = b.createObject(with: [:])
-        b.setComputedProperty(bar, of: o1, to: n1)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testObjectLiteralMinimization() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        let v = b.loadInt(42)
-        var n = b.loadString("MyObject")
-        // This object literal is important, but not all of its fields.
-        var o = b.buildObjectLiteral { obj in
             evaluator.nextInstructionIsImportant(in: b)
-            obj.addProperty("name", as: n)
-            obj.addProperty("foo", as: v)
+            b.loadString("foo")
+            var bar = b.loadString("bar")
+            let baz = b.loadString("baz")
+
+            var o1 = b.createObject(with: [:])
             evaluator.nextInstructionIsImportant(in: b)
-            obj.addMethod("m", with: .parameters(n: 1)) { args in
-                let this = args[0]
-                let prefix = b.loadString("Hello World from ")
-                evaluator.nextInstructionIsImportant(in: b)
-                let name = b.getProperty("name", of: this)
-                evaluator.nextInstructionIsImportant(in: b)
-                let msg = b.binary(prefix, name, with: .Add)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.doReturn(msg)
-            }
-            obj.addGetter(for: "bar") { this in
-                b.doReturn(b.loadString("baz"))
-            }
+            b.setComputedProperty(bar, of: o1, to: n3)
+            let o2 = b.createObject(with: [:])
+            b.setComputedProperty(baz, of: o2, to: n4)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            n1 = b.loadInt(42)
+            b.loadString("foo")
+            bar = b.loadString("bar")
+            o1 = b.createObject(with: [:])
+            b.setComputedProperty(bar, of: o1, to: n1)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callMethod("m", on: o)
-
-        // This object literal can be removed entirely.
-        b.buildObjectLiteral { obj in
-            obj.addGetter(for: "x") { this in
-                b.doReturn(b.loadInt(1337))
-            }
-            obj.addProperty("y", as: v)
-            obj.addMethod("m", with: .parameters(n: 0)) { args in
-                let this = args[0]
-                let x = b.getProperty("x", of: this)
-                let y = b.getProperty("y", of: this)
-                let r = b.binary(x, y, with: .Add)
-                b.doReturn(r)
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        n = b.loadString("MyObject")
-        o = b.buildObjectLiteral { obj in
-            obj.addProperty("name", as: n)
-            obj.addMethod("m", with: .parameters(n: 1)) { args in
-                let this = args[0]
-                let prefix = b.loadString("Hello World from ")
-                let name = b.getProperty("name", of: this)
-                let msg = b.binary(prefix, name, with: .Add)
-                b.doReturn(msg)
-            }
-        }
-
-        b.callMethod("m", on: o)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testFunctionSimplification() {
+    @Test func testObjectLiteralMinimization() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            let v = b.loadInt(42)
+            var n = b.loadString("MyObject")
+            // This object literal is important, but not all of its fields.
+            var o = b.buildObjectLiteral { obj in
+                evaluator.nextInstructionIsImportant(in: b)
+                obj.addProperty("name", as: n)
+                obj.addProperty("foo", as: v)
+                evaluator.nextInstructionIsImportant(in: b)
+                obj.addMethod("m", with: .parameters(n: 1)) { args in
+                    let this = args[0]
+                    let prefix = b.loadString("Hello World from ")
+                    evaluator.nextInstructionIsImportant(in: b)
+                    let name = b.getProperty("name", of: this)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    let msg = b.binary(prefix, name, with: .Add)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.doReturn(msg)
+                }
+                obj.addGetter(for: "bar") { this in
+                    b.doReturn(b.loadString("baz"))
+                }
+            }
+
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callMethod("m", on: o)
+
+            // This object literal can be removed entirely.
+            b.buildObjectLiteral { obj in
+                obj.addGetter(for: "x") { this in
+                    b.doReturn(b.loadInt(1337))
+                }
+                obj.addProperty("y", as: v)
+                obj.addMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    let x = b.getProperty("x", of: this)
+                    let y = b.getProperty("y", of: this)
+                    let r = b.binary(x, y, with: .Add)
+                    b.doReturn(r)
+                }
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            n = b.loadString("MyObject")
+            o = b.buildObjectLiteral { obj in
+                obj.addProperty("name", as: n)
+                obj.addMethod("m", with: .parameters(n: 1)) { args in
+                    let this = args[0]
+                    let prefix = b.loadString("Hello World from ")
+                    let name = b.getProperty("name", of: this)
+                    let msg = b.binary(prefix, name, with: .Add)
+                    b.doReturn(msg)
+                }
+            }
+
+            b.callMethod("m", on: o)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testFunctionSimplification() {
         // We prefer plain functions over complex functions because they behave in a
         // more straight-forward way (e.g. return value doesn't become a Promise).
 
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        let async = b.buildAsyncFunction(with: .parameters(n: 0)) { args in }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(async)
+            // Build input program to be minimized.
+            let async = b.buildAsyncFunction(with: .parameters(n: 0)) { args in }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(async)
 
-        let generator = b.buildGeneratorFunction(with: .parameters(n: 0)) { args in }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(generator)
+            let generator = b.buildGeneratorFunction(with: .parameters(n: 0)) { args in }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(generator)
 
-        let asyncGenerator = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { args in }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(asyncGenerator)
+            let asyncGenerator = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { args in }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(asyncGenerator)
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Build expected output program.
-        let f1 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        b.callFunction(f1)
+            // Build expected output program.
+            let f1 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            b.callFunction(f1)
 
-        let f2 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        b.callFunction(f2)
+            let f2 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            b.callFunction(f2)
 
-        let f3 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        b.callFunction(f3)
+            let f3 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            b.callFunction(f3)
 
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        // Perform minimization and check that the two programs are equal.
-        // Post-processing can insert return statements or function parameters, so skip that.
-        let actualProgram = minimize(originalProgram, with: fuzzer, performPostprocessing: false)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            // Perform minimization and check that the two programs are equal.
+            // Post-processing can insert return statements or function parameters, so skip that.
+            let actualProgram = minimize(
+                originalProgram, with: fuzzer, performPostprocessing: false)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testWorkerFunctionMinimization() {
+    @Test func testWorkerFunctionMinimization() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        evaluator.keepReturnsInFunctions = true
+            evaluator.keepReturnsInFunctions = true
 
-        // Build input program to be minimized.
-        evaluator.nextInstructionIsImportant(in: b)
-        b.buildWorkerFunction(with: .parameters(n: 0)) { args in
+            // Build input program to be minimized.
             evaluator.nextInstructionIsImportant(in: b)
-            let v = b.loadInt(42)
-            b.doReturn(v)
+            b.buildWorkerFunction(with: .parameters(n: 0)) { args in
+                evaluator.nextInstructionIsImportant(in: b)
+                let v = b.loadInt(42)
+                b.doReturn(v)
+            }
+
+            let originalProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(originalProgram == actualProgram)
         }
-
-        let originalProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(originalProgram, actualProgram)
     }
 
-    func testFunctionNameRemoval() {
+    @Test func testFunctionNameRemoval() {
         // We prefer functions with "flexible" names (automatically assigned during lifting)
         // as there's no risk of name collisions during mutations with those.
 
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        let foo = b.buildPlainFunction(with: .parameters(n: 0), named: "foo") { args in }
-        let bar = b.buildGeneratorFunction(with: .parameters(n: 0), named: "bar") { args in }
-        let baz = b.buildAsyncFunction(with: .parameters(n: 0), named: "baz") { args in }
-        let bla = b.buildAsyncGeneratorFunction(with: .parameters(n: 0), named: "bla") { args in }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(foo)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(bar)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(baz)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(bla)
+            // Build input program to be minimized.
+            let foo = b.buildPlainFunction(with: .parameters(n: 0), named: "foo") { args in }
+            let bar = b.buildGeneratorFunction(with: .parameters(n: 0), named: "bar") { args in }
+            let baz = b.buildAsyncFunction(with: .parameters(n: 0), named: "baz") { args in }
+            let bla = b.buildAsyncGeneratorFunction(with: .parameters(n: 0), named: "bla") { args in
+            }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(foo)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(bar)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(baz)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(bla)
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Build expected output program.
-        // See test above for why the different function types also become plain functions.
-        let f1 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        let f2 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        let f3 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        let f4 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
-        b.callFunction(f1)
-        b.callFunction(f2)
-        b.callFunction(f3)
-        b.callFunction(f4)
+            // Build expected output program.
+            // See test above for why the different function types also become plain functions.
+            let f1 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            let f2 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            let f3 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            let f4 = b.buildPlainFunction(with: .parameters(n: 0)) { args in }
+            b.callFunction(f1)
+            b.callFunction(f2)
+            b.callFunction(f3)
+            b.callFunction(f4)
 
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        // Perform minimization and check that the two programs are equal.
-        // Post-processing can insert return statements or function parameters, so skip that.
-        let actualProgram = minimize(originalProgram, with: fuzzer, performPostprocessing: false)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            // Perform minimization and check that the two programs are equal.
+            // Post-processing can insert return statements or function parameters, so skip that.
+            let actualProgram = minimize(
+                originalProgram, with: fuzzer, performPostprocessing: false)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testClassDefinitionMinimization() {
+    @Test func testClassDefinitionMinimization() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var s = b.loadString("foobar")
-        // This class is important, but not all of its fields
-        var class1 = b.buildClassDefinition { cls in
+            // Build input program to be minimized.
+            var s = b.loadString("foobar")
+            // This class is important, but not all of its fields
+            var class1 = b.buildClassDefinition { cls in
+                evaluator.nextInstructionIsImportant(in: b)
+                cls.addPrivateInstanceProperty("name", value: s)
+                cls.addInstanceProperty("foo")
+                cls.addInstanceElement(0)
+                cls.addInstanceElement(1)
+                evaluator.nextInstructionIsImportant(in: b)
+                cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    evaluator.nextInstructionIsImportant(in: b)
+                    let v = b.getPrivateProperty("name", of: this)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.doReturn(v)
+                }
+                cls.addInstanceGetter(for: "bar") { this in
+                    b.doReturn(b.loadInt(42))
+                }
+            }
+
             evaluator.nextInstructionIsImportant(in: b)
-            cls.addPrivateInstanceProperty("name", value: s)
-            cls.addInstanceProperty("foo")
-            cls.addInstanceElement(0)
-            cls.addInstanceElement(1)
+            b.construct(class1)
+
+            // Only the body of a method of this class is important, the class itself should be removed
+            let class2 = b.buildClassDefinition(withSuperclass: class1) { cls in
+                cls.addConstructor(with: .parameters(n: 1)) { args in
+                    let this = args[0]
+                    b.setProperty("bar", of: this, to: args[1])
+                }
+                cls.addInstanceMethod("foo", with: .parameters(n: 0)) { args in
+                    let importantFunction = b.createNamedVariable(forBuiltin: "ImportantFunction")
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(importantFunction)
+                }
+                cls.addStaticMethod("bar", with: .parameters(n: 1)) { args in
+                    let this = args[0]
+                    b.setProperty("baz", of: this, to: args[1])
+                }
+                cls.addStaticProperty("baz")
+            }
+            let unusedInstance = b.construct(class2)
+            b.callMethod("foo", on: unusedInstance)
+
+            // This class can be removed entirely
+            let supercls = b.createNamedVariable(forBuiltin: "SuperClass")
+            let class3 = b.buildClassDefinition(withSuperclass: supercls) { cls in
+                cls.addInstanceProperty("x", value: s)
+                cls.addInstanceProperty("y")
+                cls.addInstanceComputedProperty(s)
+                cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    let x = b.getProperty("x", of: this)
+                    let y = b.getProperty("y", of: this)
+                    let r = b.binary(x, y, with: .Add)
+                    b.doReturn(r)
+                }
+                cls.addStaticMethod("n", with: .parameters(n: 1)) { args in
+                    let n = b.loadInt(1337)
+                    b.doReturn(n)
+                }
+                cls.addStaticSetter(for: "bar") { this, v in
+                }
+                cls.addPrivateStaticProperty("bla")
+                cls.addPrivateStaticMethod("m", with: .parameters(n: 1)) { args in
+                    let this = args[0]
+                    b.setPrivateProperty("bla", of: this, to: args[1])
+                }
+            }
+            b.construct(class3)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            s = b.loadString("foobar")
+            class1 = b.buildClassDefinition { cls in
+                cls.addPrivateInstanceProperty("name", value: s)
+                cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    let v = b.getPrivateProperty("name", of: this)
+                    b.doReturn(v)
+                }
+            }
+            b.construct(class1)
+            let importantFunction = b.createNamedVariable(forBuiltin: "ImportantFunction")
+            b.callFunction(importantFunction)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testSwitchCaseMinimization1() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var num = b.loadInt(1337)
+            let cond1 = b.loadInt(1339)
+            let cond2 = b.loadInt(1338)
+            var cond3 = b.loadInt(1337)
+            let one = b.loadInt(1)
+
             evaluator.nextInstructionIsImportant(in: b)
-            cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
-                let this = args[0]
-                evaluator.nextInstructionIsImportant(in: b)
-                let v = b.getPrivateProperty("name", of: this)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.doReturn(v)
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond1, fallsThrough: false) {
+                    b.binary(num, one, with: .Add)
+                }
+                swtch.addCase(cond2, fallsThrough: false) {
+                    b.binary(num, one, with: .Sub)
+                }
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.binary(num, two, with: .Mul)
+                }
+                swtch.addDefaultCase(fallsThrough: false) {
+                    let x = b.loadString("foobar")
+                    b.reassign(variable: num, value: x)
+                }
             }
-            cls.addInstanceGetter(for: "bar") { this in
-                b.doReturn(b.loadInt(42))
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            num = b.loadInt(1337)
+            cond3 = b.loadInt(1337)
+
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    b.binary(num, two, with: .Mul)
+                }
             }
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
+    }
 
-        evaluator.nextInstructionIsImportant(in: b)
-        b.construct(class1)
+    @Test func testSwitchCaseMinimization2() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Only the body of a method of this class is important, the class itself should be removed
-        let class2 = b.buildClassDefinition(withSuperclass: class1) { cls in
-            cls.addConstructor(with: .parameters(n: 1)) { args in
-                let this = args[0]
-                b.setProperty("bar", of: this, to: args[1])
+            // Build input program to be minimized.
+            var num = b.loadInt(1337)
+            let cond1 = b.loadInt(1339)
+            var cond2 = b.loadInt(1338)
+            var cond3 = b.loadInt(1337)
+            var one = b.loadInt(1)
+
+            evaluator.nextInstructionIsImportant(in: b)
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond1, fallsThrough: false) {
+                    b.binary(num, one, with: .Add)
+                }
+                swtch.addCase(cond2, fallsThrough: false) {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.binary(num, one, with: .Sub)
+                }
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.binary(num, two, with: .Mul)
+                }
+                swtch.addDefaultCase(fallsThrough: false) {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    let x = b.loadString("foobar")
+                    b.reassign(variable: num, value: x)
+                }
             }
-            cls.addInstanceMethod("foo", with: .parameters(n: 0)) { args in
-                let importantFunction = b.createNamedVariable(forBuiltin: "ImportantFunction")
-                evaluator.nextInstructionIsImportant(in: b)
-                b.callFunction(importantFunction)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            num = b.loadInt(1337)
+            cond2 = b.loadInt(1338)
+            cond3 = b.loadInt(1337)
+            one = b.loadInt(1)
+
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond2, fallsThrough: false) {
+                    b.binary(num, one, with: .Sub)
+                }
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    b.binary(num, two, with: .Mul)
+                }
+                swtch.addDefaultCase(fallsThrough: false) {
+                    let _ = b.loadString("foobar")
+                }
             }
-            cls.addStaticMethod("bar", with: .parameters(n: 1)) { args in
-                let this = args[0]
-                b.setProperty("baz", of: this, to: args[1])
-            }
-            cls.addStaticProperty("baz")
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        let unusedInstance = b.construct(class2)
-        b.callMethod("foo", on: unusedInstance)
+    }
 
-        // This class can be removed entirely
-        let supercls = b.createNamedVariable(forBuiltin: "SuperClass")
-        let class3 = b.buildClassDefinition(withSuperclass: supercls) { cls in
-            cls.addInstanceProperty("x", value: s)
-            cls.addInstanceProperty("y")
-            cls.addInstanceComputedProperty(s)
-            cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
-                let this = args[0]
-                let x = b.getProperty("x", of: this)
-                let y = b.getProperty("y", of: this)
-                let r = b.binary(x, y, with: .Add)
+    @Test func testSwitchRemovalKeepContent() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var num = b.loadInt(1337)
+            let cond1 = b.loadInt(1339)
+            let cond2 = b.loadInt(1338)
+            let cond3 = b.loadInt(1337)
+            let one = b.loadInt(1)
+
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond1, fallsThrough: false) {
+                    b.binary(num, one, with: .Add)
+                }
+                swtch.addCase(cond2, fallsThrough: false) {
+                    b.binary(num, one, with: .Sub)
+                }
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.binary(num, two, with: .Mul)
+                }
+                swtch.addDefaultCase(fallsThrough: false) {
+                    let x = b.loadString("foobar")
+                    b.reassign(variable: num, value: x)
+                }
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            num = b.loadInt(1337)
+            let two = b.loadInt(2)
+            b.binary(num, two, with: .Mul)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testSwitchRemoval() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            let num = b.loadInt(1337)
+            evaluator.nextInstructionIsImportant(in: b)
+            var cond1 = b.loadInt(1339)
+            let cond2 = b.loadInt(1338)
+            let cond3 = b.loadInt(1337)
+            let one = b.loadInt(1)
+
+            b.buildSwitch(on: num) { swtch in
+                swtch.addCase(cond1, fallsThrough: false) {
+                    b.binary(num, one, with: .Add)
+                }
+                swtch.addCase(cond2, fallsThrough: false) {
+                    b.binary(num, one, with: .Sub)
+                }
+                swtch.addCase(cond3, fallsThrough: false) {
+                    let two = b.loadInt(2)
+                    b.binary(num, two, with: .Mul)
+                }
+                swtch.addDefaultCase(fallsThrough: false) {
+                    let x = b.loadString("foobar")
+                    b.reassign(variable: num, value: x)
+                }
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            cond1 = b.loadInt(1339)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testCodeStringMinimization() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var v = b.loadInt(42)
+            var o = b.createObject(with: [:])
+            let c = b.buildCodeString {
+                evaluator.nextInstructionIsImportant(in: b)
+                b.setProperty("foo", of: o, to: v)
+            }
+            let k = b.loadString("code")
+            b.setComputedProperty(k, of: o, to: c)
+            let eval = b.createNamedVariable(forBuiltin: "eval")
+            b.callFunction(eval, withArgs: [c])
+            b.deleteProperty("foo", of: o)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            v = b.loadInt(42)
+            o = b.createObject(with: [:])
+            b.setProperty("foo", of: o, to: v)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testBasicInlining() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var o = b.createObject(with: [:])
+            var m = b.loadInt(42)
+            let f = b.buildPlainFunction(with: .parameters(n: 2)) { args in
+                let t = b.binary(m, args[0], with: .Mul)
+                let r = b.binary(t, args[1], with: .Add)
                 b.doReturn(r)
             }
-            cls.addStaticMethod("n", with: .parameters(n: 1)) { args in
-                let n = b.loadInt(1337)
-                b.doReturn(n)
-            }
-            cls.addStaticSetter(for: "bar") { this, v in
-            }
-            cls.addPrivateStaticProperty("bla")
-            cls.addPrivateStaticMethod("m", with: .parameters(n: 1)) { args in
-                let this = args[0]
-                b.setPrivateProperty("bla", of: this, to: args[1])
-            }
-        }
-        b.construct(class3)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        s = b.loadString("foobar")
-        class1 = b.buildClassDefinition { cls in
-            cls.addPrivateInstanceProperty("name", value: s)
-            cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
-                let this = args[0]
-                let v = b.getPrivateProperty("name", of: this)
-                b.doReturn(v)
-            }
-        }
-        b.construct(class1)
-        let importantFunction = b.createNamedVariable(forBuiltin: "ImportantFunction")
-        b.callFunction(importantFunction)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testSwitchCaseMinimization1() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var num = b.loadInt(1337)
-        let cond1 = b.loadInt(1339)
-        let cond2 = b.loadInt(1338)
-        var cond3 = b.loadInt(1337)
-        let one = b.loadInt(1)
-
-        evaluator.nextInstructionIsImportant(in: b)
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond1, fallsThrough: false) {
-                b.binary(num, one, with: .Add)
-            }
-            swtch.addCase(cond2, fallsThrough: false) {
-                b.binary(num, one, with: .Sub)
-            }
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.binary(num, two, with: .Mul)
-            }
-            swtch.addDefaultCase(fallsThrough: false) {
-                let x = b.loadString("foobar")
-                b.reassign(variable: num, value: x)
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        num = b.loadInt(1337)
-        cond3 = b.loadInt(1337)
-
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                b.binary(num, two, with: .Mul)
-            }
-        }
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testSwitchCaseMinimization2() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var num = b.loadInt(1337)
-        let cond1 = b.loadInt(1339)
-        var cond2 = b.loadInt(1338)
-        var cond3 = b.loadInt(1337)
-        var one = b.loadInt(1)
-
-        evaluator.nextInstructionIsImportant(in: b)
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond1, fallsThrough: false) {
-                b.binary(num, one, with: .Add)
-            }
-            swtch.addCase(cond2, fallsThrough: false) {
-                evaluator.nextInstructionIsImportant(in: b)
-                b.binary(num, one, with: .Sub)
-            }
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.binary(num, two, with: .Mul)
-            }
-            swtch.addDefaultCase(fallsThrough: false) {
-                evaluator.nextInstructionIsImportant(in: b)
-                let x = b.loadString("foobar")
-                b.reassign(variable: num, value: x)
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        num = b.loadInt(1337)
-        cond2 = b.loadInt(1338)
-        cond3 = b.loadInt(1337)
-        one = b.loadInt(1)
-
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond2, fallsThrough: false) {
-                b.binary(num, one, with: .Sub)
-            }
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                b.binary(num, two, with: .Mul)
-            }
-            swtch.addDefaultCase(fallsThrough: false) {
-                let _ = b.loadString("foobar")
-            }
-        }
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testSwitchRemovalKeepContent() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var num = b.loadInt(1337)
-        let cond1 = b.loadInt(1339)
-        let cond2 = b.loadInt(1338)
-        let cond3 = b.loadInt(1337)
-        let one = b.loadInt(1)
-
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond1, fallsThrough: false) {
-                b.binary(num, one, with: .Add)
-            }
-            swtch.addCase(cond2, fallsThrough: false) {
-                b.binary(num, one, with: .Sub)
-            }
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.binary(num, two, with: .Mul)
-            }
-            swtch.addDefaultCase(fallsThrough: false) {
-                let x = b.loadString("foobar")
-                b.reassign(variable: num, value: x)
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        num = b.loadInt(1337)
-        let two = b.loadInt(2)
-        b.binary(num, two, with: .Mul)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testSwitchRemoval() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        let num = b.loadInt(1337)
-        evaluator.nextInstructionIsImportant(in: b)
-        var cond1 = b.loadInt(1339)
-        let cond2 = b.loadInt(1338)
-        let cond3 = b.loadInt(1337)
-        let one = b.loadInt(1)
-
-        b.buildSwitch(on: num) { swtch in
-            swtch.addCase(cond1, fallsThrough: false) {
-                b.binary(num, one, with: .Add)
-            }
-            swtch.addCase(cond2, fallsThrough: false) {
-                b.binary(num, one, with: .Sub)
-            }
-            swtch.addCase(cond3, fallsThrough: false) {
-                let two = b.loadInt(2)
-                b.binary(num, two, with: .Mul)
-            }
-            swtch.addDefaultCase(fallsThrough: false) {
-                let x = b.loadString("foobar")
-                b.reassign(variable: num, value: x)
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        cond1 = b.loadInt(1339)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testCodeStringMinimization() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var v = b.loadInt(42)
-        var o = b.createObject(with: [:])
-        let c = b.buildCodeString {
+            var x = b.loadInt(1337)
+            var y = b.loadInt(1338)
+            var r = b.callFunction(f, withArgs: [x, y])
             evaluator.nextInstructionIsImportant(in: b)
-            b.setProperty("foo", of: o, to: v)
+            b.setProperty("result", of: o, to: r)
+
+            // Make sure to keep the binary operations.
+            evaluator.operationIsImportant(BinaryOperation.self)
+            // We also need to keep the return instruction as long as the function still exists. However, once the function has been inlined, the return should also disappear.
+            evaluator.keepReturnsInFunctions = true
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            o = b.createObject(with: [:])
+            m = b.loadInt(42)
+            x = b.loadInt(1337)
+            y = b.loadInt(1338)
+            let t = b.binary(m, x, with: .Mul)
+            r = b.binary(t, y, with: .Add)
+            b.setProperty("result", of: o, to: r)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(FuzzILLifter().lift(expectedProgram) == FuzzILLifter().lift(actualProgram))
+            #expect(expectedProgram == actualProgram)
         }
-        let k = b.loadString("code")
-        b.setComputedProperty(k, of: o, to: c)
-        let eval = b.createNamedVariable(forBuiltin: "eval")
-        b.callFunction(eval, withArgs: [c])
-        b.deleteProperty("foo", of: o)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        v = b.loadInt(42)
-        o = b.createObject(with: [:])
-        b.setProperty("foo", of: o, to: v)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testBasicInlining() {
+    @Test func testInliningWithConditionalReturn() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var o = b.createObject(with: [:])
-        var m = b.loadInt(42)
-        let f = b.buildPlainFunction(with: .parameters(n: 2)) { args in
-            let t = b.binary(m, args[0], with: .Mul)
-            let r = b.binary(t, args[1], with: .Add)
-            b.doReturn(r)
-        }
-        var x = b.loadInt(1337)
-        var y = b.loadInt(1338)
-        var r = b.callFunction(f, withArgs: [x, y])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("result", of: o, to: r)
+            // Build input program to be minimized.
+            b.loadString("unused")
+            let f = b.buildPlainFunction(with: .parameters(n: 3)) { args in
+                b.buildIfElse(
+                    args[0],
+                    ifBody: {
+                        b.doReturn(args[1])
+                    },
+                    elseBody: {
+                        b.doReturn(args[2])
+                    })
+            }
+            var a1 = b.loadBool(true)
+            var a2 = b.loadInt(1337)
+            var r = b.callFunction(f, withArgs: [a1, a2])
+            var o = b.createObject(with: [:])
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("result", of: o, to: r)
 
-        // Make sure to keep the binary operations.
-        evaluator.operationIsImportant(BinaryOperation.self)
-        // We also need to keep the return instruction as long as the function still exists. However, once the function has been inlined, the return should also disappear.
-        evaluator.keepReturnsInFunctions = true
+            let originalProgram = b.finalize()
 
-        let originalProgram = b.finalize()
+            // Need to keep various things alive, see also the comment in testBasicInlining
+            evaluator.operationIsImportant(LoadInteger.self)
+            evaluator.operationIsImportant(LoadBoolean.self)
+            evaluator.operationIsImportant(BeginIf.self)
+            evaluator.operationIsImportant(Reassign.self)
+            evaluator.keepReturnsInFunctions = true
 
-        // Build expected output program.
-        o = b.createObject(with: [:])
-        m = b.loadInt(42)
-        x = b.loadInt(1337)
-        y = b.loadInt(1338)
-        let t = b.binary(m, x, with: .Mul)
-        r = b.binary(t, y, with: .Add)
-        b.setProperty("result", of: o, to: r)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(FuzzILLifter().lift(expectedProgram), FuzzILLifter().lift(actualProgram))
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testInliningWithConditionalReturn() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        b.loadString("unused")
-        let f = b.buildPlainFunction(with: .parameters(n: 3)) { args in
+            // Build expected output program.
+            a1 = b.loadBool(true)
+            a2 = b.loadInt(1337)
+            let u = b.loadUndefined()
+            r = b.loadUndefined()
             b.buildIfElse(
-                args[0],
+                a1,
                 ifBody: {
-                    b.doReturn(args[1])
+                    b.reassign(variable: r, value: a2)
                 },
                 elseBody: {
-                    b.doReturn(args[2])
+                    b.reassign(variable: r, value: u)
                 })
+            o = b.createObject(with: [:])
+            b.setProperty("result", of: o, to: r)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        var a1 = b.loadBool(true)
-        var a2 = b.loadInt(1337)
-        var r = b.callFunction(f, withArgs: [a1, a2])
-        var o = b.createObject(with: [:])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("result", of: o, to: r)
-
-        let originalProgram = b.finalize()
-
-        // Need to keep various things alive, see also the comment in testBasicInlining
-        evaluator.operationIsImportant(LoadInteger.self)
-        evaluator.operationIsImportant(LoadBoolean.self)
-        evaluator.operationIsImportant(BeginIf.self)
-        evaluator.operationIsImportant(Reassign.self)
-        evaluator.keepReturnsInFunctions = true
-
-        // Build expected output program.
-        a1 = b.loadBool(true)
-        a2 = b.loadInt(1337)
-        let u = b.loadUndefined()
-        r = b.loadUndefined()
-        b.buildIfElse(
-            a1,
-            ifBody: {
-                b.reassign(variable: r, value: a2)
-            },
-            elseBody: {
-                b.reassign(variable: r, value: u)
-            })
-        o = b.createObject(with: [:])
-        b.setProperty("result", of: o, to: r)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testInliningWithSemiConditionalReturn() {
+    @Test func testInliningWithSemiConditionalReturn() {
         /*
           Show that inlining with conditional returns migth not be
           semantically equivalent.
@@ -706,1064 +738,1112 @@ class MinimizerTests: XCTestCase {
         */
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var a1 = b.loadBool(true)
-        var a2 = b.loadInt(1)
-        var a3 = b.loadInt(2)
-        b.loadString("unused")
-        let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+            // Build input program to be minimized.
+            var a1 = b.loadBool(true)
+            var a2 = b.loadInt(1)
+            var a3 = b.loadInt(2)
+            b.loadString("unused")
+            let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+                b.buildIf(
+                    a1,
+                    ifBody: {
+                        b.doReturn(a2)
+                    })
+                b.doReturn(a3)
+            }
+
+            var r = b.callFunction(f, withArgs: [])
+            var o = b.createObject(with: [:])
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("result", of: o, to: r)
+
+            let originalProgram = b.finalize()
+
+            // Need to keep various things alive, see also the comment in testBasicInlining
+            evaluator.operationIsImportant(LoadInteger.self)
+            evaluator.operationIsImportant(LoadBoolean.self)
+            evaluator.operationIsImportant(BeginIf.self)
+            evaluator.operationIsImportant(Reassign.self)
+            evaluator.keepReturnsInFunctions = true
+
+            // Build expected output program.
+            a1 = b.loadBool(true)
+            a2 = b.loadInt(1)
+            a3 = b.loadInt(2)
+            r = b.loadUndefined()
             b.buildIf(
                 a1,
                 ifBody: {
-                    b.doReturn(a2)
+                    b.reassign(variable: r, value: a2)
                 })
-            b.doReturn(a3)
+            b.reassign(variable: r, value: a3)
+            o = b.createObject(with: [:])
+            b.setProperty("result", of: o, to: a3)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        var r = b.callFunction(f, withArgs: [])
-        var o = b.createObject(with: [:])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("result", of: o, to: r)
-
-        let originalProgram = b.finalize()
-
-        // Need to keep various things alive, see also the comment in testBasicInlining
-        evaluator.operationIsImportant(LoadInteger.self)
-        evaluator.operationIsImportant(LoadBoolean.self)
-        evaluator.operationIsImportant(BeginIf.self)
-        evaluator.operationIsImportant(Reassign.self)
-        evaluator.keepReturnsInFunctions = true
-
-        // Build expected output program.
-        a1 = b.loadBool(true)
-        a2 = b.loadInt(1)
-        a3 = b.loadInt(2)
-        r = b.loadUndefined()
-        b.buildIf(
-            a1,
-            ifBody: {
-                b.reassign(variable: r, value: a2)
-            })
-        b.reassign(variable: r, value: a3)
-        o = b.createObject(with: [:])
-        b.setProperty("result", of: o, to: a3)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
     // Ensure we don't crash when a candidate function is also used as a
     // disposable variable.
-    func testInliningWithDisposableVariable() {
+    @Test func testInliningWithDisposableVariable() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        let a1 = b.loadBool(true)
-
-        // The function to be inlined.
-        let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
-            b.doReturn(a1)
-        }
-
-        // The call and result.
-        evaluator.nextInstructionIsImportant(in: b)
-        let r = b.callFunction(f, withArgs: [])
-        let o = b.createObject(with: [:])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("result", of: o, to: r)
-
-        // Another function with a disposable variable refering
-        // to the first function.
-        evaluator.nextInstructionIsImportant(in: b)
-        b.buildPlainFunction(with: .parameters(n: 0)) { args in
-            evaluator.nextInstructionIsImportant(in: b)
-            b.loadDisposableVariable(f)
-            b.doReturn(a1)
-        }
-
-        let originalProgram = b.finalize()
-
-        // Need to keep various things alive, see also the comment in testBasicInlining
-        evaluator.operationIsImportant(LoadBoolean.self)
-        evaluator.operationIsImportant(Reassign.self)
-        evaluator.keepReturnsInFunctions = true
-
-        // Perform minimization and check that the two programs are equal.
-        // We expect the no changes as the inlining candidate was used as
-        // a disposable variable.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(originalProgram, actualProgram)
-    }
-
-    func testInliningWithTopLevelAsyncDisposableVariable() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let config = Configuration(logLevel: .error, generateBundle: true)
-        let fuzzer = makeMockFuzzer(config: config, evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program with a bundle.
-        b.buildBundleModuleEntryPoint {
+            // Build input program to be minimized.
             let a1 = b.loadBool(true)
 
-            // We need some function to be an inlining candidate, but it doesn't have to be related to the disposable.
+            // The function to be inlined.
             let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
                 b.doReturn(a1)
             }
 
+            // The call and result.
+            evaluator.nextInstructionIsImportant(in: b)
             let r = b.callFunction(f, withArgs: [])
             let o = b.createObject(with: [:])
             evaluator.nextInstructionIsImportant(in: b)
             b.setProperty("result", of: o, to: r)
 
-            // This is allowed because we are in .async context (opened by buildBundleModuleEntryPoint)
-            // but activeSubroutineDefinitions is empty.
-            b.loadAsyncDisposableVariable(a1)
+            // Another function with a disposable variable refering
+            // to the first function.
+            evaluator.nextInstructionIsImportant(in: b)
+            b.buildPlainFunction(with: .parameters(n: 0)) { args in
+                evaluator.nextInstructionIsImportant(in: b)
+                b.loadDisposableVariable(f)
+                b.doReturn(a1)
+            }
+
+            let originalProgram = b.finalize()
+
+            // Need to keep various things alive, see also the comment in testBasicInlining
+            evaluator.operationIsImportant(LoadBoolean.self)
+            evaluator.operationIsImportant(Reassign.self)
+            evaluator.keepReturnsInFunctions = true
+
+            // Perform minimization and check that the two programs are equal.
+            // We expect the no changes as the inlining candidate was used as
+            // a disposable variable.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(originalProgram == actualProgram)
         }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        b.buildBundleModuleEntryPoint {
-            let a1 = b.loadBool(true)
-            let o = b.createObject(with: [:])
-            b.setProperty("result", of: o, to: a1)
-            b.loadAsyncDisposableVariable(a1)
-        }
-        let expectedProgram = b.finalize()
-
-        evaluator.operationIsImportant(LoadBoolean.self)
-        evaluator.operationIsImportant(LoadAsyncDisposableVariable.self)
-        evaluator.keepReturnsInFunctions = true
-
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(FuzzILLifter().lift(expectedProgram), FuzzILLifter().lift(actualProgram))
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testMultiInlining() {
+    @Test func testInliningWithTopLevelAsyncDisposableVariable() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let config = Configuration(logLevel: .error, generateBundle: true)
+        let fuzzer = makeMockFuzzer(config: config, evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program with a bundle.
+            b.buildBundleModuleEntryPoint {
+                let a1 = b.loadBool(true)
+
+                // We need some function to be an inlining candidate, but it doesn't have to be related to the disposable.
+                let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+                    b.doReturn(a1)
+                }
+
+                let r = b.callFunction(f, withArgs: [])
+                let o = b.createObject(with: [:])
+                evaluator.nextInstructionIsImportant(in: b)
+                b.setProperty("result", of: o, to: r)
+
+                // This is allowed because we are in .async context (opened by buildBundleModuleEntryPoint)
+                // but activeSubroutineDefinitions is empty.
+                b.loadAsyncDisposableVariable(a1)
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            b.buildBundleModuleEntryPoint {
+                let a1 = b.loadBool(true)
+                let o = b.createObject(with: [:])
+                b.setProperty("result", of: o, to: a1)
+                b.loadAsyncDisposableVariable(a1)
+            }
+            let expectedProgram = b.finalize()
+
+            evaluator.operationIsImportant(LoadBoolean.self)
+            evaluator.operationIsImportant(LoadAsyncDisposableVariable.self)
+            evaluator.keepReturnsInFunctions = true
+
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(FuzzILLifter().lift(expectedProgram) == FuzzILLifter().lift(actualProgram))
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testMultiInlining() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var o = b.createObject(with: [:])
-        let f1 = b.buildPlainFunction(with: .parameters(n: 1)) { args in
-            b.loadString("unused1")
-            evaluator.nextInstructionIsImportant(in: b)
-            let r = b.unary(.PostInc, args[0])
-            b.doReturn(r)
-        }
-        let f2 = b.buildPlainFunction(with: .parameters(n: 2)) { args in
-            let f3 = b.buildPlainFunction(with: .parameters(n: 1)) { args in
-                b.loadString("unused2")
-                b.loadArguments()
+            // Build input program to be minimized.
+            var o = b.createObject(with: [:])
+            let f1 = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+                b.loadString("unused1")
                 evaluator.nextInstructionIsImportant(in: b)
-                let r = b.unary(.PostDec, args[0])
+                let r = b.unary(.PostInc, args[0])
                 b.doReturn(r)
             }
-            b.loadString("unused3")
-            let a1 = b.callFunction(f1, withArgs: [args[0]])
-            let a2 = b.callFunction(f3, withArgs: [args[1]])
-            evaluator.nextInstructionIsImportant(in: b)
-            let r = b.binary(a1, a2, with: .Add)
-            b.doReturn(r)
-        }
-        var x = b.loadInt(1337)
-        var y = b.loadInt(1338)
-        var r = b.callFunction(f2, withArgs: [x, y])
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("result", of: o, to: r)
-
-        let originalProgram = b.finalize()
-
-        // Need to keep various things alive, see also the comment in testBasicInlining
-        evaluator.operationIsImportant(LoadInteger.self)
-        evaluator.keepReturnsInFunctions = true
-
-        // Build expected output program.
-        o = b.createObject(with: [:])
-        x = b.loadInt(1337)
-        y = b.loadInt(1338)
-        let t1 = b.unary(.PostInc, x)
-        let t2 = b.unary(.PostDec, y)
-        r = b.binary(t1, t2, with: .Add)
-        b.setProperty("result", of: o, to: r)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testReassignmentReduction() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var o = b.createObject(with: [:])
-        var n1 = b.loadInt(42)
-        var n2 = b.loadInt(43)
-        var n3 = b.loadInt(44)
-        b.reassign(variable: n3, value: n1)
-        var n4 = b.loadInt(45)
-        b.reassign(variable: n4, value: n3)
-        b.setProperty("n4", of: o, to: n4)  // This will store n1, i.e. 42
-        var c = b.loadBool(true)
-        b.buildIfElse(
-            c,
-            ifBody: {
-                let n5 = b.loadInt(46)
-                b.reassign(variable: n1, value: n5)
-                b.setProperty("n1", of: o, to: n1)  // This will store n5, i.e. 46
-                b.setProperty("n1", of: o, to: n1)  // This will (again) store n5, i.e. 46
-                b.reassign(variable: n1, value: n2)
-                b.setProperty("n1", of: o, to: n1)  // This will store n2, i.e. 43
-            },
-            elseBody: {
-                let n6 = b.loadInt(47)
-                b.reassign(variable: n1, value: n6)
-                b.setProperty("n3", of: o, to: n3)  // This will still store n3, i.e. 42
-            })
-        b.setProperty("n1", of: o, to: n1)  // This will store n1, i.e. 42
-        b.reassign(variable: n1, value: n2)
-        b.setProperty("n3", of: o, to: n3)  // This will store n3, i.e. 42
-
-        evaluator.operationIsImportant(Reassign.self)
-
-        let originalProgram = b.finalize()
-
-        // Keep all property stores and the if-else
-        evaluator.operationIsImportant(SetProperty.self)
-        evaluator.operationIsImportant(BeginIf.self)
-
-        // Build expected output program.
-        o = b.createObject(with: [:])
-        n1 = b.loadInt(42)
-        n2 = b.loadInt(43)
-        n3 = b.loadInt(44)
-        b.reassign(variable: n3, value: n1)
-        n4 = b.loadInt(45)
-        b.reassign(variable: n4, value: n3)
-        b.setProperty("n4", of: o, to: n1)
-        c = b.loadBool(true)
-        b.buildIfElse(
-            c,
-            ifBody: {
-                let n5 = b.loadInt(46)
-                b.reassign(variable: n1, value: n5)
-                b.setProperty("n1", of: o, to: n5)
-                b.setProperty("n1", of: o, to: n5)
-                b.reassign(variable: n1, value: n2)
-                b.setProperty("n1", of: o, to: n2)
-            },
-            elseBody: {
-                let n6 = b.loadInt(47)
-                b.reassign(variable: n1, value: n6)
-                b.setProperty("n3", of: o, to: n3)
-            })
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("n1", of: o, to: n1)
-        b.reassign(variable: n1, value: n2)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.setProperty("n3", of: o, to: n3)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testNamedVariableRemoval() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var print = b.createNamedVariable(forBuiltin: "print")
-        var v1 = b.loadInt(42)
-        let n1 = b.createNamedVariable("n1", declarationMode: .var, initialValue: v1)
-        // These uses of n1 can be replaced with v1
-        evaluator.nextInstructionIsImportant(in: b)
-        var s1 = b.binary(n1, n1, with: .Add)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [s1])
-
-        // Similar situation, but now the original input is also reused.
-        var v2 = b.loadInt(43)
-        let n2 = b.createNamedVariable("n2", declarationMode: .var, initialValue: v2)
-        evaluator.nextInstructionIsImportant(in: b)
-        var s2 = b.binary(n2, v2, with: .Add)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [s2])
-
-        // Now the named variable itself is important and so shouldn't be removed.
-        evaluator.nextInstructionIsImportant(in: b)
-        var n3 = b.createNamedVariable("n3", declarationMode: .var, initialValue: n2)
-        // ... but this instruction can be removed (and s4 replaced with n3)
-        let s4 = b.binary(n3, n3, with: .Add)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [n3, s4, n3])
-
-        // This named variable can again be removed though.
-        let n4 = b.createNamedVariable("n4", declarationMode: .var, initialValue: n3)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [n1, n2, n3, n4])
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        print = b.createNamedVariable(forBuiltin: "print")
-        v1 = b.loadInt(42)
-        s1 = b.binary(v1, v1, with: .Add)
-        b.callFunction(print, withArgs: [s1])
-        v2 = b.loadInt(43)
-        s2 = b.binary(v2, v2, with: .Add)
-        b.callFunction(print, withArgs: [s2])
-        n3 = b.createNamedVariable("n3", declarationMode: .var, initialValue: v2)
-        b.callFunction(print, withArgs: [n3, n3, n3])
-        b.callFunction(print, withArgs: [v1, v2, n3, n3])
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testSimpleLoopMinimization() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        let f = b.createNamedVariable(forBuiltin: "f")
-        let maxIterations = b.loadInt(10)
-        let loopVar = b.loadInt(0)
-        b.buildWhileLoop({ b.callFunction(f) }) {
-            b.unary(.PostInc, loopVar)
-            let foo = b.createNamedVariable(forBuiltin: "foo")
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callMethod("bar", on: foo)
-            let cond = b.compare(loopVar, with: maxIterations, using: .lessThan)
-            b.buildIf(cond) {
-                b.loopBreak()
-            }
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        let foo = b.createNamedVariable(forBuiltin: "foo")
-        b.callMethod("bar", on: foo)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testNestedLoopMinimization() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        let numIterations = b.loadInt(10)
-        let loopVar = b.loadInt(0)
-        b.buildWhileLoop({ b.compare(loopVar, with: numIterations, using: .lessThan) }) {
-            b.unary(.PostInc, loopVar)
-            evaluator.nextInstructionIsImportant(in: b)  // Otherwise, the minimizer will attempt to simplify the while-loop into a repeat-loop
-            b.buildWhileLoop({ b.loadBool(true) }) {
+            let f2 = b.buildPlainFunction(with: .parameters(n: 2)) { args in
+                let f3 = b.buildPlainFunction(with: .parameters(n: 1)) { args in
+                    b.loadString("unused2")
+                    b.loadArguments()
+                    evaluator.nextInstructionIsImportant(in: b)
+                    let r = b.unary(.PostDec, args[0])
+                    b.doReturn(r)
+                }
+                b.loadString("unused3")
+                let a1 = b.callFunction(f1, withArgs: [args[0]])
+                let a2 = b.callFunction(f3, withArgs: [args[1]])
                 evaluator.nextInstructionIsImportant(in: b)
+                let r = b.binary(a1, a2, with: .Add)
+                b.doReturn(r)
+            }
+            var x = b.loadInt(1337)
+            var y = b.loadInt(1338)
+            var r = b.callFunction(f2, withArgs: [x, y])
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("result", of: o, to: r)
+
+            let originalProgram = b.finalize()
+
+            // Need to keep various things alive, see also the comment in testBasicInlining
+            evaluator.operationIsImportant(LoadInteger.self)
+            evaluator.keepReturnsInFunctions = true
+
+            // Build expected output program.
+            o = b.createObject(with: [:])
+            x = b.loadInt(1337)
+            y = b.loadInt(1338)
+            let t1 = b.unary(.PostInc, x)
+            let t2 = b.unary(.PostDec, y)
+            r = b.binary(t1, t2, with: .Add)
+            b.setProperty("result", of: o, to: r)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testReassignmentReduction() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var o = b.createObject(with: [:])
+            var n1 = b.loadInt(42)
+            var n2 = b.loadInt(43)
+            var n3 = b.loadInt(44)
+            b.reassign(variable: n3, value: n1)
+            var n4 = b.loadInt(45)
+            b.reassign(variable: n4, value: n3)
+            b.setProperty("n4", of: o, to: n4)  // This will store n1, i.e. 42
+            var c = b.loadBool(true)
+            b.buildIfElse(
+                c,
+                ifBody: {
+                    let n5 = b.loadInt(46)
+                    b.reassign(variable: n1, value: n5)
+                    b.setProperty("n1", of: o, to: n1)  // This will store n5, i.e. 46
+                    b.setProperty("n1", of: o, to: n1)  // This will (again) store n5, i.e. 46
+                    b.reassign(variable: n1, value: n2)
+                    b.setProperty("n1", of: o, to: n1)  // This will store n2, i.e. 43
+                },
+                elseBody: {
+                    let n6 = b.loadInt(47)
+                    b.reassign(variable: n1, value: n6)
+                    b.setProperty("n3", of: o, to: n3)  // This will still store n3, i.e. 42
+                })
+            b.setProperty("n1", of: o, to: n1)  // This will store n1, i.e. 42
+            b.reassign(variable: n1, value: n2)
+            b.setProperty("n3", of: o, to: n3)  // This will store n3, i.e. 42
+
+            evaluator.operationIsImportant(Reassign.self)
+
+            let originalProgram = b.finalize()
+
+            // Keep all property stores and the if-else
+            evaluator.operationIsImportant(SetProperty.self)
+            evaluator.operationIsImportant(BeginIf.self)
+
+            // Build expected output program.
+            o = b.createObject(with: [:])
+            n1 = b.loadInt(42)
+            n2 = b.loadInt(43)
+            n3 = b.loadInt(44)
+            b.reassign(variable: n3, value: n1)
+            n4 = b.loadInt(45)
+            b.reassign(variable: n4, value: n3)
+            b.setProperty("n4", of: o, to: n1)
+            c = b.loadBool(true)
+            b.buildIfElse(
+                c,
+                ifBody: {
+                    let n5 = b.loadInt(46)
+                    b.reassign(variable: n1, value: n5)
+                    b.setProperty("n1", of: o, to: n5)
+                    b.setProperty("n1", of: o, to: n5)
+                    b.reassign(variable: n1, value: n2)
+                    b.setProperty("n1", of: o, to: n2)
+                },
+                elseBody: {
+                    let n6 = b.loadInt(47)
+                    b.reassign(variable: n1, value: n6)
+                    b.setProperty("n3", of: o, to: n3)
+                })
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("n1", of: o, to: n1)
+            b.reassign(variable: n1, value: n2)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("n3", of: o, to: n3)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testNamedVariableRemoval() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var print = b.createNamedVariable(forBuiltin: "print")
+            var v1 = b.loadInt(42)
+            let n1 = b.createNamedVariable("n1", declarationMode: .var, initialValue: v1)
+            // These uses of n1 can be replaced with v1
+            evaluator.nextInstructionIsImportant(in: b)
+            var s1 = b.binary(n1, n1, with: .Add)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [s1])
+
+            // Similar situation, but now the original input is also reused.
+            var v2 = b.loadInt(43)
+            let n2 = b.createNamedVariable("n2", declarationMode: .var, initialValue: v2)
+            evaluator.nextInstructionIsImportant(in: b)
+            var s2 = b.binary(n2, v2, with: .Add)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [s2])
+
+            // Now the named variable itself is important and so shouldn't be removed.
+            evaluator.nextInstructionIsImportant(in: b)
+            var n3 = b.createNamedVariable("n3", declarationMode: .var, initialValue: n2)
+            // ... but this instruction can be removed (and s4 replaced with n3)
+            let s4 = b.binary(n3, n3, with: .Add)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [n3, s4, n3])
+
+            // This named variable can again be removed though.
+            let n4 = b.createNamedVariable("n4", declarationMode: .var, initialValue: n3)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [n1, n2, n3, n4])
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            print = b.createNamedVariable(forBuiltin: "print")
+            v1 = b.loadInt(42)
+            s1 = b.binary(v1, v1, with: .Add)
+            b.callFunction(print, withArgs: [s1])
+            v2 = b.loadInt(43)
+            s2 = b.binary(v2, v2, with: .Add)
+            b.callFunction(print, withArgs: [s2])
+            n3 = b.createNamedVariable("n3", declarationMode: .var, initialValue: v2)
+            b.callFunction(print, withArgs: [n3, n3, n3])
+            b.callFunction(print, withArgs: [v1, v2, n3, n3])
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testSimpleLoopMinimization() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            let f = b.createNamedVariable(forBuiltin: "f")
+            let maxIterations = b.loadInt(10)
+            let loopVar = b.loadInt(0)
+            b.buildWhileLoop({ b.callFunction(f) }) {
+                b.unary(.PostInc, loopVar)
+                let foo = b.createNamedVariable(forBuiltin: "foo")
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callMethod("bar", on: foo)
+                let cond = b.compare(loopVar, with: maxIterations, using: .lessThan)
+                b.buildIf(cond) {
+                    b.loopBreak()
+                }
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            let foo = b.createNamedVariable(forBuiltin: "foo")
+            b.callMethod("bar", on: foo)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testNestedLoopMinimization() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            let numIterations = b.loadInt(10)
+            let loopVar = b.loadInt(0)
+            b.buildWhileLoop({ b.compare(loopVar, with: numIterations, using: .lessThan) }) {
+                b.unary(.PostInc, loopVar)
+                evaluator.nextInstructionIsImportant(in: b)  // Otherwise, the minimizer will attempt to simplify the while-loop into a repeat-loop
+                b.buildWhileLoop({ b.loadBool(true) }) {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.loopBreak()
+                }
+                let f = b.createNamedVariable(forBuiltin: "importantFunction")
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callFunction(f)
+                b.loopContinue()
+            }
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            b.buildWhileLoop({ b.loadBool(true) }) {
                 b.loopBreak()
             }
             let f = b.createNamedVariable(forBuiltin: "importantFunction")
-            evaluator.nextInstructionIsImportant(in: b)
             b.callFunction(f)
-            b.loopContinue()
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        b.buildWhileLoop({ b.loadBool(true) }) {
-            b.loopBreak()
-        }
-        let f = b.createNamedVariable(forBuiltin: "importantFunction")
-        b.callFunction(f)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testForLoopSimplification1() {
+    @Test func testForLoopSimplification1() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var d = b.createNamedVariable(forBuiltin: "d")
-        var e = b.createNamedVariable(forBuiltin: "e")
-        var f = b.createNamedVariable(forBuiltin: "f")
-        var g = b.createNamedVariable(forBuiltin: "g")
-        var h = b.createNamedVariable(forBuiltin: "h")
-        b.buildForLoop(
-            i: {
+            // Build input program to be minimized.
+            var d = b.createNamedVariable(forBuiltin: "d")
+            var e = b.createNamedVariable(forBuiltin: "e")
+            var f = b.createNamedVariable(forBuiltin: "f")
+            var g = b.createNamedVariable(forBuiltin: "g")
+            var h = b.createNamedVariable(forBuiltin: "h")
+            b.buildForLoop(
+                i: {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    return b.callFunction(d)
+                },
+                { i in
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(e)
+                    return b.compare(i, with: b.loadInt(100), using: .lessThan)
+                },
+                { i in
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(f)
+                    b.unary(.PostInc, i)
+                }
+            ) { i in
                 evaluator.nextInstructionIsImportant(in: b)
-                return b.callFunction(d)
-            },
-            { i in
-                evaluator.nextInstructionIsImportant(in: b)
+                b.callFunction(g, withArgs: [i])
+            }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(h)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            d = b.createNamedVariable(forBuiltin: "d")
+            e = b.createNamedVariable(forBuiltin: "e")
+            f = b.createNamedVariable(forBuiltin: "f")
+            g = b.createNamedVariable(forBuiltin: "g")
+            h = b.createNamedVariable(forBuiltin: "h")
+            b.callFunction(d)
+            b.buildRepeatLoop(n: 5) { i in
                 b.callFunction(e)
-                return b.compare(i, with: b.loadInt(100), using: .lessThan)
-            },
-            { i in
+                b.callFunction(g, withArgs: [i])
+                b.callFunction(f)
+            }
+            b.callFunction(h)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testForLoopSimplification2() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var d = b.createNamedVariable(forBuiltin: "d")
+            let e = b.createNamedVariable(forBuiltin: "e")
+            let f = b.createNamedVariable(forBuiltin: "f")
+            var g = b.createNamedVariable(forBuiltin: "g")
+            var h = b.createNamedVariable(forBuiltin: "h")
+            var limit = b.loadInt(100)
+            // In this case, the for-loop is actually important (we emulate that by marking the EndForLoopAfterthought instruction as important
+            b.buildForLoop(
+                i: {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    return b.callFunction(d)
+                },
+                { i in
+                    b.callFunction(e)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    return b.compare(i, with: limit, using: .lessThan)
+                },
+                { i in
+                    b.callFunction(f)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.unary(.PostInc, i)
+                    evaluator.nextInstructionIsImportant(in: b)
+                }
+            ) { i in
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callFunction(g, withArgs: [i])
+            }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(h)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            d = b.createNamedVariable(forBuiltin: "d")
+            g = b.createNamedVariable(forBuiltin: "g")
+            h = b.createNamedVariable(forBuiltin: "h")
+            limit = b.loadInt(100)
+            b.buildForLoop(
+                i: { return b.callFunction(d) },
+                { i in b.compare(i, with: limit, using: .lessThan) },
+                { i in b.unary(.PostInc, i) }
+            ) { i in
+                b.callFunction(g, withArgs: [i])
+            }
+            b.callFunction(h)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testWhileLoopSimplification() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var f = b.createNamedVariable(forBuiltin: "f")
+            var g = b.createNamedVariable(forBuiltin: "g")
+            var h = b.createNamedVariable(forBuiltin: "h")
+            var loopVar = b.loadInt(10)
+            b.buildWhileLoop({
                 evaluator.nextInstructionIsImportant(in: b)
                 b.callFunction(f)
-                b.unary(.PostInc, i)
-            }
-        ) { i in
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(g, withArgs: [i])
-        }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(h)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        d = b.createNamedVariable(forBuiltin: "d")
-        e = b.createNamedVariable(forBuiltin: "e")
-        f = b.createNamedVariable(forBuiltin: "f")
-        g = b.createNamedVariable(forBuiltin: "g")
-        h = b.createNamedVariable(forBuiltin: "h")
-        b.callFunction(d)
-        b.buildRepeatLoop(n: 5) { i in
-            b.callFunction(e)
-            b.callFunction(g, withArgs: [i])
-            b.callFunction(f)
-        }
-        b.callFunction(h)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testForLoopSimplification2() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var d = b.createNamedVariable(forBuiltin: "d")
-        let e = b.createNamedVariable(forBuiltin: "e")
-        let f = b.createNamedVariable(forBuiltin: "f")
-        var g = b.createNamedVariable(forBuiltin: "g")
-        var h = b.createNamedVariable(forBuiltin: "h")
-        var limit = b.loadInt(100)
-        // In this case, the for-loop is actually important (we emulate that by marking the EndForLoopAfterthought instruction as important
-        b.buildForLoop(
-            i: {
                 evaluator.nextInstructionIsImportant(in: b)
-                return b.callFunction(d)
-            },
-            { i in
-                b.callFunction(e)
+                return b.unary(.PostDec, loopVar)
+            }) {
                 evaluator.nextInstructionIsImportant(in: b)
-                return b.compare(i, with: limit, using: .lessThan)
-            },
-            { i in
-                b.callFunction(f)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.unary(.PostInc, i)
-                evaluator.nextInstructionIsImportant(in: b)
-            }
-        ) { i in
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(g, withArgs: [i])
-        }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(h)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        d = b.createNamedVariable(forBuiltin: "d")
-        g = b.createNamedVariable(forBuiltin: "g")
-        h = b.createNamedVariable(forBuiltin: "h")
-        limit = b.loadInt(100)
-        b.buildForLoop(
-            i: { return b.callFunction(d) },
-            { i in b.compare(i, with: limit, using: .lessThan) },
-            { i in b.unary(.PostInc, i) }
-        ) { i in
-            b.callFunction(g, withArgs: [i])
-        }
-        b.callFunction(h)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testWhileLoopSimplification() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var f = b.createNamedVariable(forBuiltin: "f")
-        var g = b.createNamedVariable(forBuiltin: "g")
-        var h = b.createNamedVariable(forBuiltin: "h")
-        var loopVar = b.loadInt(10)
-        b.buildWhileLoop({
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(f)
-            evaluator.nextInstructionIsImportant(in: b)
-            return b.unary(.PostDec, loopVar)
-        }) {
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(g, withArgs: [loopVar])
-
-            evaluator.nextInstructionIsImportant(in: b)
-            // The Continue operation is necessary here so that the loop isn't simply deleted.
-            b.loopContinue()
-        }
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(h)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        f = b.createNamedVariable(forBuiltin: "f")
-        g = b.createNamedVariable(forBuiltin: "g")
-        h = b.createNamedVariable(forBuiltin: "h")
-        loopVar = b.loadInt(10)
-        b.buildRepeatLoop(n: 5) {
-            b.callFunction(f)
-            b.unary(.PostDec, loopVar)
-            b.callFunction(g, withArgs: [loopVar])
-            b.loopContinue()
-        }
-        b.callFunction(h)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testDoWhileLoopSimplification() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        var f = b.createNamedVariable(forBuiltin: "f")
-        var g = b.createNamedVariable(forBuiltin: "g")
-        var h = b.createNamedVariable(forBuiltin: "h")
-        var loopVar = b.loadInt(10)
-        b.buildDoWhileLoop(
-            do: {
-                evaluator.nextInstructionIsImportant(in: b)
-                b.callFunction(f, withArgs: [loopVar])
+                b.callFunction(g, withArgs: [loopVar])
 
                 evaluator.nextInstructionIsImportant(in: b)
                 // The Continue operation is necessary here so that the loop isn't simply deleted.
                 b.loopContinue()
-            },
-            while: {
-                evaluator.nextInstructionIsImportant(in: b)
+            }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(h)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            f = b.createNamedVariable(forBuiltin: "f")
+            g = b.createNamedVariable(forBuiltin: "g")
+            h = b.createNamedVariable(forBuiltin: "h")
+            loopVar = b.loadInt(10)
+            b.buildRepeatLoop(n: 5) {
+                b.callFunction(f)
+                b.unary(.PostDec, loopVar)
+                b.callFunction(g, withArgs: [loopVar])
+                b.loopContinue()
+            }
+            b.callFunction(h)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testDoWhileLoopSimplification() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var f = b.createNamedVariable(forBuiltin: "f")
+            var g = b.createNamedVariable(forBuiltin: "g")
+            var h = b.createNamedVariable(forBuiltin: "h")
+            var loopVar = b.loadInt(10)
+            b.buildDoWhileLoop(
+                do: {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(f, withArgs: [loopVar])
+
+                    evaluator.nextInstructionIsImportant(in: b)
+                    // The Continue operation is necessary here so that the loop isn't simply deleted.
+                    b.loopContinue()
+                },
+                while: {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(g)
+                    return b.unary(.PostDec, loopVar)
+                })
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(h)
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            f = b.createNamedVariable(forBuiltin: "f")
+            g = b.createNamedVariable(forBuiltin: "g")
+            h = b.createNamedVariable(forBuiltin: "h")
+            loopVar = b.loadInt(10)
+            b.buildRepeatLoop(n: 5) {
+                b.callFunction(f, withArgs: [loopVar])
+                b.loopContinue()
                 b.callFunction(g)
-                return b.unary(.PostDec, loopVar)
-            })
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(h)
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        f = b.createNamedVariable(forBuiltin: "f")
-        g = b.createNamedVariable(forBuiltin: "g")
-        h = b.createNamedVariable(forBuiltin: "h")
-        loopVar = b.loadInt(10)
-        b.buildRepeatLoop(n: 5) {
-            b.callFunction(f, withArgs: [loopVar])
-            b.loopContinue()
-            b.callFunction(g)
-        }
-        b.callFunction(h)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testRepeatLoopReduction() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        b.buildRepeatLoop(n: 100) { i in
-            let foo = b.createNamedVariable(forBuiltin: "foo")
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(foo, withArgs: [i])
-
-            evaluator.nextInstructionIsImportant(in: b)
-            // Due to the `continue` the loop must be kept, but the number of iterations can be decreased.
-            b.loopContinue()
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        // Five is currently the smallest iteration count tried by the LoopReducer.
-        b.buildRepeatLoop(n: 5) { i in
-            let foo = b.createNamedVariable(forBuiltin: "foo")
-            b.callFunction(foo, withArgs: [i])
-            b.loopContinue()
-        }
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testNestedLoopMerging1() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        b.buildRepeatLoop(n: 2) {
-            b.buildRepeatLoop(n: 2) { i in
-                let foo = b.createNamedVariable(forBuiltin: "foo")
-                // The inner loop can't be deleted due to the data-flow dependency.
-                evaluator.nextInstructionIsImportant(in: b)
-                b.callFunction(foo, withArgs: [i])
             }
+            b.callFunction(h)
 
-            // These instruction isn't needed and will be removed, allowing the loops to be merged.
-            let unimportant = b.createNamedVariable(forBuiltin: "unimportant")
-            b.callFunction(unimportant)
+            let expectedProgram = b.finalize()
 
-            // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
-            evaluator.nextInstructionIsImportant(in: b)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        b.buildRepeatLoop(n: 4) { i in
-            let foo = b.createNamedVariable(forBuiltin: "foo")
-            b.callFunction(foo, withArgs: [i])
-        }
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testNestedLoopMerging2() {
+    @Test func testRepeatLoopReduction() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        b.buildRepeatLoop(n: 2) { i in
-            // These instruction isn't needed and will be removed, allowing the loops to be merged.
-            let unimportant = b.createNamedVariable(forBuiltin: "unimportant")
-            b.callFunction(unimportant)
-
-            b.buildRepeatLoop(n: 2) { j in
-                let foo = b.createNamedVariable(forBuiltin: "foo")
-                evaluator.nextInstructionIsImportant(in: b)
-                b.callFunction(foo, withArgs: [i, j])
-            }
-
-            // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
-            evaluator.nextInstructionIsImportant(in: b)
-        }
-
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        b.buildRepeatLoop(n: 4) { i in
-            let foo = b.createNamedVariable(forBuiltin: "foo")
-            b.callFunction(foo, withArgs: [i, i])
-        }
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
-    }
-
-    func testNestedLoopMerging3() {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        b.buildRepeatLoop(n: 2) {
-            // In this case, the loops cannot be merged since there is code in between them.
-            let important = b.createNamedVariable(forBuiltin: "important")
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callFunction(important)
-
-            b.buildRepeatLoop(n: 2) { i in
+            // Build input program to be minimized.
+            b.buildRepeatLoop(n: 100) { i in
                 let foo = b.createNamedVariable(forBuiltin: "foo")
                 evaluator.nextInstructionIsImportant(in: b)
                 b.callFunction(foo, withArgs: [i])
+
+                evaluator.nextInstructionIsImportant(in: b)
+                // Due to the `continue` the loop must be kept, but the number of iterations can be decreased.
+                b.loopContinue()
             }
 
-            // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
-            evaluator.nextInstructionIsImportant(in: b)
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            // Five is currently the smallest iteration count tried by the LoopReducer.
+            b.buildRepeatLoop(n: 5) { i in
+                let foo = b.createNamedVariable(forBuiltin: "foo")
+                b.callFunction(foo, withArgs: [i])
+                b.loopContinue()
+            }
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        let originalProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(originalProgram, actualProgram)
     }
 
-    func testTryCatchRemoval() {
+    @Test func testNestedLoopMerging1() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var i = b.loadInt(42)
-        evaluator.nextInstructionIsImportant(in: b)
-        var a = b.createArray(with: [i, i, i])
-        var f = b.loadFloat(13.37)
-        b.buildTryCatchFinally(
-            tryBody: {
+            // Build input program to be minimized.
+            b.buildRepeatLoop(n: 2) {
+                b.buildRepeatLoop(n: 2) { i in
+                    let foo = b.createNamedVariable(forBuiltin: "foo")
+                    // The inner loop can't be deleted due to the data-flow dependency.
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(foo, withArgs: [i])
+                }
+
+                // These instruction isn't needed and will be removed, allowing the loops to be merged.
+                let unimportant = b.createNamedVariable(forBuiltin: "unimportant")
+                b.callFunction(unimportant)
+
+                // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
                 evaluator.nextInstructionIsImportant(in: b)
-                b.callMethod("fill", on: a, withArgs: [f])
-            }, catchBody: { _ in })
+            }
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Build expected output program.
-        i = b.loadInt(42)
-        a = b.createArray(with: [i, i, i])
-        f = b.loadFloat(13.37)
-        b.callMethod("fill", on: a, withArgs: [f])
+            // Build expected output program.
+            b.buildRepeatLoop(n: 4) { i in
+                let foo = b.createNamedVariable(forBuiltin: "foo")
+                b.callFunction(foo, withArgs: [i])
+            }
 
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testDestructuringSimplification1() {
+    @Test func testNestedLoopMerging2() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var o = b.createNamedVariable(forBuiltin: "TheObject")
-        let vars = b.destruct(o, selecting: ["foo", "bar", "baz"])
-        var print = b.createNamedVariable(forBuiltin: "print")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [vars[0], vars[1], vars[2]])
+            // Build input program to be minimized.
+            b.buildRepeatLoop(n: 2) { i in
+                // These instruction isn't needed and will be removed, allowing the loops to be merged.
+                let unimportant = b.createNamedVariable(forBuiltin: "unimportant")
+                b.callFunction(unimportant)
 
-        let originalProgram = b.finalize()
+                b.buildRepeatLoop(n: 2) { j in
+                    let foo = b.createNamedVariable(forBuiltin: "foo")
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(foo, withArgs: [i, j])
+                }
 
-        // Build expected output program.
-        o = b.createNamedVariable(forBuiltin: "TheObject")
-        let foo = b.getProperty("foo", of: o)
-        let bar = b.getProperty("bar", of: o)
-        let baz = b.getProperty("baz", of: o)
-        print = b.createNamedVariable(forBuiltin: "print")
-        b.callFunction(print, withArgs: [foo, bar, baz])
+                // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
+                evaluator.nextInstructionIsImportant(in: b)
+            }
 
-        let expectedProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Here we rely on a quirk of the minimization evaluator: it only ensures that the sum
-        // of all important operations doesn't decrease, and so this will allow the DestructObject
-        // to be converted into GetProperty operations but prevent both the DestructObject and the
-        // GetProperty from being removed entirely.
-        evaluator.operationIsImportant(Destruct.self)
-        evaluator.operationIsImportant(GetProperty.self)
+            // Build expected output program.
+            b.buildRepeatLoop(n: 4) { i in
+                let foo = b.createNamedVariable(forBuiltin: "foo")
+                b.callFunction(foo, withArgs: [i, i])
+            }
 
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testDestructuringSimplification2() {
+    @Test func testNestedLoopMerging3() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var o = b.createNamedVariable(forBuiltin: "TheArray")
-        let vars = b.destruct(o, selecting: [0, 3, 4])
-        var print = b.createNamedVariable(forBuiltin: "print")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [vars[0], vars[1], vars[2]])
+            // Build input program to be minimized.
+            b.buildRepeatLoop(n: 2) {
+                // In this case, the loops cannot be merged since there is code in between them.
+                let important = b.createNamedVariable(forBuiltin: "important")
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callFunction(important)
 
-        let originalProgram = b.finalize()
+                b.buildRepeatLoop(n: 2) { i in
+                    let foo = b.createNamedVariable(forBuiltin: "foo")
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callFunction(foo, withArgs: [i])
+                }
 
-        // Build expected output program.
-        o = b.createNamedVariable(forBuiltin: "TheArray")
-        let val0 = b.getElement(0, of: o)
-        let val3 = b.getElement(3, of: o)
-        let val4 = b.getElement(4, of: o)
-        print = b.createNamedVariable(forBuiltin: "print")
-        b.callFunction(print, withArgs: [val0, val3, val4])
+                // Small hack: we force the outer loop to be kept by keeping the EndRepeatLoop instruction (which the loop merging won't change).
+                evaluator.nextInstructionIsImportant(in: b)
+            }
 
-        let expectedProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Here we rely on a quirk of the minimization evaluator: it only ensures that the sum
-        // of all important operations doesn't decrease, and so this will allow the DestructArray
-        // to be converted into GetElement operations but prevent both the DestructArray and the
-        // GetElement from being removed entirely.
-        evaluator.operationIsImportant(Destruct.self)
-        evaluator.operationIsImportant(GetElement.self)
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(originalProgram == actualProgram)
+        }
     }
 
-    func testDestructuringSimplificationWithRest() {
+    @Test func testTryCatchRemoval() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var o = b.createNamedVariable(forBuiltin: "TheArray")
-        let vars = b.destruct(o, selecting: [0, 2], lastIsRest: true)
+            // Build input program to be minimized.
+            var i = b.loadInt(42)
+            evaluator.nextInstructionIsImportant(in: b)
+            var a = b.createArray(with: [i, i, i])
+            var f = b.loadFloat(13.37)
+            b.buildTryCatchFinally(
+                tryBody: {
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.callMethod("fill", on: a, withArgs: [f])
+                }, catchBody: { _ in })
 
-        var print = b.createNamedVariable(forBuiltin: "print")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(print, withArgs: [vars[0], vars[1]])
+            let originalProgram = b.finalize()
 
-        let originalProgram = b.finalize()
+            // Build expected output program.
+            i = b.loadInt(42)
+            a = b.createArray(with: [i, i, i])
+            f = b.loadFloat(13.37)
+            b.callMethod("fill", on: a, withArgs: [f])
 
-        // Build expected output program.
-        o = b.createNamedVariable(forBuiltin: "TheArray")
-        let e0 = b.getElement(0, of: o)
-        let restVars = b.destruct(o, selecting: [2], lastIsRest: true)
+            let expectedProgram = b.finalize()
 
-        print = b.createNamedVariable(forBuiltin: "print")
-        b.callFunction(print, withArgs: [e0, restVars[0]])
-
-        let expectedProgram = b.finalize()
-
-        // See testDestructuringSimplification2 for why these are marked important.
-        evaluator.operationIsImportant(Destruct.self)
-        evaluator.operationIsImportant(GetElement.self)
-
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(actualProgram, expectedProgram)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testVariableDeduplication() {
+    @Test func testDestructuringSimplification1() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        var foo = b.createNamedVariable(forBuiltin: "foo")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(foo)
-        let foo2 = b.createNamedVariable(forBuiltin: "foo")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(foo2)
-        var bar = b.createNamedVariable(forBuiltin: "bar")
-        evaluator.nextInstructionIsImportant(in: b)
-        var cond = b.callFunction(bar)
-        evaluator.nextInstructionIsImportant(in: b)
-        b.buildIf(cond) {
-            let baz = b.createNamedVariable(forBuiltin: "baz")
+            // Build input program to be minimized.
+            var o = b.createNamedVariable(forBuiltin: "TheObject")
+            let vars = b.destruct(o, selecting: ["foo", "bar", "baz"])
+            var print = b.createNamedVariable(forBuiltin: "print")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [vars[0], vars[1], vars[2]])
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            o = b.createNamedVariable(forBuiltin: "TheObject")
+            let foo = b.getProperty("foo", of: o)
+            let bar = b.getProperty("bar", of: o)
+            let baz = b.getProperty("baz", of: o)
+            print = b.createNamedVariable(forBuiltin: "print")
+            b.callFunction(print, withArgs: [foo, bar, baz])
+
+            let expectedProgram = b.finalize()
+
+            // Here we rely on a quirk of the minimization evaluator: it only ensures that the sum
+            // of all important operations doesn't decrease, and so this will allow the DestructObject
+            // to be converted into GetProperty operations but prevent both the DestructObject and the
+            // GetProperty from being removed entirely.
+            evaluator.operationIsImportant(Destruct.self)
+            evaluator.operationIsImportant(GetProperty.self)
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testDestructuringSimplification2() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var o = b.createNamedVariable(forBuiltin: "TheArray")
+            let vars = b.destruct(o, selecting: [0, 3, 4])
+            var print = b.createNamedVariable(forBuiltin: "print")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [vars[0], vars[1], vars[2]])
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            o = b.createNamedVariable(forBuiltin: "TheArray")
+            let val0 = b.getElement(0, of: o)
+            let val3 = b.getElement(3, of: o)
+            let val4 = b.getElement(4, of: o)
+            print = b.createNamedVariable(forBuiltin: "print")
+            b.callFunction(print, withArgs: [val0, val3, val4])
+
+            let expectedProgram = b.finalize()
+
+            // Here we rely on a quirk of the minimization evaluator: it only ensures that the sum
+            // of all important operations doesn't decrease, and so this will allow the DestructArray
+            // to be converted into GetElement operations but prevent both the DestructArray and the
+            // GetElement from being removed entirely.
+            evaluator.operationIsImportant(Destruct.self)
+            evaluator.operationIsImportant(GetElement.self)
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testDestructuringSimplificationWithRest() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var o = b.createNamedVariable(forBuiltin: "TheArray")
+            let vars = b.destruct(o, selecting: [0, 2], lastIsRest: true)
+
+            var print = b.createNamedVariable(forBuiltin: "print")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(print, withArgs: [vars[0], vars[1]])
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            o = b.createNamedVariable(forBuiltin: "TheArray")
+            let e0 = b.getElement(0, of: o)
+            let restVars = b.destruct(o, selecting: [2], lastIsRest: true)
+
+            print = b.createNamedVariable(forBuiltin: "print")
+            b.callFunction(print, withArgs: [e0, restVars[0]])
+
+            let expectedProgram = b.finalize()
+
+            // See testDestructuringSimplification2 for why these are marked important.
+            evaluator.operationIsImportant(Destruct.self)
+            evaluator.operationIsImportant(GetElement.self)
+
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(actualProgram == expectedProgram)
+        }
+    }
+
+    @Test func testVariableDeduplication() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            var foo = b.createNamedVariable(forBuiltin: "foo")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(foo)
+            let foo2 = b.createNamedVariable(forBuiltin: "foo")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(foo2)
+            var bar = b.createNamedVariable(forBuiltin: "bar")
+            evaluator.nextInstructionIsImportant(in: b)
+            var cond = b.callFunction(bar)
+            evaluator.nextInstructionIsImportant(in: b)
+            b.buildIf(cond) {
+                let baz = b.createNamedVariable(forBuiltin: "baz")
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callFunction(baz)
+            }
+            var baz = b.createNamedVariable(forBuiltin: "baz")
             evaluator.nextInstructionIsImportant(in: b)
             b.callFunction(baz)
-        }
-        var baz = b.createNamedVariable(forBuiltin: "baz")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(baz)
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Build expected output program.
-        foo = b.createNamedVariable(forBuiltin: "foo")
-        b.callFunction(foo)
-        b.callFunction(foo)
-        bar = b.createNamedVariable(forBuiltin: "bar")
-        cond = b.callFunction(bar)
-        b.buildIf(cond) {
-            let baz = b.createNamedVariable(forBuiltin: "baz")
+            // Build expected output program.
+            foo = b.createNamedVariable(forBuiltin: "foo")
+            b.callFunction(foo)
+            b.callFunction(foo)
+            bar = b.createNamedVariable(forBuiltin: "bar")
+            cond = b.callFunction(bar)
+            b.buildIf(cond) {
+                let baz = b.createNamedVariable(forBuiltin: "baz")
+                b.callFunction(baz)
+            }
+            baz = b.createNamedVariable(forBuiltin: "baz")
             b.callFunction(baz)
+
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        baz = b.createNamedVariable(forBuiltin: "baz")
-        b.callFunction(baz)
-
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testBundleMinimizing() {
+    @Test func testBundleMinimizing() {
         let config = Configuration(logLevel: .error, generateBundle: true)
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(config: config, evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
+            // Build input program to be minimized.
 
-        // Script with an important instruction.
-        b.emit(BeginBundleScript())
-        var foo = b.createNamedVariable(forBuiltin: "foo")
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callFunction(foo)
-        b.emit(EndBundleScript())
+            // Script with an important instruction.
+            b.emit(BeginBundleScript())
+            var foo = b.createNamedVariable(forBuiltin: "foo")
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callFunction(foo)
+            b.emit(EndBundleScript())
 
-        // Script with an unimportant instruction.
-        b.emit(BeginBundleScript())
-        foo = b.createNamedVariable(forBuiltin: "foo")
-        b.callFunction(foo)
-        b.emit(EndBundleScript())
+            // Script with an unimportant instruction.
+            b.emit(BeginBundleScript())
+            foo = b.createNamedVariable(forBuiltin: "foo")
+            b.callFunction(foo)
+            b.emit(EndBundleScript())
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Build expected output program.
+            // Build expected output program.
 
-        // Expect only the script with the important instruction to be preserved.
-        b.emit(BeginBundleScript())
-        foo = b.createNamedVariable(forBuiltin: "foo")
-        b.callFunction(foo)
-        b.emit(EndBundleScript())
+            // Expect only the script with the important instruction to be preserved.
+            b.emit(BeginBundleScript())
+            foo = b.createNamedVariable(forBuiltin: "foo")
+            b.callFunction(foo)
+            b.emit(EndBundleScript())
 
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
-    func testPendingModuleMinimization() {
+    @Test func testPendingModuleMinimization() {
         let config = Configuration(logLevel: .error, generateBundle: true)
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(config: config, evaluator: evaluator)
 
-        // Build input program to be minimized.
-        var originalProgram: Program
-        do {
-            let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            // Build input program to be minimized.
+            var originalProgram: Program
+            do {
+                let b = fuzzer.makeBuilder()
 
-            let v0 = b.declarePendingBundleModule(name: "module.mjs", exportNames: ["test"])
+                let v0 = b.declarePendingBundleModule(name: "module.mjs", exportNames: ["test"])
 
-            b.buildBundleModuleEntryPoint {
-                let i = b.loadInt(42)
-                evaluator.nextInstructionIsImportant(in: b)
-                b.unary(.BitwiseNot, i)
+                b.buildBundleModuleEntryPoint {
+                    let i = b.loadInt(42)
+                    evaluator.nextInstructionIsImportant(in: b)
+                    b.unary(.BitwiseNot, i)
+                }
+
+                b.buildPendingBundleModule(moduleVariable: v0) {
+                    let v1 = b.loadInt(1337)
+                    b.exportVariables(variables: [v1], exportNames: ["test"])
+                }
+
+                originalProgram = b.finalize()
             }
 
-            b.buildPendingBundleModule(moduleVariable: v0) {
-                let v1 = b.loadInt(1337)
-                b.exportVariables(variables: [v1], exportNames: ["test"])
+            // Build expected output program.
+            var expectedProgram: Program
+            do {
+                let b = fuzzer.makeBuilder()
+
+                b.buildBundleModuleEntryPoint {
+                    let i = b.loadInt(42)
+                    b.unary(.BitwiseNot, i)
+                }
+
+                expectedProgram = b.finalize()
             }
 
-            originalProgram = b.finalize()
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-
-        // Build expected output program.
-        var expectedProgram: Program
-        do {
-            let b = fuzzer.makeBuilder()
-
-            b.buildBundleModuleEntryPoint {
-                let i = b.loadInt(42)
-                b.unary(.BitwiseNot, i)
-            }
-
-            expectedProgram = b.finalize()
-        }
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
     }
 
-    func testGuardedOperationSimplification() {
+    @Test func testGuardedOperationSimplification() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        let o = b.createNamedVariable(forBuiltin: "o")
-        let f = b.createNamedVariable(forBuiltin: "f")
-        b.getProperty("p1", of: o, guard: true)
-        b.getElement(2, of: o, guard: true)
-        b.getComputedProperty(b.loadString("p3"), of: o, guard: true)
-        b.callFunction(f, guard: true)
-        b.callMethod("m", on: o, guard: true)
+            // Build input program to be minimized.
+            let o = b.createNamedVariable(forBuiltin: "o")
+            let f = b.createNamedVariable(forBuiltin: "f")
+            b.getProperty("p1", of: o, guard: true)
+            b.getElement(2, of: o, guard: true)
+            b.getComputedProperty(b.loadString("p3"), of: o, guard: true)
+            b.callFunction(f, guard: true)
+            b.callMethod("m", on: o, guard: true)
 
-        // Make sure that none of the operations are removed.
-        evaluator.operationsAreImportant([
-            GetProperty.self, GetElement.self, GetComputedProperty.self, CallFunction.self,
-            CallMethod.self,
-        ])
+            // Make sure that none of the operations are removed.
+            evaluator.operationsAreImportant([
+                GetProperty.self, GetElement.self, GetComputedProperty.self, CallFunction.self,
+                CallMethod.self,
+            ])
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        // Perform minimization.
-        // We then expect to have the same types of operations, but no guarded ones.
-        let minimizedProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(originalProgram.size, minimizedProgram.size)
+            // Perform minimization.
+            // We then expect to have the same types of operations, but no guarded ones.
+            let minimizedProgram = minimize(originalProgram, with: fuzzer)
+            #expect(originalProgram.size == minimizedProgram.size)
 
-        let numGuardableOperationsBefore = originalProgram.code.filter({
-            $0.op is GuardableOperation
-        }).count
-        let numGuardableOperationsAfter = minimizedProgram.code.filter({
-            $0.op is GuardableOperation
-        }).count
-        XCTAssertEqual(numGuardableOperationsBefore, numGuardableOperationsAfter)
+            let numGuardableOperationsBefore = originalProgram.code.filter({
+                $0.op is GuardableOperation
+            }).count
+            let numGuardableOperationsAfter = minimizedProgram.code.filter({
+                $0.op is GuardableOperation
+            }).count
+            #expect(numGuardableOperationsBefore == numGuardableOperationsAfter)
 
-        let operationTypesBefore = originalProgram.code.map({ $0.op.name })
-        let operationTypesAfter = minimizedProgram.code.map({ $0.op.name })
-        XCTAssertEqual(operationTypesBefore, operationTypesAfter)
+            let operationTypesBefore = originalProgram.code.map({ $0.op.name })
+            let operationTypesAfter = minimizedProgram.code.map({ $0.op.name })
+            #expect(operationTypesBefore == operationTypesAfter)
 
-        let numGuardedOperationsBefore = originalProgram.code.filter({ $0.isGuarded }).count
-        let numGuardedOperationsAfter = minimizedProgram.code.filter({ $0.isGuarded }).count
-        XCTAssertEqual(numGuardedOperationsBefore, 5)
-        XCTAssertEqual(numGuardedOperationsAfter, 0)
+            let numGuardedOperationsBefore = originalProgram.code.filter({ $0.isGuarded }).count
+            let numGuardedOperationsAfter = minimizedProgram.code.filter({ $0.isGuarded }).count
+            #expect(numGuardedOperationsBefore == 5)
+            #expect(numGuardedOperationsAfter == 0)
+        }
     }
 
     func runWasmMinimization(
@@ -1772,32 +1852,31 @@ class MinimizerTests: XCTestCase {
     ) throws {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        let originalModule = program(evaluator, b)
-        evaluator.nextInstructionIsImportant(in: b)
-        let exports = originalModule.loadExports()
-        evaluator.nextInstructionIsImportant(in: b)
-        b.callMethod(originalModule.getExportedMethod(at: 0), on: exports)
-        let originalProgram = b.finalize()
+            // Build input program to be minimized.
+            let originalModule = program(evaluator, b)
+            evaluator.nextInstructionIsImportant(in: b)
+            let exports = originalModule.loadExports()
+            evaluator.nextInstructionIsImportant(in: b)
+            b.callMethod(originalModule.getExportedMethod(at: 0), on: exports)
+            let originalProgram = b.finalize()
 
-        let minifiedModule = minified(b)
-        let minifiedExports = minifiedModule.loadExports()
-        b.callMethod(minifiedModule.getExportedMethod(at: 0), on: minifiedExports)
+            let minifiedModule = minified(b)
+            let minifiedExports = minifiedModule.loadExports()
+            b.callMethod(minifiedModule.getExportedMethod(at: 0), on: minifiedExports)
 
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
     // Test removing unneeded WasmBeginCatchAll blocks.
-    func testWasmCatchAllMinimization() throws {
+    @Test func testWasmCatchAllMinimization() throws {
         try runWasmMinimization { evaluator, b in
             return b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
@@ -1827,7 +1906,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Test removing unneeded WasmBeginCatch blocks.
-    func testWasmCatchMinimization() throws {
+    @Test func testWasmCatchMinimization() throws {
         try runWasmMinimization { evaluator, b in
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
@@ -1879,7 +1958,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Test removing the try block but keeping its inner instructions (the return statement here).
-    func testWasmTryMinimizationKeepBody() throws {
+    @Test func testWasmTryMinimizationKeepBody() throws {
         try runWasmMinimization { evaluator, b in
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
@@ -1906,7 +1985,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Test removing the whole try-catch block including all statements.
-    func testWasmTryMinimizationAll() throws {
+    @Test func testWasmTryMinimizationAll() throws {
         try runWasmMinimization { evaluator, b in
             return b.buildWasmModule { wasmModule in
                 let tag = wasmModule.addTag(parameterTypes: [])
@@ -1928,7 +2007,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationVoidRemoveIfElseKeepContents() throws {
+    @Test func testWasmIfElseMinimizationVoidRemoveIfElseKeepContents() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => []) { function, label, args in
@@ -1954,7 +2033,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationVoidRemoveElse() throws {
+    @Test func testWasmIfElseMinimizationVoidRemoveElse() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -1990,7 +2069,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationVoidRemoveIfKeepElse() throws {
+    @Test func testWasmIfElseMinimizationVoidRemoveIfKeepElse() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2026,7 +2105,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationWithResult() throws {
+    @Test func testWasmIfElseMinimizationWithResult() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2057,7 +2136,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationWithResultKeepElse() throws {
+    @Test func testWasmIfElseMinimizationWithResultKeepElse() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2089,7 +2168,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Test that we don't remove an if-else if the label is used.
-    func testWasmIfElseMinimizationWithResultButLabelUsedInIf() throws {
+    @Test func testWasmIfElseMinimizationWithResultButLabelUsedInIf() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2126,7 +2205,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Test that we don't remove an if-else if the label is used.
-    func testWasmIfElseMinimizationWithResultButLabelUsedInElse() throws {
+    @Test func testWasmIfElseMinimizationWithResultButLabelUsedInElse() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2162,7 +2241,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationWithResultPassingThroughInputInIf() throws {
+    @Test func testWasmIfElseMinimizationWithResultPassingThroughInputInIf() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2193,7 +2272,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmIfElseMinimizationWithResultPassingThroughInputInElse() throws {
+    @Test func testWasmIfElseMinimizationWithResultPassingThroughInputInElse() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2224,7 +2303,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmBlockMinimization() throws {
+    @Test func testWasmBlockMinimization() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2255,7 +2334,7 @@ class MinimizerTests: XCTestCase {
     }
 
     // Don't minimize the block if the label is used by an important instruction.
-    func testWasmBlockMinimizationLabelUsed() throws {
+    @Test func testWasmBlockMinimizationLabelUsed() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2290,7 +2369,7 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmLoopMinimization() throws {
+    @Test func testWasmLoopMinimization() throws {
         try runWasmMinimization { evaluator, b in
             b.buildWasmModule { wasmModule in
                 wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
@@ -2320,420 +2399,415 @@ class MinimizerTests: XCTestCase {
         }
     }
 
-    func testWasmDataflowMinimization() throws {
+    @Test func testWasmDataflowMinimization() throws {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        do {
-            let module = b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, label, args in
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let val = function.consti64(42)
-                    // We would expect this to be removed by the DataflowSimplifier
-                    let absVal = function.wasmi64UnOp(val, unOpKind: .Clz)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [absVal]
+            // Build input program to be minimized.
+            do {
+                let module = b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, label, args in
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let val = function.consti64(42)
+                        // We would expect this to be removed by the DataflowSimplifier
+                        let absVal = function.wasmi64UnOp(val, unOpKind: .Clz)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [absVal]
+                    }
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let valA = function.consti64(42)
+                        let valB = function.consti64(43)
+                        // We cannot remove this with the DataflowSimplifier as the input types don't match the output type.
+                        let testVal = function.wasmi64CompareOp(valA, valB, using: .Eq)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [testVal]
+                    }
                 }
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let valA = function.consti64(42)
-                    let valB = function.consti64(43)
-                    // We cannot remove this with the DataflowSimplifier as the input types don't match the output type.
-                    let testVal = function.wasmi64CompareOp(valA, valB, using: .Eq)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [testVal]
-                }
+
+                evaluator.nextInstructionIsImportant(in: b)
+                let exports = module.loadExports()
+                evaluator.nextInstructionIsImportant(in: b)
+                b.callMethod(module.getExportedMethod(at: 0), on: exports)
             }
+            let originalProgram = b.finalize()
 
-            evaluator.nextInstructionIsImportant(in: b)
-            let exports = module.loadExports()
-            evaluator.nextInstructionIsImportant(in: b)
-            b.callMethod(module.getExportedMethod(at: 0), on: exports)
-        }
-        let originalProgram = b.finalize()
+            // Build expected output program.
+            do {
+                let module = b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, label, args in
+                        return [function.consti64(42)]
+                    }
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let valA = function.consti64(42)
+                        let valB = function.consti64(43)
+                        let testVal = function.wasmi64CompareOp(valA, valB, using: .Eq)
+                        return [testVal]
+                    }
+                }
 
-        // Build expected output program.
-        do {
-            let module = b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, label, args in
-                    return [function.consti64(42)]
-                }
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let valA = function.consti64(42)
-                    let valB = function.consti64(43)
-                    let testVal = function.wasmi64CompareOp(valA, valB, using: .Eq)
-                    return [testVal]
-                }
+                let exports = module.loadExports()
+                b.callMethod(module.getExportedMethod(at: 0), on: exports)
             }
+            let expectedProgram = b.finalize()
 
-            let exports = module.loadExports()
-            b.callMethod(module.getExportedMethod(at: 0), on: exports)
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-
     }
 
-    func testWasmStartFunctionMinimization() throws {
+    @Test func testWasmStartFunctionMinimization() throws {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        do {
-            b.emit(BeginWasmModule())
-            let module = b.currentWasmModule
-            let startFunc = module.addWasmFunction(with: [] => []) { function, label, args in
-                return []
-            }
-            b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunc])
-            evaluator.nextInstructionIsImportant(in: b)
-            module.loadExports()
-        }
-        let originalProgram = b.finalize()
-
-        do {
-            b.emit(BeginWasmModule())
-            let module = b.currentWasmModule
-            b.emit(EndWasmModule(hasStartFunction: false))
-            module.loadExports()
-        }
-        let expectedProgram = b.finalize()
-
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-
-    }
-
-    func testWasmTypeGroupUnusedType() throws {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                return [
-                    b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
-                    b.wasmDefineArrayType(elementType: .wasmi64, mutability: true),
-                ]
-            }
-
-            // This unused type group should also get removed.
-            b.wasmDefineTypeGroup {
-                return [
-                    b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
-                ]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    // Not important array, this should make the second type unused and then being
-                    // removed from the type group.
-                    let _ = function.wasmArrayNewDefault(arrayType: typeGroup[1], size: constOne)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [element]
-                }
-            }
-        }
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    return [element]
-                }
-            }
-        }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-
-    }
-
-    func testWasmTypeGroupUnusedSubType() throws {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
-                let v1 = b.wasmDefineArrayType(
-                    elementType: .wasmi32, mutability: true, superTypeDef: v0)
-                return [v0, v1]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    // Not important array, this should make the sub type unused and then being
-                    // removed from the type group.
-                    let _ = function.wasmArrayNewDefault(arrayType: typeGroup[1], size: constOne)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [element]
-                }
-            }
-        }
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    return [element]
-                }
-            }
-        }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-
-    }
-
-    func testWasmTypeGroupUnusedSuperType() throws {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
-                let v1 = b.wasmDefineArrayType(
-                    elementType: .wasmi32, mutability: true, superTypeDef: v0)
-                return [v0, v1]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    // Not important array, this should make the super type unused and then being
-                    // removed from the type group, because the sub type is the only user of the
-                    // super type.
-                    let _ = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[1], size: constOne)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [element]
-                }
-            }
-        }
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
-                    let constOne = function.consti32(1)
-                    let constZero = function.consti32(0)
-                    let array = function.wasmArrayNewDefault(
-                        arrayType: typeGroup[0], size: constOne)
-                    let element = function.wasmArrayGet(array: array, index: constZero)
-                    return [element]
-                }
-            }
-        }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-
-    }
-
-    func testWasmTypeGroupTypeOnlyUsedInDependency() throws {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                // This signature is only used by the structType which is exposed from this type
-                // group and then used in the struct.new_default inside the wasm function. Still,
-                // due to this indirect usage it must still be kept alive.
-                let signature = b.wasmDefineSignatureType(
-                    signature: [.wasmi32] => [.wasmi32], indexTypes: [])
-                let structType = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmRef(.Index(), nullability: true), mutability: true)],
-                    indexTypes: [signature])
-                return [signature, structType]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) { function, label, args in
-                    evaluator.nextInstructionIsImportant(in: b)
-                    return [function.wasmStructNewDefault(structType: typeGroup[1])]
-                }
-            }
-        }
-        let originalProgram = b.finalize()
-
-        // Build expected output program.
-        do {
-            let typeGroup = b.wasmDefineTypeGroup {
-                let signature = b.wasmDefineSignatureType(
-                    signature: [.wasmi32] => [.wasmi32], indexTypes: [])
-                let structType = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmRef(.Index(), nullability: true), mutability: true)],
-                    indexTypes: [signature])
-                return [signature, structType]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) { function, label, args in
-                    return [function.wasmStructNewDefault(structType: typeGroup[1])]
-                }
-            }
-        }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
-    }
-
-    func testWasmTypeGroupNestedTypesAndTypeGroupDependencies() throws {
-        let evaluator = EvaluatorForMinimizationTests()
-        let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
-
-        // Build input program to be minimized.
-        do {
-            let typeGroupA = b.wasmDefineTypeGroup {
-                return [
-                    // Not used at all.
-                    b.wasmDefineArrayType(elementType: .wasmf64, mutability: true),
-                    // Used by typeGroupB in type that is used in important instruction.
-                    b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
-                    // Used by typeGroupB for a type that is not used in an important instruction.
-                    b.wasmDefineArrayType(elementType: .wasmi64, mutability: true),
-                ]
-            }
-            let typeGroupB = b.wasmDefineTypeGroup {
-                return [
-                    // Only used by an unimportant instruction.
-                    b.wasmDefineArrayType(
-                        elementType: .wasmRef(.Index(), nullability: false), mutability: false,
-                        indexType: typeGroupA[2]),
-                    // Needed for an important instruction, shall not be removed.
-                    b.wasmDefineArrayType(
-                        elementType: .wasmRef(.Index(), nullability: true), mutability: true,
-                        indexType: typeGroupA[1]),
-                ]
-            }
-
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
-                    let constOne = function.consti32(1)
-                    evaluator.nextInstructionIsImportant(in: b)
-                    function.wasmArrayNewDefault(arrayType: typeGroupB[1], size: constOne)
-                    function.wasmArrayNewDefault(arrayType: typeGroupB[0], size: constOne)
+            do {
+                b.emit(BeginWasmModule())
+                let module = b.currentWasmModule
+                let startFunc = module.addWasmFunction(with: [] => []) { function, label, args in
                     return []
                 }
+                b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunc])
+                evaluator.nextInstructionIsImportant(in: b)
+                module.loadExports()
             }
+            let originalProgram = b.finalize()
+
+            do {
+                b.emit(BeginWasmModule())
+                let module = b.currentWasmModule
+                b.emit(EndWasmModule(hasStartFunction: false))
+                module.loadExports()
+            }
+            let expectedProgram = b.finalize()
+
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        let originalProgram = b.finalize()
+    }
 
-        // Build expected output program.
-        do {
-            let typeGroupA = b.wasmDefineTypeGroup {
-                return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
-            }
-            let typeGroupB = b.wasmDefineTypeGroup {
-                return [
-                    b.wasmDefineArrayType(
-                        elementType: .wasmRef(.Index(), nullability: true), mutability: true,
-                        indexType: typeGroupA[0])
-                ]
-            }
+    @Test func testWasmTypeGroupUnusedType() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-            b.buildWasmModule { wasmModule in
-                wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
-                    let constOne = function.consti32(1)
-                    function.wasmArrayNewDefault(arrayType: typeGroupB[0], size: constOne)
-                    return []
+            // Build input program to be minimized.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    return [
+                        b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
+                        b.wasmDefineArrayType(elementType: .wasmi64, mutability: true),
+                    ]
+                }
+
+                // This unused type group should also get removed.
+                b.wasmDefineTypeGroup {
+                    return [
+                        b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
+                    ]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        // Not important array, this should make the second type unused and then being
+                        // removed from the type group.
+                        let _ = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[1], size: constOne)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [element]
+                    }
                 }
             }
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        return [element]
+                    }
+                }
+            }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
         }
-        let expectedProgram = b.finalize()
+    }
 
-        // Perform minimization and check that the two programs are equal.
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
+    @Test func testWasmTypeGroupUnusedSubType() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
+            // Build input program to be minimized.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
+                    let v1 = b.wasmDefineArrayType(
+                        elementType: .wasmi32, mutability: true, superTypeDef: v0)
+                    return [v0, v1]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        // Not important array, this should make the sub type unused and then being
+                        // removed from the type group.
+                        let _ = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[1], size: constOne)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [element]
+                    }
+                }
+            }
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        return [element]
+                    }
+                }
+            }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testWasmTypeGroupUnusedSuperType() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
+                    let v1 = b.wasmDefineArrayType(
+                        elementType: .wasmi32, mutability: true, superTypeDef: v0)
+                    return [v0, v1]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        // Not important array, this should make the super type unused and then being
+                        // removed from the type group, because the sub type is the only user of the
+                        // super type.
+                        let _ = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[1], size: constOne)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [element]
+                    }
+                }
+            }
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, label, args in
+                        let constOne = function.consti32(1)
+                        let constZero = function.consti32(0)
+                        let array = function.wasmArrayNewDefault(
+                            arrayType: typeGroup[0], size: constOne)
+                        let element = function.wasmArrayGet(array: array, index: constZero)
+                        return [element]
+                    }
+                }
+            }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testWasmTypeGroupTypeOnlyUsedInDependency() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    // This signature is only used by the structType which is exposed from this type
+                    // group and then used in the struct.new_default inside the wasm function. Still,
+                    // due to this indirect usage it must still be kept alive.
+                    let signature = b.wasmDefineSignatureType(
+                        signature: [.wasmi32] => [.wasmi32], indexTypes: [])
+                    let structType = b.wasmDefineStructType(
+                        fields: [
+                            .init(type: .wasmRef(.Index(), nullability: true), mutability: true)
+                        ],
+                        indexTypes: [signature])
+                    return [signature, structType]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) {
+                        function, label, args in
+                        evaluator.nextInstructionIsImportant(in: b)
+                        return [function.wasmStructNewDefault(structType: typeGroup[1])]
+                    }
+                }
+            }
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            do {
+                let typeGroup = b.wasmDefineTypeGroup {
+                    let signature = b.wasmDefineSignatureType(
+                        signature: [.wasmi32] => [.wasmi32], indexTypes: [])
+                    let structType = b.wasmDefineStructType(
+                        fields: [
+                            .init(type: .wasmRef(.Index(), nullability: true), mutability: true)
+                        ],
+                        indexTypes: [signature])
+                    return [signature, structType]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmAnyRef()]) {
+                        function, label, args in
+                        return [function.wasmStructNewDefault(structType: typeGroup[1])]
+                    }
+                }
+            }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testWasmTypeGroupNestedTypesAndTypeGroupDependencies() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            do {
+                let typeGroupA = b.wasmDefineTypeGroup {
+                    return [
+                        // Not used at all.
+                        b.wasmDefineArrayType(elementType: .wasmf64, mutability: true),
+                        // Used by typeGroupB in type that is used in important instruction.
+                        b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
+                        // Used by typeGroupB for a type that is not used in an important instruction.
+                        b.wasmDefineArrayType(elementType: .wasmi64, mutability: true),
+                    ]
+                }
+                let typeGroupB = b.wasmDefineTypeGroup {
+                    return [
+                        // Only used by an unimportant instruction.
+                        b.wasmDefineArrayType(
+                            elementType: .wasmRef(.Index(), nullability: false), mutability: false,
+                            indexType: typeGroupA[2]),
+                        // Needed for an important instruction, shall not be removed.
+                        b.wasmDefineArrayType(
+                            elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                            indexType: typeGroupA[1]),
+                    ]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
+                        let constOne = function.consti32(1)
+                        evaluator.nextInstructionIsImportant(in: b)
+                        function.wasmArrayNewDefault(arrayType: typeGroupB[1], size: constOne)
+                        function.wasmArrayNewDefault(arrayType: typeGroupB[0], size: constOne)
+                        return []
+                    }
+                }
+            }
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            do {
+                let typeGroupA = b.wasmDefineTypeGroup {
+                    return [b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)]
+                }
+                let typeGroupB = b.wasmDefineTypeGroup {
+                    return [
+                        b.wasmDefineArrayType(
+                            elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                            indexType: typeGroupA[0])
+                    ]
+                }
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
+                        let constOne = function.consti32(1)
+                        function.wasmArrayNewDefault(arrayType: typeGroupB[0], size: constOne)
+                        return []
+                    }
+                }
+            }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 
     // A mock evaluator that can be configured to treat selected instructions as important, causing them to not be minimized away.
@@ -2923,111 +2997,112 @@ class MinimizerTests: XCTestCase {
             performPostprocessing: performPostprocessing)
     }
 
-    func testWasmTypeGroupMinimization() {
+    @Test func testWasmTypeGroupMinimization() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        evaluator.nextInstructionIsImportant(in: b)
-        b.wasmDefineTypeGroup {
-            let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
-            return [v0]
+            // Build input program to be minimized.
+            evaluator.nextInstructionIsImportant(in: b)
+            b.wasmDefineTypeGroup {
+                let v0 = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
+                return [v0]
+            }
+            let originalProgram = b.finalize()
+
+            // Build expected output program: an empty type group.
+            b.reset()
+            b.wasmDefineTypeGroup { [] }
+            let expectedProgram = b.finalize()
+
+            // Perform minimization with only the WasmTypeGroupReducer.
+            let reducer = WasmTypeGroupReducer()
+            evaluator.setOriginalProgram(originalProgram)
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+            reducer.reduce(with: helper)
+
+            let actualProgram = Program(code: helper.code)
+
+            #expect(expectedProgram == actualProgram)
         }
-        let originalProgram = b.finalize()
-
-        // Build expected output program: an empty type group.
-        b.reset()
-        b.wasmDefineTypeGroup { [] }
-        let expectedProgram = b.finalize()
-
-        // Perform minimization with only the WasmTypeGroupReducer.
-        let reducer = WasmTypeGroupReducer()
-        evaluator.setOriginalProgram(originalProgram)
-        let helper = MinimizationHelper(
-            for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
-            runningOnFuzzerQueue: true)
-        reducer.reduce(with: helper)
-
-        let actualProgram = Program(code: helper.code)
-
-        XCTAssertEqual(
-            expectedProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
     }
 
     // Removing WasmResolveForwardReference is done by another reducer. The WasmTypeGroupReducer
     // should not change the semantics when reducing the types exposed by the WasmEndTypeGroup.
-    func testWasmTypeGroupReducerDoesntRemoveForwardReferenceResolving() {
+    @Test func testWasmTypeGroupReducerDoesntRemoveForwardReferenceResolving() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        // Build input program to be minimized.
-        b.wasmDefineTypeGroup {
-            let fwd = b.wasmDefineForwardOrSelfReference()
-            evaluator.nextInstructionIsImportant(in: b)
-            let arrayType = b.wasmDefineArrayType(
-                elementType: .wasmRef(.Index(), nullability: true), mutability: true, indexType: fwd
-            )
-            let structType = b.wasmDefineStructType(
-                fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [])
-            b.wasmResolveForwardReference(fwd, to: structType)
-            return [structType, arrayType]
+            // Build input program to be minimized.
+            b.wasmDefineTypeGroup {
+                let fwd = b.wasmDefineForwardOrSelfReference()
+                evaluator.nextInstructionIsImportant(in: b)
+                let arrayType = b.wasmDefineArrayType(
+                    elementType: .wasmRef(.Index(), nullability: true), mutability: true,
+                    indexType: fwd
+                )
+                let structType = b.wasmDefineStructType(
+                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [])
+                b.wasmResolveForwardReference(fwd, to: structType)
+                return [structType, arrayType]
+            }
+            let originalProgram = b.finalize()
+
+            // Perform minimization and check that the two programs are equal.
+            let reducer = WasmTypeGroupReducer()
+            evaluator.setOriginalProgram(originalProgram)
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+            reducer.reduce(with: helper)
+            let actualProgram = Program(code: helper.code)
+
+            #expect(originalProgram == actualProgram)
         }
-        let originalProgram = b.finalize()
-
-        // Perform minimization and check that the two programs are equal.
-        let reducer = WasmTypeGroupReducer()
-        evaluator.setOriginalProgram(originalProgram)
-        let helper = MinimizationHelper(
-            for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
-            runningOnFuzzerQueue: true)
-        reducer.reduce(with: helper)
-        let actualProgram = Program(code: helper.code)
-
-        XCTAssertEqual(
-            originalProgram, actualProgram,
-            "Expected:\n\(FuzzILLifter().lift(originalProgram.code))\n\n"
-                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
     }
 
-    func testWasmArrayNewFixedReduction() {
+    @Test func testWasmArrayNewFixedReduction() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)
-        let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
 
-        evaluator.operationIsImportant(WasmArrayGet.self)
+            evaluator.operationIsImportant(WasmArrayGet.self)
 
-        let arrayDef = b.wasmDefineTypeGroup {
-            return [b.wasmDefineArrayType(elementType: ILType.wasmi32, mutability: true)]
-        }[0]
-        b.buildWasmModule { module in
-            module.addWasmFunction(with: [] => [.wasmi32]) { fn, label, params in
-                let i1 = fn.consti32(1)
-                let i2 = fn.consti32(2)
-                let i3 = fn.consti32(3)
+            let arrayDef = b.wasmDefineTypeGroup {
+                return [b.wasmDefineArrayType(elementType: ILType.wasmi32, mutability: true)]
+            }[0]
+            b.buildWasmModule { module in
+                module.addWasmFunction(with: [] => [.wasmi32]) { fn, label, params in
+                    let i1 = fn.consti32(1)
+                    let i2 = fn.consti32(2)
+                    let i3 = fn.consti32(3)
 
-                let array = fn.wasmArrayNewFixed(arrayType: arrayDef, elements: [i1, i2, i3])
-                return [fn.wasmArrayGet(array: array, index: fn.consti32(0))]
+                    let array = fn.wasmArrayNewFixed(arrayType: arrayDef, elements: [i1, i2, i3])
+                    return [fn.wasmArrayGet(array: array, index: fn.consti32(0))]
+                }
             }
-        }
 
-        let originalProgram = b.finalize()
+            let originalProgram = b.finalize()
 
-        let expectedArrayDef = b.wasmDefineTypeGroup {
-            return [b.wasmDefineArrayType(elementType: ILType.wasmi32, mutability: true)]
-        }[0]
-        b.buildWasmModule { module in
-            module.addWasmFunction(with: [] => [.wasmi32]) { fn, label, params in
-                let array = fn.wasmArrayNewFixed(arrayType: expectedArrayDef, elements: [])
-                return [fn.wasmArrayGet(array: array, index: fn.consti32(0))]
+            let expectedArrayDef = b.wasmDefineTypeGroup {
+                return [b.wasmDefineArrayType(elementType: ILType.wasmi32, mutability: true)]
+            }[0]
+            b.buildWasmModule { module in
+                module.addWasmFunction(with: [] => [.wasmi32]) { fn, label, params in
+                    let array = fn.wasmArrayNewFixed(arrayType: expectedArrayDef, elements: [])
+                    return [fn.wasmArrayGet(array: array, index: fn.consti32(0))]
+                }
             }
-        }
-        let expectedProgram = b.finalize()
+            let expectedProgram = b.finalize()
 
-        let actualProgram = minimize(originalProgram, with: fuzzer)
-        XCTAssertEqual(expectedProgram, actualProgram)
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(expectedProgram == actualProgram)
+        }
     }
 }

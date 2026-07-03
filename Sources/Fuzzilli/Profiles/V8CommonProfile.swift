@@ -1119,7 +1119,6 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         "--omit-quit",
         "--allow-natives-syntax",
         "--fuzzing",
-        "--future",
         "--harmony",
         "--experimental-fuzzing",
         "--js-staging",
@@ -1135,6 +1134,12 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
     }
 
     guard randomize else { return args }
+
+    // Prioritize fuzzing "future" logic as it is more likely to have bugs but keep some basic
+    // coverage for the shipping non-future logic.
+    if probability(0.8) {
+        args.append("--future")
+    }
 
     //
     // Existing features that should sometimes be disabled.

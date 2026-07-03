@@ -2049,7 +2049,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             }
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
-            let (targetRefType, typeDef) = function.randomWasmReferenceType(
+            let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: topType)
             var blockOutputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [targetRefType]
             let signatureDef = b.wasmDefineAdHocSignatureType(
@@ -2089,7 +2089,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let lastParamType = labelType.parameters.last!
 
             let sourceVar = function.findOrGenerateWasmVar(ofType: lastParamType)
-            let (targetRefType, typeDef) = function.randomWasmReferenceType(
+            let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: lastParamType)
 
             let args = labelType.parameters.dropLast().map(function.findOrGenerateWasmVar)
@@ -2102,7 +2102,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             function.wasmBuildBlockWithResults(with: [] => blockParamTypes, args: []) {
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
-                let (targetRefType, typeDef) = function.randomWasmReferenceType(
+                let (targetRefType, typeDef) = b.randomWasmReferenceType(
                     withAbstractSuperType: topType)
                 let args = blockParamTypes.map(function.findOrGenerateWasmVar)
 

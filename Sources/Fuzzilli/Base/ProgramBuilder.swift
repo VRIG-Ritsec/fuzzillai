@@ -5745,45 +5745,6 @@ public class ProgramBuilder {
             fatalError("Could not find or generate wasm variable of type \(type)")
         }
 
-        public func randomWasmReferenceType(withAbstractSuperType type: ILType) -> (
-            type: ILType, typeDef: Variable?
-        ) {
-            assert(type.wasmReferenceType?.isAbstract() == true)
-
-            let nullability = type.wasmReferenceType!.nullability
-            assert(nullability == true)
-            // TODO(bettscheider): Support generating non-nullable reference types.
-            // If the super type is nullable, the sub type may also be non-nullable.
-            // We already have some support for generating non-nullable values, but at this point it's
-            // not complete. So when we want to allow generating non-nullable reference types here, we
-            // need to make sure that values can be generated for them.
-
-            if probability(0.5) {
-                let typeDef = b.findVariable { v in
-                    let isAdHocSignature =
-                        (b.type(of: v).wasmTypeDefinition?.description
-                        as? WasmSignatureTypeDescription)?.isAdHoc == true
-                    let isTypeDefinition = b.type(of: v).Is(.wasmTypeDef())
-                    guard isTypeDefinition && !isAdHocSignature else {
-                        return false
-                    }
-                    let desc = b.type(of: v).wasmTypeDefinition!.description!
-                    let indexType = ILType.wasmIndexRef(desc, nullability: nullability)
-                    return type.subsumes(indexType)
-                }
-
-                if let typeDef {
-                    return (.wasmRef(.Index(), nullability: nullability), typeDef)
-                }
-            }
-
-            let candidates = WasmAbstractHeapType.allCases
-                .map { ILType.wasmRef($0, shared: false, nullability: nullability) }
-                .filter { type.subsumes($0) }
-
-            return (candidates.randomElement() ?? type, nil)
-        }
-
         public func wasmUnreachable() {
             b.emit(WasmUnreachable())
         }
@@ -6645,10 +6606,65 @@ public class ProgramBuilder {
         }
     }
 
+    public func randomWasmReferenceType(withAbstractSuperType type: ILType) -> (
+        type: ILType, typeDef: Variable?
+    ) {
+        assert(type.wasmReferenceType?.isAbstract() == true)
+
+        let nullability = type.wasmReferenceType!.nullability
+        assert(nullability == true)
+        // TODO(bettscheider): Support generating non-nullable reference types.
+        // If the super type is nullable, the sub type may also be non-nullable.
+        // We already have some support for generating non-nullable values, but at this point it's
+        // not complete. So when we want to allow generating non-nullable reference types here, we
+        // need to make sure that values can be generated for them.
+
+        if probability(0.5) {
+            let typeDef = self.findVariable { v in
+                let isAdHocSignature =
+                    (self.type(of: v).wasmTypeDefinition?.description
+                    as? WasmSignatureTypeDescription)?.isAdHoc == true
+                let isTypeDefinition = self.type(of: v).Is(.wasmTypeDef())
+                guard isTypeDefinition && !isAdHocSignature else {
+                    return false
+                }
+                let desc = self.type(of: v).wasmTypeDefinition!.description!
+                let indexType = ILType.wasmIndexRef(desc, nullability: nullability)
+                return type.subsumes(indexType)
+            }
+
+            if let typeDef {
+                return (.wasmRef(.Index(), nullability: nullability), typeDef)
+            }
+        }
+
+        let candidates = WasmAbstractHeapType.allCases
+            .map { ILType.wasmRef($0, shared: false, nullability: nullability) }
+            .filter { type.subsumes($0) }
+
+        return (candidates.randomElement() ?? type, nil)
+    }
+
     @discardableResult
     public func generateSubtype(for superType: Variable, isFinal: Bool = false) -> Variable {
         guard let superTypeDesc = type(of: superType).wasmTypeDefinition?.description else {
             fatalError("superType is not a WasmTypeDefinition")
+        }
+
+        let refineAbstractType = {
+            (refType: WasmReferenceType, mutability: Bool, newNullability: Bool) -> (
+                ILType, Variable?
+            ) in
+            if !mutability && refType.nullability && newNullability {
+                let (newType, typeDef) = self.randomWasmReferenceType(
+                    withAbstractSuperType: .wasmRef(refType.kind, nullability: true))
+                return (
+                    .wasmRef(newType.wasmReferenceType!.kind, nullability: newNullability), typeDef
+                )
+            } else {
+                // randomWasmReferenceType() currently only supports generating subtypes for nullable reference types.
+                return (.wasmRef(refType.kind, nullability: newNullability), nil)
+            }
         }
 
         switch superTypeDesc {
@@ -6682,8 +6698,10 @@ public class ProgramBuilder {
                         })!
                     }
                 case .Abstract:
-                    // TODO(bettscheider): Support generating an index type as a subtype for abstract reference types.
-                    elementType = .wasmRef(refType.kind, nullability: newNullability)
+                    let (newType, typeDef) = refineAbstractType(
+                        refType, arrayDesc.mutability, newNullability)
+                    elementType = newType
+                    indexType = typeDef
                 }
             }
 
@@ -6701,25 +6719,36 @@ public class ProgramBuilder {
             for field in structDesc.fields {
                 var fieldType = field.type
 
-                if let refType = fieldType.wasmReferenceType, case .Index = refType.kind {
-                    var indexType = self.getWasmTypeDef(for: fieldType)
-                    // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
-                    // This is not yet supported by WasmStructNewGenerator.
-                    assert(refType.nullability)
-                    fieldType = .wasmRef(.Index(), nullability: refType.nullability)
+                if let refType = fieldType.wasmReferenceType {
+                    switch refType.kind {
+                    case .Index:
+                        var indexType = self.getWasmTypeDef(for: fieldType)
+                        // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
+                        // This is not yet supported by WasmStructNewGenerator.
+                        assert(refType.nullability)
+                        fieldType = .wasmRef(.Index(), nullability: refType.nullability)
 
-                    let indexTypeDesc = type(of: indexType).wasmTypeDefinition!.description!
-                    if !field.mutability,
-                        !indexTypeDesc.hasUnresolvedSelfReferences(),
-                        !indexTypeDesc.isFinal
-                    {
-                        indexType = self.findVariable(satisfying: {
-                            guard let desc = self.type(of: $0).wasmTypeDefinition?.description
-                            else { return false }
-                            return indexTypeDesc.subsumes(desc)
-                        })!
+                        let indexTypeDesc = type(of: indexType).wasmTypeDefinition!.description!
+                        if !field.mutability,
+                            !indexTypeDesc.hasUnresolvedSelfReferences(),
+                            !indexTypeDesc.isFinal
+                        {
+                            indexType = self.findVariable(satisfying: {
+                                guard let desc = self.type(of: $0).wasmTypeDefinition?.description
+                                else { return false }
+                                return indexTypeDesc.subsumes(desc)
+                            })!
+                        }
+                        indexTypes.append(indexType)
+                    case .Abstract:
+                        let newNullability = refType.nullability
+                        let (newType, typeDef) = refineAbstractType(
+                            refType, field.mutability, newNullability)
+                        fieldType = newType
+                        if let typeDef {
+                            indexTypes.append(typeDef)
+                        }
                     }
-                    indexTypes.append(indexType)
                 }
 
                 cleanFields.append(
@@ -6747,32 +6776,55 @@ public class ProgramBuilder {
 
             let processTypes = { (types: [ILType], isCovariant: Bool) -> [ILType] in
                 return types.map { type in
-                    if let refType = type.wasmReferenceType, case .Index = refType.kind {
-                        var indexType = self.getWasmTypeDef(for: type)
+                    if let refType = type.wasmReferenceType {
+                        switch refType.kind {
+                        case .Index:
+                            var indexType = self.getWasmTypeDef(for: type)
 
-                        let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!
-                            .description!
-                        if !indexTypeDesc.hasUnresolvedSelfReferences() && !indexTypeDesc.isFinal {
+                            let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!
+                                .description!
+                            if !indexTypeDesc.hasUnresolvedSelfReferences()
+                                && !indexTypeDesc.isFinal
+                            {
+                                if isCovariant {
+                                    indexType = self.findVariable(satisfying: {
+                                        guard
+                                            let desc = self.type(of: $0).wasmTypeDefinition?
+                                                .description
+                                        else { return false }
+                                        return indexTypeDesc.subsumes(desc)
+                                    })!
+                                } else {
+                                    indexType = self.findVariable(satisfying: {
+                                        guard
+                                            let desc = self.type(of: $0).wasmTypeDefinition?
+                                                .description
+                                        else { return false }
+                                        return desc.subsumes(indexTypeDesc)
+                                    })!
+                                }
+                            }
+
+                            indexTypes.append(indexType)
+                            // TODO(bettscheider): Possibly refine nullability.
+                            return .wasmRef(.Index(), nullability: refType.nullability)
+                        case .Abstract(let info):
                             if isCovariant {
-                                indexType = self.findVariable(satisfying: {
-                                    guard
-                                        let desc = self.type(of: $0).wasmTypeDefinition?.description
-                                    else { return false }
-                                    return indexTypeDesc.subsumes(desc)
-                                })!
+                                let newNullability = refType.nullability
+                                let (newType, typeDef) = refineAbstractType(
+                                    refType, false, newNullability)
+                                if let typeDef {
+                                    indexTypes.append(typeDef)
+                                }
+                                return newType
                             } else {
-                                indexType = self.findVariable(satisfying: {
-                                    guard
-                                        let desc = self.type(of: $0).wasmTypeDefinition?.description
-                                    else { return false }
-                                    return desc.subsumes(indexTypeDesc)
-                                })!
+                                let candidates = WasmAbstractHeapType.allCases
+                                    .filter { $0.subsumes(info.heapType) }
+                                let newKind = candidates.randomElement()!
+                                return .wasmRef(
+                                    newKind, shared: false, nullability: refType.nullability)
                             }
                         }
-
-                        indexTypes.append(indexType)
-                        // TODO(bettscheider): Possibly refine nullability.
-                        return .wasmRef(.Index(), nullability: refType.nullability)
                     } else {
                         return type
                     }

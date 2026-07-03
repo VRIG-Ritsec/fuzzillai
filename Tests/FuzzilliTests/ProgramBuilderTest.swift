@@ -3321,8 +3321,18 @@ struct ProgramBuilderTests {
                     elementType: ILType.wasmRef(.Index(), nullability: true), mutability: false,
                     indexType: baseStruct)
 
+                let abstractBaseArray = b.wasmDefineArrayType(
+                    elementType: ILType.wasmRef(.WasmAny, nullability: true), mutability: false)
+
                 let subArrays = (0..<20).map { _ in b.generateSubtype(for: baseArray) }
+                let subAbstractArrays = (0..<20).map { _ in
+                    b.generateSubtype(for: abstractBaseArray)
+                }
+
                 let subArraysTypeDescriptions = subArrays.map {
+                    b.type(of: $0).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+                }
+                let subAbstractArraysTypeDescriptions = subAbstractArrays.map {
                     b.type(of: $0).wasmTypeDefinition!.description as! WasmArrayTypeDescription
                 }
 
@@ -3331,6 +3341,12 @@ struct ProgramBuilderTests {
                         $0.concreteHeapSupertype
                             == b.type(of: baseArray).wasmTypeDefinition?.description
                     })
+                #expect(
+                    subAbstractArraysTypeDescriptions.allSatisfy {
+                        $0.concreteHeapSupertype
+                            == b.type(of: abstractBaseArray).wasmTypeDefinition?.description
+                    })
+
                 #expect(subArraysTypeDescriptions.allSatisfy { !$0.mutability })
                 #expect(
                     subArraysTypeDescriptions.contains {
@@ -3338,6 +3354,16 @@ struct ProgramBuilderTests {
                     })
                 #expect(
                     subArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.nullability == false
+                    })
+
+                #expect(subAbstractArraysTypeDescriptions.allSatisfy { !$0.mutability })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.nullability == true
+                    })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
                         $0.elementType.wasmReferenceType?.nullability == false
                     })
 
@@ -3359,7 +3385,17 @@ struct ProgramBuilderTests {
                         return false
                     })
 
-                return [baseStruct, subStruct, baseArray] + subArrays
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subAbstractArraysTypeDescriptions.contains {
+                        $0.elementType.wasmReferenceType?.isAbstract() == false
+                    })
+
+                return [baseStruct, subStruct, baseArray, abstractBaseArray] + subArrays
+                    + subAbstractArrays
             }
         }
     }
@@ -3377,7 +3413,8 @@ struct ProgramBuilderTests {
                 let subInnerStruct = b.generateSubtype(for: innerStruct)
                 let outerStruct = b.wasmDefineStructType(
                     fields: [
-                        .init(type: ILType.wasmRef(.Index(), nullability: true), mutability: false)
+                        .init(type: ILType.wasmRef(.Index(), nullability: true), mutability: false),
+                        .init(type: ILType.wasmRef(.WasmAny, nullability: true), mutability: false),
                     ],
                     indexTypes: [innerStruct])
 
@@ -3393,8 +3430,8 @@ struct ProgramBuilderTests {
                     })
 
                 // Width subtyping
-                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count == 1 })
-                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count > 1 })
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count == 2 })
+                #expect(subOuterStructsTypeDescriptions.contains { $0.fields.count > 2 })
 
                 // Depth subtyping
                 let innerStructDesc = b.type(of: innerStruct).wasmTypeDefinition!.description!
@@ -3415,6 +3452,15 @@ struct ProgramBuilderTests {
                         return false
                     })
 
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        $0.fields[1].type.wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subOuterStructsTypeDescriptions.contains {
+                        $0.fields[1].type.wasmReferenceType?.isAbstract() == false
+                    })
+
                 return [innerStruct, subInnerStruct, outerStruct] + subOuterStructs
             }
         }
@@ -3432,8 +3478,12 @@ struct ProgramBuilderTests {
                     fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
                 let subStructType = b.generateSubtype(for: structType)
                 let baseSignatureType = b.wasmDefineSignatureType(
-                    signature: [ILType.wasmRef(.Index(), nullability: true)] => [
-                        ILType.wasmRef(.Index(), nullability: true)
+                    signature: [
+                        ILType.wasmRef(.Index(), nullability: true),
+                        ILType.wasmRef(.WasmEq, nullability: true),
+                    ] => [
+                        ILType.wasmRef(.Index(), nullability: true),
+                        ILType.wasmRef(.WasmAny, nullability: true),
                     ],
                     indexTypes: [subStructType, structType])
 
@@ -3474,6 +3524,16 @@ struct ProgramBuilderTests {
                         return false
                     })
 
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.parameterTypes[1] == ILType.wasmRef(.WasmEq, nullability: true)
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.parameterTypes[1]
+                            == ILType.wasmRef(.WasmAny, nullability: true)
+                    })
+
                 // Outputs are covariant
                 #expect(
                     subSignatureTypeDescriptions.contains {
@@ -3492,6 +3552,15 @@ struct ProgramBuilderTests {
                             return target.get() == structTypeDescription
                         }
                         return false
+                    })
+
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.outputTypes[1].wasmReferenceType?.isAbstract() == true
+                    })
+                #expect(
+                    subSignatureTypeDescriptions.contains {
+                        $0.signature.outputTypes[1].wasmReferenceType?.isAbstract() == false
                     })
 
                 return [structType, subStructType, baseSignatureType] + subSignatureTypes

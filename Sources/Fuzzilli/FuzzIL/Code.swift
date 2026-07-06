@@ -209,7 +209,7 @@ public struct Code: Collection {
     }
 
     /// Checks if this code is statically valid, i.e. can be used as a Program.
-    public func check() throws {
+    public func check(checkVisibility: Bool = true) throws {
         var definedVariables = VariableMap<Int>()
         var contextAnalyzer = ContextAnalyzer(isBundle: isBundle)
         var scopeCounter = 0
@@ -247,9 +247,15 @@ public struct Code: Collection {
                 guard let definingScope = definedVariables[input] else {
                     throw FuzzilliError.codeVerificationError("variable \(input) was never defined")
                 }
-                guard activeBlocks.contains(where: { $0.scopeId == definingScope }) else {
-                    throw FuzzilliError.codeVerificationError(
-                        "variable \(input) is not visible anymore at instruction \(idx): \(instr)")
+                if !activeBlocks.contains(where: { $0.scopeId == definingScope }) {
+                    let message =
+                        "variable \(input) is not visible anymore at instruction \(idx): \(instr)"
+                    if checkVisibility {
+                        throw FuzzilliError.codeVerificationError(message)
+                    } else {
+                        // TODO(mliedtke, https://crbug.com/508306801): Always throw once the bug is fixed.
+                        print("FuzzIL verification warning: \(message)")
+                    }
                 }
             }
 

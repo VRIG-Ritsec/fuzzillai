@@ -31,7 +31,7 @@ public final class Program: CustomStringConvertible {
 
     public func checkOrDie(onFailure message: String) {
         do {
-            try code.check()
+            try code.check(checkVisibility: false)
         } catch {
             fatalError("\(message): \(error)\nFuzzIL program:\n\(description)")
         }

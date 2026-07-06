@@ -1618,10 +1618,12 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let parameters = args.map(b.type)
 
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
-                b.runtimeData.push("blockSignature", signature)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
+                b.runtimeData.push("blockSignature", signatureDef)
                 b.emit(
-                    WasmBeginBlock(parameterCount: parameters.count), withInputs: [signature] + args
+                    WasmBeginBlock(parameterCount: parameters.count),
+                    withInputs: [signatureDef] + args
                 )
             },
             GeneratorStub("WasmEndBlockGenerator", inContext: .single(.wasmFunction)) { b in
@@ -1681,16 +1683,16 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let randomArgTypes = randomArgs.map { b.type(of: $0) }
                 let args = [function.consti32(0)] + randomArgs
                 let parameters = args.map(b.type)
-                // TODO(mliedtke): Also allow index types in the output types.
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
                 let loopBegin = b.emit(
                     WasmBeginLoop(parameterCount: parameters.count),
-                    withInputs: [signature] + args)
+                    withInputs: [signatureDef] + args)
                 let loopCounter = loopBegin.innerOutput(1)
                 assert(b.type(of: loopCounter).Is(.wasmi32))
                 b.runtimeData.push("loopCounter", loopCounter)
-                b.runtimeData.push("loopSignature", signature)
+                b.runtimeData.push("loopSignature", signatureDef)
                 b.runtimeData.push("loopLabel", loopBegin.innerOutput(0))
             },
             GeneratorStub(
@@ -1813,13 +1815,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 let args = b.randomWasmBlockArguments(upTo: 5)
                 let parameters = args.map(b.type)
                 let outputTypes = b.randomWasmBlockOutputTypes(upTo: 5)
-                let signature = b.wasmDefineAdHocSignatureType(signature: parameters => outputTypes)
-                b.runtimeData.push("ifSignature", signature)
+                let signatureDef = b.wasmDefineAdHocSignatureType(
+                    signature: parameters => outputTypes)
+                b.runtimeData.push("ifSignature", signatureDef)
                 b.emit(
                     WasmBeginIf(
                         parameterCount: parameters.count,
                         hint: b.randomWasmBranchHint()),
-                    withInputs: [signature] + args + [condition])
+                    withInputs: [signatureDef] + args + [condition])
             },
             GeneratorStub(
                 "WasmBeginElseGenerator",
@@ -2051,17 +2054,15 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
             let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: topType)
-            var blockOutputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [targetRefType]
-            let signatureDef = b.wasmDefineAdHocSignatureType(
-                signature: [] => blockOutputTypes,
-                indexTypes: typeDef != nil ? [typeDef!] : nil)
 
-            let signature = b.type(of: signatureDef).wasmFunctionSignatureDefSignature
+            let linkedTargetRefType = b.wasmLinkIndexTypes(
+                [targetRefType], with: typeDef != nil ? [typeDef!] : [])[0]
+            let allOutputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [linkedTargetRefType]
 
-            function.wasmBuildBlockWithResults(with: signatureDef, args: []) {
+            function.wasmBuildBlockWithResults(with: [] => allOutputTypes, args: []) {
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
-                let args = signature.outputTypes.map(function.findOrGenerateWasmVar)
+                let args = allOutputTypes.map(function.findOrGenerateWasmVar)
 
                 function.wasmBranchOnCast(
                     sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
@@ -2097,14 +2098,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 sourceVar, targetRefType: targetRefType, to: label, args: args, typeDef: typeDef)
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
-            let blockParamTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [topType]
+            let outputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [topType]
 
-            function.wasmBuildBlockWithResults(with: [] => blockParamTypes, args: []) {
+            function.wasmBuildBlockWithResults(with: [] => outputTypes, args: []) {
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
                 let (targetRefType, typeDef) = b.randomWasmReferenceType(
                     withAbstractSuperType: topType)
-                let args = blockParamTypes.map(function.findOrGenerateWasmVar)
+                let args = outputTypes.map(function.findOrGenerateWasmVar)
 
                 function.wasmBranchOnCastFail(
                     sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
@@ -2121,14 +2122,12 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         inputs: .required(.wasmi32)
     ) { b, value in
         let function = b.currentWasmModule.currentWasmFunction
-        // Choose parameter types for the br_table. If we can find an existing label, just use that
-        // label types as it allows use to reuse existing (and therefore more interesting) blocks.
-        let parameterTypes =
-            if let label = b.randomVariable(ofType: .anyWasmLabel) {
-                b.type(of: label).wasmLabelType!.parameters
-            } else {
-                b.randomWasmBlockOutputTypes(upTo: 3)
-            }
+        let parameterTypes: [ILType]
+        if let label = b.randomVariable(ofType: .anyWasmLabel) {
+            parameterTypes = b.type(of: label).wasmLabelType!.parameters
+        } else {
+            parameterTypes = b.randomWasmBlockOutputTypes(upTo: 3)
+        }
         let extraBlockCount = Int.random(in: 1...5)
         let valueCount = Int.random(in: 0...20)
         let signature = [] => parameterTypes
@@ -2209,6 +2208,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 tryArgs += zip(tags, labels).map { tag, label in
                     tag == nil ? [label] : [tag!, label]
                 }.joined()
+
                 function.wasmBuildTryTable(
                     with: tryParameters => tryOutputTypes, args: tryArgs,
                     catches: catches

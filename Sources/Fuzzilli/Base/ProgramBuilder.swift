@@ -6429,11 +6429,32 @@ public class ProgramBuilder {
         // to generate a sequence that produces such a non-nullable value which might be difficult
         // for some types as of now.
         // TODO(pawkra): enable shared types.
-        (0..<Int.random(in: 0...n)).map { _ in
-            chooseUniform(
-                from: ILType.wasmNonRefValueTypes + [.wasmRefI31()]
-                    + WasmAbstractHeapType.allCases.map { .wasmRef($0, nullability: true) })
+        var indexTypes: [Variable] = []
+        let types = (0..<Int.random(in: 0...n)).map { _ in
+            if let elementType = randomWasmTypeDef(), probability(0.25) {
+                indexTypes.append(elementType)
+                return ILType.wasmRef(.Index(), nullability: true)
+            } else {
+                return chooseUniform(
+                    from: ILType.wasmNonRefValueTypes + [.wasmRefI31()]
+                        + WasmAbstractHeapType.allCases.map { .wasmRef($0, nullability: true) })
+            }
         }
+        return wasmLinkIndexTypes(types, with: indexTypes)
+    }
+
+    public func wasmLinkIndexTypes(_ types: [ILType], with indexTypes: [Variable]) -> [ILType] {
+        var it = indexTypes.makeIterator()
+        let result: [ILType] = types.map { type in
+            if type.Is(.anyIndexRef) && type.wasmReferenceType?.kind == .Index() {
+                let typeDef = it.next()!
+                let desc = self.type(of: typeDef).wasmTypeDefinition!.description!
+                return .wasmIndexRef(desc, nullability: type.wasmReferenceType!.nullability)
+            }
+            return type
+        }
+        assert(it.next() == nil)
+        return result
     }
 
     public func randomWasmBlockArguments(upTo n: Int) -> [Variable] {

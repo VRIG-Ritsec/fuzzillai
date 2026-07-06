@@ -495,7 +495,7 @@ struct JavaScriptRuntimeAssistedMutatorLifting {
               [OP_CALL_FUNCTION]: (inputs, currentThis) => { let f = shift(inputs); return apply(f, currentThis, inputs); },
               [OP_CONSTRUCT]: (inputs) => { let c = shift(inputs); return construct(c, inputs); },
               [OP_CALL_METHOD]: (inputs) => { let o = shift(inputs); let m = shift(inputs); return apply(o[m], o, inputs); },
-              [OP_CONSTRUCT_METHOD]: (v, inputs) => { let o = shift(inputs); let m = shift(inputs); return construct(o[m], inputs); },
+              [OP_CONSTRUCT_METHOD]: (inputs) => { let o = shift(inputs); let m = shift(inputs); return construct(o[m], inputs); },
               [OP_GET_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; return o[p]; },
               [OP_SET_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; let v = inputs[2]; o[p] = v; },
               [OP_DELETE_PROPERTY]: (inputs) => { let o = inputs[0]; let p = inputs[1]; return delete o[p]; },

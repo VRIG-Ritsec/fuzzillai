@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Collections
 import Foundation
 import OrderedCollections
 
@@ -2515,7 +2516,95 @@ public class ProgramBuilder {
         return numberOfGeneratedInstructions
     }
 
-    // Todo, the context graph could also find ideal paths that allow type creation.
+    private struct SearchState: Comparable {
+        /// The sequence of generators accumulated so far, in reverse order of how they would be run.
+        let sequence: [CodeGenerator]
+
+        /// The set of input constraints we still need to satisfy by finding appropriate generators.
+        let unsatisfiedRequirements: Set<GeneratorStub.Constraint>
+
+        static func == (lhs: SearchState, rhs: SearchState) -> Bool {
+            return lhs.sequence.count == rhs.sequence.count
+                && lhs.unsatisfiedRequirements == rhs.unsatisfiedRequirements
+        }
+
+        static func < (lhs: SearchState, rhs: SearchState) -> Bool {
+            if lhs.sequence.count != rhs.sequence.count {
+                return lhs.sequence.count < rhs.sequence.count
+            }
+            return lhs.unsatisfiedRequirements.count < rhs.unsatisfiedRequirements.count
+        }
+    }
+
+    private func findGeneratorSequence(for targetRequirement: GeneratorStub.Constraint)
+        -> [CodeGenerator]?
+    {
+        // Fail Safe
+        let maxTotalGenerators = 10
+
+        var priorityQueue: Heap<SearchState> = [
+            SearchState(
+                sequence: [],
+                unsatisfiedRequirements: [targetRequirement]
+            )
+        ]
+
+        let availableGenerators = fuzzer.codeGenerators.filter {
+            $0.requiredContext.isSubset(of: context)
+        }
+
+        while !priorityQueue.isEmpty {
+            let state = priorityQueue.popMin()!
+
+            // We have a generator chain satisfying the (missing) types dependency tree
+            if state.unsatisfiedRequirements.isEmpty {
+                let reversedSequence = state.sequence.reversed()
+
+                var finalGeneratorSequence = [CodeGenerator]()
+
+                // Filter out potential duplicates. It is always enough to fulfill a given requirement once, even if it is required by multiple other generators.
+                for item in reversedSequence {
+                    if !finalGeneratorSequence.contains(where: { $0 === item }) {
+                        finalGeneratorSequence.append(item)
+                    }
+                }
+                return finalGeneratorSequence
+            }
+
+            // Early Exit. Should never happen unless we have a loop with no alternative
+            if state.sequence.count == maxTotalGenerators {
+                continue
+            }
+
+            // Pick one requirement to resolve
+            let requirement = state.unsatisfiedRequirements.first!
+
+            let usableGenerators = availableGenerators.filter { generator in
+                generator.produces.contains(where: requirement.fulfilled)
+            }
+
+            for generator in usableGenerators {
+
+                // Calculate missing inputs (not satisfied by existing variables)
+                let missingInputs = generator.parts.flatMap { $0.inputs.constraints }.filter {
+                    nestedRequirement in
+                    findVariable(satisfying: { nestedRequirement.fulfilled(by: self.type(of: $0)) })
+                        == nil
+                }
+
+                priorityQueue.insert(
+                    SearchState(
+                        sequence: state.sequence + [generator],
+                        unsatisfiedRequirements: state.unsatisfiedRequirements
+                            .filter { !generator.produces.contains(where: $0.fulfilled) }
+                            .union(missingInputs)
+                    ))
+            }
+        }
+
+        return nil
+    }
+
     private func createRequiredInputVariables(for requirements: Set<GeneratorStub.Constraint>) {
         for requirement in requirements {
             let type = requirement.type
@@ -2533,11 +2622,18 @@ public class ProgramBuilder {
 
                 // Cannot build type here.
                 if usableGenerators.isEmpty {
-                    if type.Is(.wasmAnything) && context.contains(.wasmFunction) {
+                    // TODO(rherouart): this is a no regression strategy.
+                    // But findGeneratorSequence could replace createRequiredInputVariables
+                    if let plan = findGeneratorSequence(for: requirement) {
+                        for generator in plan {
+                            let instructionCount = complete(generator: generator, withBudget: 0)
+                            assert(instructionCount > 0, "\(generator.name) failed to generate")
+                        }
+                    } else if type.Is(.wasmAnything) && context.contains(.wasmFunction) {
                         // If we didn't find a code generator, generateRandomWasmVar() can generate
                         // some default value (though due to its limited capabilities this should be
                         // used as a fallback, the code generators are strictly preferrable.)
-                        let _ = currentWasmFunction.generateRandomWasmVar(ofType: type)
+                        _ = currentWasmFunction.generateRandomWasmVar(ofType: type)
                     }
                     // Continue here though, as we might be able to create Variables for other types.
                     continue

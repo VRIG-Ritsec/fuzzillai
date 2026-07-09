@@ -765,7 +765,7 @@ public let WasmDeoptFuzzer = WasmProgramTemplate("WasmDeoptFuzzer") { b in
         b.build(n: 10)
     }
 
-    let wasmModule = b.buildWasmModule { wasmModule in
+    let wasmModule = b.buildWasmModule(possiblyWithStartFunction: true) { wasmModule in
         b.build(n: 10)
         // Emit the callees for the call_indirect
         let callees = (0..<numCallees).map { _ in
@@ -822,7 +822,7 @@ public let WasmInJsInliningFuzzer = WasmProgramTemplate("WasmInJsInliningFuzzer"
     }
 
     // Create a Wasm function that we can call from JS.
-    let wasmModule = b.buildWasmModule { wasmModule in
+    let wasmModule = b.buildWasmModule(possiblyWithStartFunction: true) { wasmModule in
         // Build some other functions, tags, globals, tables etc.
         b.build(n: 5)
         // Create the function we want to call from JS.
@@ -919,7 +919,7 @@ public let WasmTurbofanFuzzer = WasmProgramTemplate("WasmTurbofanFuzzer") { b in
         b.build(n: 10)
     }
 
-    let wasmModule = b.buildWasmModule { wasmModule in
+    let wasmModule = b.buildWasmModule(possiblyWithStartFunction: true) { wasmModule in
         // Have some budget for tables, globals, memories, other functions that can be called, ...
         b.build(n: 30)
 
@@ -967,7 +967,7 @@ public let WasmFastCallFuzzer = WasmProgramTemplate("WasmFastCallFuzzer") { b in
     let functionSig = chooseUniform(from: b.methodSignatures(of: target.method, on: target.group))
     let wrappedSig = [.plain(b.type(of: apiObj))] + functionSig.parameters => functionSig.outputType
 
-    let m = b.buildWasmModule { m in
+    let m = b.buildWasmModule(possiblyWithStartFunction: true) { m in
         let allWasmTypes: WeightedList<ILType> = WeightedList([
             (.wasmi32, 1), (.wasmi64, 1), (.wasmf32, 1), (.wasmf64, 1), (.wasmExternRef(), 1),
             (.wasmFuncRef(), 1),

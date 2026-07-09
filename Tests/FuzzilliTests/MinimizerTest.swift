@@ -2382,6 +2382,39 @@ class MinimizerTests: XCTestCase {
 
     }
 
+    func testWasmStartFunctionMinimization() throws {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        let b = fuzzer.makeBuilder()
+
+        do {
+            b.emit(BeginWasmModule())
+            let module = b.currentWasmModule
+            let startFunc = module.addWasmFunction(with: [] => []) { function, label, args in
+                return []
+            }
+            b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunc])
+            evaluator.nextInstructionIsImportant(in: b)
+            module.loadExports()
+        }
+        let originalProgram = b.finalize()
+
+        do {
+            b.emit(BeginWasmModule())
+            let module = b.currentWasmModule
+            b.emit(EndWasmModule(hasStartFunction: false))
+            module.loadExports()
+        }
+        let expectedProgram = b.finalize()
+
+        let actualProgram = minimize(originalProgram, with: fuzzer)
+        XCTAssertEqual(
+            expectedProgram, actualProgram,
+            "Expected:\n\(FuzzILLifter().lift(expectedProgram.code))\n\n"
+                + "Actual:\n\(FuzzILLifter().lift(actualProgram.code))")
+
+    }
+
     func testWasmTypeGroupUnusedType() throws {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)

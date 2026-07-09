@@ -6590,6 +6590,13 @@ public class ProgramBuilder {
         }
     }
 
+    public func randomWasmStartFunction() -> Variable? {
+        return findVariable(satisfying: {
+            let type = self.type(of: $0)
+            return type.isWasmFunctionDef && type.wasmFunctionDefSignature == ([] => [])
+        })
+    }
+
     @discardableResult
     public func rawWasmModule(bytes: [UInt8], metadata: WasmModuleMetadata = WasmModuleMetadata())
         -> Variable
@@ -6598,11 +6605,22 @@ public class ProgramBuilder {
     }
 
     @discardableResult
-    public func buildWasmModule(_ body: (WasmModule) -> Void) -> WasmModule {
+    public func buildWasmModule(
+        possiblyWithStartFunction: Bool = false, _ body: (WasmModule) -> Void
+    ) -> WasmModule {
         emit(BeginWasmModule())
         let module = self.currentWasmModule
         body(module)
-        emit(EndWasmModule())
+
+        let startFunction =
+            (possiblyWithStartFunction && Bool.random())
+            ? randomWasmStartFunction() : nil
+
+        if let startFunction {
+            emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunction])
+        } else {
+            emit(EndWasmModule(hasStartFunction: false))
+        }
 
         return module
     }

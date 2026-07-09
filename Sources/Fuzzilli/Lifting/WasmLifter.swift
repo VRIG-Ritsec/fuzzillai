@@ -312,9 +312,13 @@ public class WasmLifter {
     private var globalOrder: [Variable] = []
     private var tagOrder: [Variable] = []
 
-    public init(withTyper typer: JSTyper, withWasmCode instrs: Code) {
+    private let startFunction: Variable?
+
+    public init(withTyper typer: JSTyper, withWasmCode instrs: Code, startFunction: Variable? = nil)
+    {
         self.typer = typer
         self.instructionBuffer = instrs
+        self.startFunction = startFunction
     }
 
     private class WasmExprWriter {
@@ -504,6 +508,7 @@ public class WasmLifter {
         try self.buildExportedSection()
 
         // Build element segments for defined tables.
+        try self.buildStartSection()
         try self.buildElementSection()
 
         try self.buildDataCountSection()
@@ -878,6 +883,19 @@ public class WasmLifter {
                 print(String(format: "%02X ", byte))
             }
         }
+    }
+
+    private func buildStartSection() throws {
+        guard let startFunction = self.startFunction else { return }
+
+        self.bytecode += [WasmSection.start.rawValue]
+        var temp = Data()
+
+        let startIdx = try resolveIdx(ofType: .function, for: startFunction)
+        temp += Leb128.unsignedEncode(startIdx)
+
+        self.bytecode += Leb128.unsignedEncode(temp.count)
+        self.bytecode += temp
     }
 
     // Only supports:

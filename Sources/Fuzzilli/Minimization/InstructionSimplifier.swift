@@ -253,14 +253,27 @@ struct InstructionSimplifier: Reducer {
 
     func simplifyWasmInstructions(with helper: MinimizationHelper) {
         for instr in helper.code {
-            if let op = instr.op as? WasmDefineArrayType, op.hasSuperType {
-                let newOp = WasmDefineArrayType(
-                    elementType: op.elementType, mutability: op.mutability, hasSuperType: false,
-                    isFinal: op.isFinal)
-                let newInouts = instr.inputs.dropFirst() + instr.outputs
-                helper.tryReplacing(
-                    instructionAt: instr.index,
-                    with: Instruction(newOp, inouts: Array(newInouts)))
+            switch instr.op.opcode {
+            case .wasmDefineArrayType(let op):
+                if op.hasSuperType {
+                    let newOp = WasmDefineArrayType(
+                        elementType: op.elementType, mutability: op.mutability, hasSuperType: false,
+                        isFinal: op.isFinal)
+                    let newInouts = instr.inputs.dropFirst() + instr.outputs
+                    helper.tryReplacing(
+                        instructionAt: instr.index,
+                        with: Instruction(newOp, inouts: Array(newInouts)))
+                }
+            case .endWasmModule(let op):
+                if op.hasStartFunction {
+                    let newOp = EndWasmModule(hasStartFunction: false)
+                    let newInouts = Array(instr.outputs)
+                    helper.tryReplacing(
+                        instructionAt: instr.index,
+                        with: Instruction(newOp, inouts: newInouts))
+                }
+            default:
+                break
             }
         }
     }

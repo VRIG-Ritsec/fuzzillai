@@ -963,6 +963,31 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "null\n-42\n")
     }
 
+    @Test func testStartFunction() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            b.emit(BeginWasmModule())
+            let module = b.currentWasmModule
+
+            let global = module.addGlobal(wasmGlobal: .wasmi32(0), isMutable: true)
+
+            let startFunc = module.addWasmFunction(with: [] => []) { function, _, _ in
+                let val = function.consti32(1337)
+                function.wasmStoreGlobal(globalVariable: global, to: val)
+                return []
+            }
+
+            b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunc])
+
+            let exports = module.loadExports()
+            let wg0 = b.getProperty("wg0", of: exports)
+            let valueWg0 = b.getProperty("value", of: wg0)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [valueWg0])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "1337\n")
+    }
+
     func importedTableTestCase(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)

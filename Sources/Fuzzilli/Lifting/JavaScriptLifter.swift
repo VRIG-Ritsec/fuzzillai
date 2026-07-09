@@ -305,7 +305,9 @@ public class JavaScriptLifter: Lifter {
             // for more details.
             // We also have some lightweight checking logic to ensure that the input expressions are retrieved in the correct order.
             // This does not guarantee that they will also _evaluate_ in that order at runtime, but it's probably a decent approximation.
-            guard let inputs = w.retrieve(expressionsFor: instr.inputs) else {
+            let inputsToRetrieve: ArraySlice<Variable> =
+                instr.op is EndWasmModule ? [] : instr.inputs
+            guard let inputs = w.retrieve(expressionsFor: inputsToRetrieve) else {
                 fatalError(
                     "Missing one or more expressions for inputs \(instr.inputs) of \(instr).\n"
                         + "Program is \(FuzzILLifter().lift(program, withOptions: .includeComments))\n"
@@ -1736,7 +1738,8 @@ public class JavaScriptLifter: Lifter {
                 wasmCodeStarts = instr.index
                 assert(wasmInstructions.isEmpty)
 
-            case .endWasmModule:
+            case .endWasmModule(let op):
+                let startFunction = op.hasStartFunction ? instr.input(0) : nil
                 // Lift the FuzzILCode of this Block first.
                 w.emitComment("WasmModule Code:")
                 let code = Code(program.code[wasmCodeStarts!...instr.index], isBundle: false)
@@ -1748,7 +1751,8 @@ public class JavaScriptLifter: Lifter {
                 // TODO: support a better diagnostics mode which stores the .wasm binary file alongside the samples.
                 do {
                     let (bytecode, importRefs) = try WasmLifter(
-                        withTyper: typer!, withWasmCode: wasmInstructions
+                        withTyper: typer!, withWasmCode: wasmInstructions,
+                        startFunction: startFunction
                     ).lift()
                     // Get and check that we have the imports here as expressions and fail otherwise.
                     let imports: [(Variable, Expression)] = try importRefs.map { ref in

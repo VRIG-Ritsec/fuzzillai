@@ -815,6 +815,7 @@ message BeginWasmModule {
 }
 
 message EndWasmModule {
+  bool hasStartFunction = 1;
 }
 
 message CreateWasmGlobal {

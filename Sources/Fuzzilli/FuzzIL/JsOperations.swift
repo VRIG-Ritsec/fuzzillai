@@ -2708,8 +2708,15 @@ final class BeginWasmModule: JsOperation {
 // The output of this instruction will be the compiled wasm module, i.e. the `instance` field will have the methods.
 class EndWasmModule: JsOperation {
     override var opcode: Opcode { .endWasmModule(self) }
-    init() {
-        super.init(numOutputs: 1, attributes: [.isBlockEnd], requiredContext: [.wasm])
+
+    var hasStartFunction: Bool {
+        return numInputs == 1
+    }
+
+    init(hasStartFunction: Bool = false) {
+        super.init(
+            numInputs: hasStartFunction ? 1 : 0, numOutputs: 1,
+            attributes: [.isBlockEnd, .isMutable], requiredContext: [.wasm])
     }
 }
 

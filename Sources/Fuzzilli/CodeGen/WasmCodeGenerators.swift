@@ -92,7 +92,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 inContext: .single(.wasm)
             ) { b in
                 let module = b.currentWasmModule
-                b.emit(EndWasmModule())
+                let startFunction = Bool.random() ? nil : b.randomWasmStartFunction()
+
+                if let startFunction {
+                    b.emit(EndWasmModule(hasStartFunction: true), withInputs: [startFunction])
+                } else {
+                    b.emit(EndWasmModule(hasStartFunction: false))
+                }
+
                 module.loadExports()
             },
         ]),

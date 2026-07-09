@@ -345,6 +345,18 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CreateWasmTable(
                 elementType: op.tableType.elementType,
                 limits: Limits(min: newMinSize, max: newMaxSize), isTable64: op.tableType.isTable64)
+        case .endWasmModule(let op):
+            if op.hasStartFunction {
+                newOp = EndWasmModule(hasStartFunction: false)
+                inouts.removeFirst()
+            } else {
+                if let startFunc = b.randomWasmStartFunction() {
+                    newOp = EndWasmModule(hasStartFunction: true)
+                    inouts = ArraySlice([startFunc] + instr.outputs)
+                } else {
+                    newOp = op
+                }
+            }
         // Wasm Operations
         case .consti32(_):
             newOp = Consti32(value: Int32(truncatingIfNeeded: b.randomInt()))
@@ -793,7 +805,6 @@ public class OperationMutator: BaseInstructionMutator {
             .createMap(_),
             // Wasm instructions
             .beginWasmModule(_),
-            .endWasmModule(_),
             .wasmReturn(_),
             .wasmJsCall(_),
             .wasmReassign(_),

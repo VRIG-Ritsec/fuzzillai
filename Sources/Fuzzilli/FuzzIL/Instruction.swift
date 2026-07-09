@@ -1161,8 +1161,10 @@ extension Instruction: ProtobufConvertible {
                 $0.loadNewTarget = Fuzzilli_Protobuf_LoadNewTarget()
             case .beginWasmModule:
                 $0.beginWasmModule = Fuzzilli_Protobuf_BeginWasmModule()
-            case .endWasmModule:
-                $0.endWasmModule = Fuzzilli_Protobuf_EndWasmModule()
+            case .endWasmModule(let op):
+                $0.endWasmModule = Fuzzilli_Protobuf_EndWasmModule.with {
+                    $0.hasStartFunction_p = op.hasStartFunction
+                }
             case .createWasmGlobal(let op):
                 $0.createWasmGlobal = Fuzzilli_Protobuf_CreateWasmGlobal.with {
                     $0.wasmGlobal.isMutable = op.isMutable
@@ -2625,8 +2627,8 @@ extension Instruction: ProtobufConvertible {
         // Wasm cases
         case .beginWasmModule(_):
             op = BeginWasmModule()
-        case .endWasmModule(_):
-            op = EndWasmModule()
+        case .endWasmModule(let p):
+            op = EndWasmModule(hasStartFunction: p.hasStartFunction_p)
         case .consti64(let p):
             op = Consti64(value: p.value)
         case .consti32(let p):

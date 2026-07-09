@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Foundation
+import OrderedCollections
 
 /// Builds programs.
 ///
@@ -746,9 +747,12 @@ public class ProgramBuilder {
         // We defer the increase again, because at that point the variable is actually visible, i.e. `numVariables` was increased through the `createObject` call.
         defer { self.argumentGenerationVariableBudget.top += 1 }
 
-        var properties: [String: Variable] = [:]
+        var properties = OrderedDictionary<String, Variable>()
 
         for propertyName in type.properties {
+            assert(
+                properties[propertyName] == nil,
+                "Duplicate property name in type.properties: \(propertyName)")
             // If we have an object that has a group, we should get a type here, otherwise if we don't have a group, we will get .jsAnything.
             let propType = fuzzer.environment.type(ofProperty: propertyName, on: type)
             properties[propertyName] = generateTypeInternal(propType)
@@ -2925,10 +2929,11 @@ public class ProgramBuilder {
 
     @discardableResult
     // Convenience method to create simple object literals.
-    public func createObject(with initialProperties: [String: Variable]) -> Variable {
+    public func createObject(with initialProperties: OrderedDictionary<String, Variable>)
+        -> Variable
+    {
         return buildObjectLiteral { obj in
-            // Sort the property names so that the emitted code is deterministic.
-            for (propertyName, value) in initialProperties.sorted(by: { $0.key < $1.key }) {
+            for (propertyName, value) in initialProperties {
                 obj.addProperty(propertyName, as: value)
             }
         }
@@ -7271,8 +7276,10 @@ public class ProgramBuilder {
         switch bag.selectionMode {
         case .anySubset:
             // We run .filter() to pick a subset of fields, but we generally want to set as many as possible
-            // and let the mutator prune things
-            let dict = [String: Variable](
+            // and let the mutator prune things.
+
+            // Since we're calling filter on a dictionary, the order of the properties inserted into the OrderedDictionary is arbitrary. This is fine, because this is called during object creation time, not during lifting time, so lifting is still deterministic.
+            let dict = OrderedDictionary<String, Variable>(
                 uniqueKeysWithValues: bag.properties.filter { _ in probability(0.8) }.map {
                     let (propertyName, type) = $0
                     if let predefinedVar = predefined[propertyName] {
@@ -7292,7 +7299,7 @@ public class ProgramBuilder {
                     } else {
                         return (propertyName, findOrGenerateType(type))
                     }
-                })
+                }.shuffled())
             return createObject(with: dict)
         case .exactlyOne:
             let (propertyName, type) = bag.properties.randomElement()!
@@ -7303,7 +7310,7 @@ public class ProgramBuilder {
     // Generate a Temporal.Duration object
     @discardableResult
     func createTemporalDurationFieldsObject() -> Variable {
-        var properties: [String: Variable] = [:]
+        var properties = OrderedDictionary<String, Variable>()
         // Durations are simple, they accept an object with optional integer fields for each duration field.
         for field in [
             "years", "months", "weeks", "days", "hours", "minutes", "seconds", "milliseconds",
@@ -7367,7 +7374,7 @@ public class ProgramBuilder {
     func createTemporalFieldsObject(
         forWith: Bool, dateFields: Bool, timeFields: Bool, zonedFields: Bool
     ) -> Variable {
-        var properties: [String: Variable] = [:]
+        var properties = OrderedDictionary<String, Variable>()
 
         if dateFields {
             var chosenCalendar: String? = nil

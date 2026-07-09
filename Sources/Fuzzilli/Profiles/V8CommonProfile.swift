@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import OrderedCollections
+
 extension ILType {
     public static let jsD8 = ILType.object(ofGroup: "D8", withProperties: ["test"], withMethods: [])
 
@@ -362,13 +364,15 @@ public let MapTransitionFuzzer = ProgramTemplate("MapTransitionFuzzer") { b in
         "CreateObject", produces: [.object()], useInPrefix: true
     ) { b in
         let (properties, values) = randomProperties(in: b)
-        let obj = b.createObject(with: Dictionary(uniqueKeysWithValues: zip(properties, values)))
+        let obj = b.createObject(
+            with: OrderedDictionary(uniqueKeysWithValues: zip(properties, values)))
         assert(b.type(of: obj).Is(objType))
     }
     let objectMakerGenerator = CodeGenerator("ObjectMaker") { b in
         let f = b.buildPlainFunction(with: b.randomParameters()) { args in
             let (properties, values) = randomProperties(in: b)
-            let o = b.createObject(with: Dictionary(uniqueKeysWithValues: zip(properties, values)))
+            let o = b.createObject(
+                with: OrderedDictionary(uniqueKeysWithValues: zip(properties, values)))
             b.doReturn(o)
         }
         for _ in 0..<3 {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Foundation
+import OrderedCollections
 
 // Generator stubs for disposable and async-disposable object variables.
 func disposableObjVariableGeneratorStubs(
@@ -561,7 +562,7 @@ public let CodeGenerators: [CodeGenerator] = [
 
         withEqualProbability(
             {
-                var options = [String: Variable]()
+                var options = OrderedDictionary<String, Variable>()
                 let alphabet = chooseUniform(from: [base64Alphabet, base64URLAlphabet])
 
                 options["alphabet"] = b.loadString(
@@ -3142,7 +3143,7 @@ public let CodeGenerators: [CodeGenerator] = [
         {
             handler = existing
         } else {
-            var handlerProperties = [String: Variable]()
+            var handlerProperties = OrderedDictionary<String, Variable>()
             for _ in 0..<Int.random(in: 0..<candidates.count) {
                 let hook = chooseUniform(from: candidates)
                 candidates.remove(hook)

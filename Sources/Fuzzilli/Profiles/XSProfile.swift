@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import OrderedCollections
+
 private let StressXSGC = CodeGenerator("StressXSGC", inputs: .required(.function())) { b, f in
     let arguments = b.randomArguments(forCalling: f)
 
@@ -71,9 +73,9 @@ private let ModuleSourceGenerator = CodeGenerator("ModuleSourceGenerator") { b i
 private let CompartmentGenerator = CodeGenerator("CompartmentGenerator") { b in
     let compartmentConstructor = b.createNamedVariable(forBuiltin: "Compartment")
 
-    var endowments = [String: Variable]()  // may be used as endowments argument or globalLexicals
-    var moduleMap = [String: Variable]()
-    var options = [String: Variable]()
+    var endowments = OrderedDictionary<String, Variable>()  // may be used as endowments argument or globalLexicals
+    var moduleMap = OrderedDictionary<String, Variable>()
+    var options = OrderedDictionary<String, Variable>()
 
     for _ in 0..<Int.random(in: 1...4) {
         let propertyName = b.randomCustomPropertyName()

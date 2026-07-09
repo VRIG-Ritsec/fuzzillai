@@ -2191,10 +2191,7 @@ struct LifterTests {
             let i = b.loadInt(1337)
             let s = b.loadString("bar")
             let f = b.loadFloat(13.37)
-            var initialProperties = [String: Variable]()
-            initialProperties["foo"] = i
-            initialProperties["bar"] = f
-            let o = b.createObject(with: initialProperties)
+            let o = b.createObject(with: ["foo": i, "bar": f])
             let _ = b.deleteProperty("foo", of: o)
             let _ = b.deleteComputedProperty(s, of: o)
             let a = b.createArray(with: [
@@ -2206,7 +2203,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v3 = { bar: 13.37, foo: 1337 };
+                const v3 = { foo: 1337, bar: 13.37 };
                 delete v3.foo;
                 delete v3["bar"];
                 const t1 = [301,4,68,22];
@@ -2976,7 +2973,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v2 = { bar: 13.37, foo: 42 };
+                const v2 = { foo: 42, bar: 13.37 };
                 let {"foo":v3,...v4} = v2;
                 let {"foo":v5,"bar":v6,...v7} = v2;
                 let {...v8} = v2;
@@ -3003,7 +3000,7 @@ struct LifterTests {
             let actual = fuzzer.lifter.lift(program)
 
             let expected = """
-                const v2 = { 123: 13.37, "foo-bar": 42 };
+                const v2 = { "foo-bar": 42, 123: 13.37 };
                 let {"foo-bar":v3,...v4} = v2;
                 let {"foo-bar":v5,"123":v6} = v2;
 
@@ -3036,7 +3033,7 @@ struct LifterTests {
                 let v0 = 42;
                 let v1 = 13.37;
                 let v2 = "Hello";
-                const v3 = { bar: v1, foo: v0 };
+                const v3 = { foo: v0, bar: v1 };
                 ({"foo":v2,...v0} = v3);
                 ({"foo":v2,"bar":v0,...v1} = v3);
                 ({...v2} = v3);

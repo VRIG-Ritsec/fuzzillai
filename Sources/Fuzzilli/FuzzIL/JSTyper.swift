@@ -1831,12 +1831,20 @@ public struct JSTyper: Analyzer {
         }
         // Helper function to process parameters
         func processParameterDeclarations(
-            _ parameterVariables: ArraySlice<Variable>, parameters: ParameterList
+            _ parameterVariables: ArraySlice<Variable>, parameters: ParameterList,
+            opParameters: Parameters
         ) {
             let types = computeParameterTypes(from: parameters)
-            assert(types.count == parameterVariables.count)
-            for (param, type) in zip(parameterVariables, types) {
-                set(param, type)
+            assert(parameterVariables.count == opParameters.numInnerOutputs)
+            var iter = parameterVariables.makeIterator()
+            for i in 0..<opParameters.count {
+                let type = types[i]
+                if let pattern = opParameters.destructuringParameters[i] {
+                    processDestructuring(
+                        pattern, on: nil, isRoot: true, iterator: &iter, isReassignment: false)
+                } else {
+                    set(iter.next()!, type)
+                }
             }
         }
 
@@ -1978,7 +1986,8 @@ public struct JSTyper: Analyzer {
             set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
             dynamicObjectGroupManager.addMethod(methodName: op.methodName)
 
         case .beginObjectLiteralComputedMethod(let op):
@@ -1986,7 +1995,8 @@ public struct JSTyper: Analyzer {
             set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
             let keyType = type(ofInput: 0)
             if let symbolGroup = keyType.group, ILType.groupsMatchByPrefix("Symbol", symbolGroup) {
@@ -2009,7 +2019,8 @@ public struct JSTyper: Analyzer {
             assert(instr.numInnerOutputs == 2)
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
             dynamicObjectGroupManager.addProperty(propertyName: op.propertyName)
 
         case .beginObjectLiteralComputedSetter(let op):
@@ -2017,7 +2028,8 @@ public struct JSTyper: Analyzer {
             set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .endObjectLiteral:
             let instanceType = dynamicObjectGroupManager.finalize()
@@ -2027,7 +2039,10 @@ public struct JSTyper: Analyzer {
             // The first inner output is the explicit |this| parameter for the constructor
             set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
             let parameters = inferSubroutineParameterList(of: op, at: instr.index)
-            processParameterDeclarations(instr.innerOutputs(1...), parameters: parameters)
+            processParameterDeclarations(
+                instr.innerOutputs(1...),
+                parameters: parameters,
+                opParameters: op.parameters)
             dynamicObjectGroupManager.setConstructorParameters(parameters: parameters)
 
         case .classAddProperty(let op):
@@ -2063,7 +2078,8 @@ public struct JSTyper: Analyzer {
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .beginClassComputedMethod(let op):
             // The first inner output is the explicit |this|
@@ -2076,7 +2092,8 @@ public struct JSTyper: Analyzer {
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
             let keyType = type(ofInput: 0)
             if let symbolGroup = keyType.group, ILType.groupsMatchByPrefix("Symbol", symbolGroup) {
@@ -2123,7 +2140,8 @@ public struct JSTyper: Analyzer {
             assert(instr.numInnerOutputs == 2)
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .beginClassComputedSetter(let op):
             if op.isStatic {
@@ -2135,7 +2153,8 @@ public struct JSTyper: Analyzer {
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .beginClassPrivateMethod(let op):
             // The first inner output is the explicit |this|
@@ -2148,7 +2167,8 @@ public struct JSTyper: Analyzer {
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .createArray(let op):
             if let elementGroupName = op.elementGroupName {
@@ -2388,14 +2408,16 @@ public struct JSTyper: Analyzer {
             .beginAsyncGeneratorFunction(let op as BeginAnyFunction):
             processParameterDeclarations(
                 instr.innerOutputs,
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .beginConstructor(let op):
             // The first inner output is the explicit |this| parameter for the constructor
             set(instr.innerOutput(0), .object())
             processParameterDeclarations(
                 instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index))
+                parameters: inferSubroutineParameterList(of: op, at: instr.index),
+                opParameters: op.parameters)
 
         case .callSuperMethod(let op):
             let sig = chooseUniform(

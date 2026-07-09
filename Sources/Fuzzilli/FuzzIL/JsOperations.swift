@@ -590,7 +590,7 @@ final class BeginObjectLiteralMethod: BeginAnySubroutine {
         self.methodName = methodName
         // First inner output is the explicit |this| parameter
         super.init(
-            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral,
             contextOpened: [.javascript, .subroutine, .method])
     }
@@ -608,7 +608,7 @@ final class BeginObjectLiteralComputedMethod: BeginAnySubroutine {
         // First inner output is the explicit |this| parameter
         super.init(
             parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
-            numInnerOutputs: parameters.count + 1,
+            numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: .isBlockStart, requiredContext: .objectLiteral,
             contextOpened: [.javascript, .subroutine, .method])
     }
@@ -770,7 +770,7 @@ final class BeginClassConstructor: BeginAnySubroutine {
     init(parameters: Parameters) {
         // First inner output is the explicit |this| parameter
         super.init(
-            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isBlockStart, .isSingular], requiredContext: .classDefinition,
             contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
@@ -839,7 +839,7 @@ final class BeginClassMethod: BeginAnySubroutine {
         self.isStatic = isStatic
         // First inner output is the explicit |this| parameter
         super.init(
-            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isMutable, .isBlockStart], requiredContext: .classDefinition,
             contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
@@ -858,7 +858,7 @@ final class BeginClassComputedMethod: BeginAnySubroutine {
         // First inner output is the explicit |this| parameter
         super.init(
             parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
-            numInnerOutputs: parameters.count + 1,
+            numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isBlockStart], requiredContext: .classDefinition,
             contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
@@ -998,7 +998,7 @@ final class BeginClassPrivateMethod: BeginAnySubroutine {
         // First inner output is the explicit |this| parameter.
         // See comment in ClassAddPrivateProperty for why this operation isn't mutable.
         super.init(
-            parameters: parameters, numInnerOutputs: parameters.count + 1,
+            parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: .isBlockStart, requiredContext: .classDefinition,
             contextOpened: [.javascript, .subroutine, .method, .classMethod])
     }
@@ -1330,17 +1330,32 @@ public struct Parameters {
     /// Indices of parameters that have a default value.
     /// The n-th default parameter will be the n-th input to the BeginAnySubroutine instruction.
     let defaultParameterIndices: [Int]
+    let destructuringParameters: [Int: DestructuringPattern]
 
-    /// The total number of parameters. This is equivalent to the number of inner outputs produced from the parameters.
     var count: Int {
         return Int(numParameters)
+    }
+
+    var numInnerOutputs: Int {
+        // Without destructuring, the number of inner outputs is equal to the number of parameters.
+        // With destructuring, the number of inner outputs might be different (larger or smaller).
+        // It could be smaller if empty patterns are used (which don't create bindings), or larger
+        // if nested patterns extract multiple inner bindings.
+        var totalBindings = count - destructuringParameters.count
+        for pattern in destructuringParameters.values {
+            totalBindings += pattern.numberOfBindings
+        }
+        return totalBindings
     }
 
     var numDefaultParameters: Int {
         return defaultParameterIndices.count
     }
 
-    init(count: Int, hasRestParameter: Bool = false, defaultParameterIndices: [Int] = []) {
+    init(
+        count: Int, hasRestParameter: Bool = false, defaultParameterIndices: [Int] = [],
+        destructuringParameters: [Int: DestructuringPattern] = [:]
+    ) {
         assert(
             !hasRestParameter || !defaultParameterIndices.contains(count - 1),
             "Rest parameter cannot have a default value")
@@ -1353,6 +1368,7 @@ public struct Parameters {
         self.numParameters = UInt32(count)
         self.hasRestParameter = hasRestParameter
         self.defaultParameterIndices = defaultParameterIndices
+        self.destructuringParameters = destructuringParameters
     }
 }
 
@@ -1370,6 +1386,9 @@ class BeginAnySubroutine: JsOperation {
         assert(contextOpened.contains(.subroutine))
         assert(attributes.contains(.isBlockStart))
         self.parameters = parameters
+        // Note: The number of inputs in subroutines is by default calculated by the number of default parameters.
+        // With destructuring patterns, some inputs would be needed for inner defaults and computed keys,
+        // but these are currently not supported yet (see tests). This holds for all supported subroutines.
         super.init(
             numInputs: numInputs ?? parameters.numDefaultParameters, numOutputs: numOutputs,
             numInnerOutputs: numInnerOutputs, attributes: attributes,
@@ -1392,7 +1411,7 @@ class BeginAnyFunction: BeginAnySubroutine {
             parameters: parameters,
             numInputs: parameters.numDefaultParameters,
             numOutputs: 1,
-            numInnerOutputs: parameters.count,
+            numInnerOutputs: parameters.numInnerOutputs,
             contextOpened: contextOpened)
     }
 }
@@ -1511,7 +1530,7 @@ final class BeginConstructor: BeginAnySubroutine {
 
     init(parameters: Parameters) {
         super.init(
-            parameters: parameters, numOutputs: 1, numInnerOutputs: parameters.count + 1,
+            parameters: parameters, numOutputs: 1, numInnerOutputs: parameters.numInnerOutputs + 1,
             contextOpened: [.javascript, .subroutine])
     }
 }
@@ -3173,10 +3192,41 @@ final class CreateMap: JsOperation {
 
 /// The native FuzzIL representation of a destructuring pattern
 public indirect enum DestructuringPattern: Hashable, Equatable {
+    public var numberOfBindings: Int {
+        var count = 0
+        switch self {
+        case .object(let obj):
+            for prop in obj.properties {
+                count += prop.target.numberOfBindings
+            }
+            if obj.hasRestElement { count += 1 }
+        case .array(let arr):
+            for elem in arr.elements {
+                if let target = elem.target {
+                    count += target.numberOfBindings
+                }
+            }
+            if let restTarget = arr.restTarget {
+                count += restTarget.numberOfBindings
+            }
+        }
+        return count
+    }
     case object(ObjectPattern)
     case array(ArrayPattern)
 
     public enum Target: Hashable, Equatable {
+        public var numberOfBindings: Int {
+            switch self {
+            case .flatBinding:
+                return 1
+            case .pattern(let pattern):
+                return pattern.numberOfBindings
+            case .property, .element, .computedProperty, .superProperty, .superElement,
+                .superComputedProperty:
+                return 0
+            }
+        }
         case flatBinding
         case pattern(DestructuringPattern)
         case property(String)

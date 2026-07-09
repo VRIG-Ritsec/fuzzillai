@@ -326,10 +326,16 @@ extension Instruction: ProtobufConvertible {
         }
 
         func convertParameters(_ parameters: Parameters) -> Fuzzilli_Protobuf_Parameters {
+            var destructuringParameters = [UInt32: Fuzzilli_Protobuf_FuzzILDestructuringPattern]()
+            for (idx, pattern) in parameters.destructuringParameters {
+                destructuringParameters[UInt32(idx)] = encodeDestructuringPattern(
+                    pattern, mode: .parameter)
+            }
             return Fuzzilli_Protobuf_Parameters.with {
                 $0.count = UInt32(parameters.count)
                 $0.hasRest_p = parameters.hasRestParameter
                 $0.defaultParameterIndices = parameters.defaultParameterIndices.map(UInt32.init)
+                $0.destructuringParameters = destructuringParameters
             }
         }
 
@@ -1114,7 +1120,7 @@ extension Instruction: ProtobufConvertible {
                         }
                     $0.usingType = convertEnum(op.usingType, UsingType.allCases)
                     if case .destruct(let pattern) = op.header {
-                        $0.pattern = encodeDestructuringPattern(pattern)
+                        $0.pattern = encodeDestructuringPattern(pattern, mode: .declaration)
                     }
                 }
 
@@ -1237,11 +1243,11 @@ extension Instruction: ProtobufConvertible {
                 }
             case .destruct(let op):
                 $0.destruct = Fuzzilli_Protobuf_Destruct.with {
-                    $0.pattern = encodeDestructuringPattern(op.pattern)
+                    $0.pattern = encodeDestructuringPattern(op.pattern, mode: .declaration)
                 }
             case .destructAndReassign(let op):
                 $0.destructAndReassign = Fuzzilli_Protobuf_DestructAndReassign.with {
-                    $0.pattern = encodeDestructuringPattern(op.pattern)
+                    $0.pattern = encodeDestructuringPattern(op.pattern, mode: .assignment)
                 }
             case .print(_):
                 fatalError("Print operations should not be serialized")
@@ -1884,10 +1890,16 @@ extension Instruction: ProtobufConvertible {
             return allValues[p.rawValue]
         }
 
-        func convertParameters(_ parameters: Fuzzilli_Protobuf_Parameters) -> Parameters {
+        func convertParameters(_ parameters: Fuzzilli_Protobuf_Parameters) throws -> Parameters {
+            var destructuringParameters = [Int: DestructuringPattern]()
+            for (idx, pattern) in parameters.destructuringParameters {
+                destructuringParameters[Int(idx)] = try decodeDestructuringPattern(
+                    from: pattern, mode: .parameter)
+            }
             return Parameters(
                 count: Int(parameters.count), hasRestParameter: parameters.hasRest_p,
-                defaultParameterIndices: parameters.defaultParameterIndices.map(Int.init))
+                defaultParameterIndices: parameters.defaultParameterIndices.map(Int.init),
+                destructuringParameters: destructuringParameters)
         }
 
         // Converts to the Wasm world global type
@@ -2128,11 +2140,11 @@ extension Instruction: ProtobufConvertible {
             op = ObjectLiteralSetPrototype()
         case .beginObjectLiteralMethod(let p):
             op = BeginObjectLiteralMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters))
+                methodName: p.methodName, parameters: try convertParameters(p.parameters))
         case .endObjectLiteralMethod:
             op = EndObjectLiteralMethod()
         case .beginObjectLiteralComputedMethod(let p):
-            op = BeginObjectLiteralComputedMethod(parameters: convertParameters(p.parameters))
+            op = BeginObjectLiteralComputedMethod(parameters: try convertParameters(p.parameters))
         case .endObjectLiteralComputedMethod:
             op = EndObjectLiteralComputedMethod()
         case .beginObjectLiteralGetter(let p):
@@ -2157,7 +2169,7 @@ extension Instruction: ProtobufConvertible {
             op = BeginClassDefinition(
                 hasSuperclass: p.hasSuperclass_p, isExpression: p.isExpression)
         case .beginClassConstructor(let p):
-            op = BeginClassConstructor(parameters: convertParameters(p.parameters))
+            op = BeginClassConstructor(parameters: try convertParameters(p.parameters))
         case .endClassConstructor:
             op = EndClassConstructor()
         case .classAddProperty(let p):
@@ -2169,13 +2181,13 @@ extension Instruction: ProtobufConvertible {
             op = ClassAddComputedProperty(hasValue: p.hasValue_p, isStatic: p.isStatic)
         case .beginClassMethod(let p):
             op = BeginClassMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters),
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
                 isStatic: p.isStatic)
         case .endClassMethod:
             op = EndClassMethod()
         case .beginClassComputedMethod(let p):
             op = BeginClassComputedMethod(
-                parameters: convertParameters(p.parameters), isStatic: p.isStatic)
+                parameters: try convertParameters(p.parameters), isStatic: p.isStatic)
         case .endClassComputedMethod:
             op = EndClassComputedMethod()
         case .beginClassGetter(let p):
@@ -2203,7 +2215,7 @@ extension Instruction: ProtobufConvertible {
                 propertyName: p.propertyName, hasValue: p.hasValue_p, isStatic: p.isStatic)
         case .beginClassPrivateMethod(let p):
             op = BeginClassPrivateMethod(
-                methodName: p.methodName, parameters: convertParameters(p.parameters),
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
                 isStatic: p.isStatic)
         case .endClassPrivateMethod:
             op = EndClassPrivateMethod()
@@ -2279,47 +2291,47 @@ extension Instruction: ProtobufConvertible {
         case .testIn:
             op = TestIn()
         case .beginPlainFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginPlainFunction(parameters: parameters, functionName: functionName)
         case .endPlainFunction:
             op = EndPlainFunction()
         case .beginWorkerFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginWorkerFunction(parameters: parameters, functionName: functionName)
         case .endWorkerFunction:
             op = EndWorkerFunction()
         case .beginArrowFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginArrowFunction(parameters: parameters)
         case .endArrowFunction:
             op = EndArrowFunction()
         case .beginGeneratorFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginGeneratorFunction(parameters: parameters, functionName: functionName)
         case .endGeneratorFunction:
             op = EndGeneratorFunction()
         case .beginAsyncFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginAsyncFunction(parameters: parameters, functionName: functionName)
         case .endAsyncFunction:
             op = EndAsyncFunction()
         case .beginAsyncArrowFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginAsyncArrowFunction(parameters: parameters)
         case .endAsyncArrowFunction:
             op = EndAsyncArrowFunction()
         case .beginAsyncGeneratorFunction(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             let functionName = p.name.isEmpty ? nil : p.name
             op = BeginAsyncGeneratorFunction(parameters: parameters, functionName: functionName)
         case .endAsyncGeneratorFunction:
             op = EndAsyncGeneratorFunction()
         case .beginConstructor(let p):
-            let parameters = convertParameters(p.parameters)
+            let parameters = try convertParameters(p.parameters)
             op = BeginConstructor(parameters: parameters)
         case .endConstructor:
             op = EndConstructor()
@@ -2470,7 +2482,7 @@ extension Instruction: ProtobufConvertible {
                 case .destruct:
                     .destruct(
                         pattern: try decodeDestructuringPattern(
-                            from: p.pattern, isDeclaration: true))
+                            from: p.pattern, mode: .declaration))
                 default:
                     .simple
                 }
@@ -2547,7 +2559,7 @@ extension Instruction: ProtobufConvertible {
         case .dynamicImport(let p):
             op = DynamicImport(isDeferred: p.isDeferred)
         case .destruct(let p):
-            let pattern = try decodeDestructuringPattern(from: p.pattern, isDeclaration: true)
+            let pattern = try decodeDestructuringPattern(from: p.pattern, mode: .declaration)
             let numInputs = inouts.count - pattern.numBindings
             guard numInputs == 1 + pattern.numExtraInputs else {
                 throw FuzzilliError.instructionDecodingError(
@@ -2557,7 +2569,7 @@ extension Instruction: ProtobufConvertible {
                 pattern: pattern, numInputs: numInputs,
                 numOutputs: pattern.numBindings)
         case .destructAndReassign(let p):
-            let pattern = try decodeDestructuringPattern(from: p.pattern, isDeclaration: false)
+            let pattern = try decodeDestructuringPattern(from: p.pattern, mode: .assignment)
             guard inouts.count == 1 + pattern.numExtraInputs + pattern.numBindings else {
                 throw FuzzilliError.instructionDecodingError(
                     "Invalid number of inputs for DestructAndReassign")
@@ -3092,31 +3104,60 @@ extension Operation {
     }
 }
 
-private func encodeDestructuringTarget(_ target: DestructuringPattern.Target)
+enum DestructuringMode {
+    case declaration
+    case assignment
+    // TODO: merge with .declaration once we support computed keys and defaults in parameters.
+    case parameter
+}
+
+private func encodeDestructuringTarget(
+    _ target: DestructuringPattern.Target, mode: DestructuringMode
+)
     -> Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target
 {
+    func checkValidTarget() {
+        if mode != .assignment {
+            fatalError("Member expression targets are only valid in destructuring for assignment")
+        }
+    }
+
     return Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target.with { encodedTarget in
         switch target {
         case .flatBinding: encodedTarget.flatBinding = Fuzzilli_Protobuf_Empty()
-        case .pattern(let pattern): encodedTarget.pattern = encodeDestructuringPattern(pattern)
-        case .property(let propertyName): encodedTarget.property = propertyName
-        case .element(let index): encodedTarget.element = index
-        case .computedProperty: encodedTarget.computedProperty = Fuzzilli_Protobuf_Empty()
-        case .superProperty(let propertyName): encodedTarget.superProperty = propertyName
-        case .superElement(let index): encodedTarget.superElement = index
-        case .superComputedProperty: encodedTarget.superComputedProperty = Fuzzilli_Protobuf_Empty()
+        case .pattern(let pattern):
+            encodedTarget.pattern = encodeDestructuringPattern(pattern, mode: mode)
+        case .property(let propertyName):
+            checkValidTarget()
+            encodedTarget.property = propertyName
+        case .element(let index):
+            checkValidTarget()
+            encodedTarget.element = index
+        case .computedProperty:
+            checkValidTarget()
+            encodedTarget.computedProperty = Fuzzilli_Protobuf_Empty()
+        case .superProperty(let propertyName):
+            checkValidTarget()
+            encodedTarget.superProperty = propertyName
+        case .superElement(let index):
+            checkValidTarget()
+            encodedTarget.superElement = index
+        case .superComputedProperty:
+            checkValidTarget()
+            encodedTarget.superComputedProperty = Fuzzilli_Protobuf_Empty()
         }
     }
 }
 
 private func decodeDestructuringTarget(
     from targetProto: Fuzzilli_Protobuf_FuzzILDestructuringPattern.Target,
-    isDeclaration: Bool
+    mode: DestructuringMode
 ) throws -> DestructuringPattern.Target {
     func checkValidTarget() throws {
-        if isDeclaration {
+        if mode != .assignment {
             throw FuzzilliError.instructionDecodingError(
-                "Member expression targets are only valid in DestructAndReassign, not Destruct")
+                "Member expression targets are only valid in destructuring for assignment"
+            )
         }
     }
 
@@ -3124,7 +3165,7 @@ private func decodeDestructuringTarget(
     case .flatBinding(_): return .flatBinding
     case .pattern(let patternProto):
         return .pattern(
-            try decodeDestructuringPattern(from: patternProto, isDeclaration: isDeclaration))
+            try decodeDestructuringPattern(from: patternProto, mode: mode))
     case .property(let propertyName):
         try checkValidTarget()
         return .property(propertyName)
@@ -3148,7 +3189,7 @@ private func decodeDestructuringTarget(
     }
 }
 
-private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
+private func encodeDestructuringPattern(_ pattern: DestructuringPattern, mode: DestructuringMode)
     -> Fuzzilli_Protobuf_FuzzILDestructuringPattern
 {
     switch pattern {
@@ -3162,9 +3203,18 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
                         case .string(let s):
                             propProto.stringKey = s
                         case .computed:
+                            if mode == .parameter {
+                                fatalError(
+                                    "Computed keys are not supported in parameter destructuring")
+                            }
                             propProto.computedKey = Fuzzilli_Protobuf_Empty()
                         }
-                        propProto.target = encodeDestructuringTarget(prop.target)
+                        propProto.target = encodeDestructuringTarget(prop.target, mode: mode)
+
+                        if mode == .parameter && prop.hasDefaultValue {
+                            fatalError(
+                                "Default values in parameter destructuring are not yet supported")
+                        }
                         propProto.hasDefaultValue_p = prop.hasDefaultValue
                     }
                 }
@@ -3178,13 +3228,17 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
                     Fuzzilli_Protobuf_FuzzILDestructuringPattern.ArrayElement.with {
                         elemProto in
                         if let target = elem.target {
-                            elemProto.target = encodeDestructuringTarget(target)
+                            elemProto.target = encodeDestructuringTarget(target, mode: mode)
+                        }
+                        if mode == .parameter && elem.hasDefaultValue {
+                            fatalError(
+                                "Default values in parameter destructuring are not yet supported")
                         }
                         elemProto.hasDefaultValue_p = elem.hasDefaultValue
                     }
                 }
                 if let restTarget = arr.restTarget {
-                    $0.restTarget = encodeDestructuringTarget(restTarget)
+                    $0.restTarget = encodeDestructuringTarget(restTarget, mode: mode)
                 }
             }
         }
@@ -3192,7 +3246,7 @@ private func encodeDestructuringPattern(_ pattern: DestructuringPattern)
 }
 
 private func decodeDestructuringPattern(
-    from proto: Fuzzilli_Protobuf_FuzzILDestructuringPattern, isDeclaration: Bool
+    from proto: Fuzzilli_Protobuf_FuzzILDestructuringPattern, mode: DestructuringMode
 )
     throws -> DestructuringPattern
 {
@@ -3200,19 +3254,30 @@ private func decodeDestructuringPattern(
     case .objectPattern(let objProto):
         let properties = try objProto.properties.map {
             propProto -> DestructuringPattern.ObjectProperty in
-            let key: DestructuringPattern.ObjectProperty.Key =
-                switch propProto.key {
-                case .stringKey(let s): .string(s)
-                case .computedKey(_): .computed
-                case nil:
+            let key: DestructuringPattern.ObjectProperty.Key
+            switch propProto.key {
+            case .stringKey(let s):
+                key = .string(s)
+            case .computedKey(_):
+                if mode == .parameter {
                     throw FuzzilliError.instructionDecodingError(
-                        "Missing or invalid key in ObjectProperty")
+                        "Computed keys are not supported in parameter destructuring")
                 }
+                key = .computed
+            case nil:
+                throw FuzzilliError.instructionDecodingError(
+                    "Missing or invalid key in ObjectProperty")
+            }
+
+            if mode == .parameter && propProto.hasDefaultValue_p {
+                throw FuzzilliError.instructionDecodingError(
+                    "Default values in parameter destructuring are not yet supported")
+            }
 
             return DestructuringPattern.ObjectProperty(
                 key: key,
                 target: try decodeDestructuringTarget(
-                    from: propProto.target, isDeclaration: isDeclaration),
+                    from: propProto.target, mode: mode),
                 hasDefaultValue: propProto.hasDefaultValue_p)
         }
         return .object(
@@ -3224,14 +3289,18 @@ private func decodeDestructuringPattern(
             let target: DestructuringPattern.Target? =
                 elemProto.hasTarget
                 ? try decodeDestructuringTarget(
-                    from: elemProto.target, isDeclaration: isDeclaration) : nil
+                    from: elemProto.target, mode: mode) : nil
+            if mode == .parameter && elemProto.hasDefaultValue_p {
+                throw FuzzilliError.instructionDecodingError(
+                    "Default values in parameter destructuring are not yet supported")
+            }
             return DestructuringPattern.ArrayElement(
                 target: target, hasDefaultValue: elemProto.hasDefaultValue_p)
         }
 
         let restTarget: DestructuringPattern.Target? =
             arrProto.hasRestTarget
-            ? try decodeDestructuringTarget(from: arrProto.restTarget, isDeclaration: isDeclaration)
+            ? try decodeDestructuringTarget(from: arrProto.restTarget, mode: mode)
             : nil
         return .array(DestructuringPattern.ArrayPattern(elements: elements, restTarget: restTarget))
 

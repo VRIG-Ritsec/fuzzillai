@@ -3498,6 +3498,10 @@ public class ProgramBuilder {
                     defaultParameterIndices: defaultParameterIndices))
         }
 
+        public static func parameters(_ parameters: Parameters) -> SubroutineDescriptor {
+            return SubroutineDescriptor(withParameters: parameters)
+        }
+
         /// Returns a copy of this SubroutineDescriptor but with some parameters turned into default parameters.
         public func withRandomDefaultParameters(
             probability chance: Double, randomVariable: () -> Variable

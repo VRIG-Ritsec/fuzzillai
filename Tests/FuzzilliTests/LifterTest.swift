@@ -1652,6 +1652,95 @@ struct LifterTests {
         }
     }
 
+    @Test func testFunctionDestructuringParametersLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let p1 = DestructuringPattern.ObjectPattern(
+                properties: [
+                    .init(key: .string("a"), target: .flatBinding, hasDefaultValue: false)
+                ],
+                hasRestElement: false)
+            let p2 = DestructuringPattern.ArrayPattern(
+                elements: [.init(target: .flatBinding, hasDefaultValue: false)], restTarget: nil)
+            let parameters = Parameters(
+                count: 3, hasRestParameter: true,
+                destructuringParameters: [0: .object(p1), 2: .array(p2)]
+            )
+
+            _ = b.buildPlainFunction(with: .parameters(parameters)) { args in
+                b.doReturn(args[0])
+            }
+
+            let program = b.finalize()
+            let actualJS = fuzzer.lifter.lift(program)
+
+            let expectedJS = """
+                function f0({a:a1}, a2, ...[a3]) {
+                    return a1;
+                }
+
+                """
+            #expect(actualJS == expectedJS)
+
+            let lifter = FuzzILLifter()
+            let actualFuzzIL = lifter.lift(program)
+            let expectedFuzzIL = """
+                v0 <- BeginPlainFunction -> {"a":v1}, v2, ...[v3]
+                    Return v1
+                EndPlainFunction
+
+                """
+            #expect(actualFuzzIL == expectedFuzzIL)
+        }
+    }
+
+    @Test func testMethodDestructuringParametersLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b2 = fuzzer.makeBuilder()
+
+            let p = DestructuringPattern.ObjectPattern(
+                properties: [
+                    .init(key: .string("x"), target: .flatBinding, hasDefaultValue: false),
+                    .init(key: .string("y"), target: .flatBinding, hasDefaultValue: false),
+                ],
+                hasRestElement: false)
+            let parameters2 = Parameters(
+                count: 1, hasRestParameter: false,
+                destructuringParameters: [0: .object(p)]
+            )
+            b2.buildObjectLiteral { obj in
+                obj.addMethod("destructMethod", with: .parameters(parameters2)) { params in
+                    b2.doReturn(params[1])
+                }
+            }
+            let program2 = b2.finalize()
+            let actualJS2 = fuzzer.lifter.lift(program2)
+            let expectedJS2 = """
+                const v3 = {
+                    destructMethod({x:a1,y:a2}) {
+                        return a1;
+                    },
+                };
+
+                """
+            #expect(actualJS2 == expectedJS2)
+            let lifter = FuzzILLifter()
+            let actualFuzzIL2 = lifter.lift(program2)
+            let expectedFuzzIL2 = """
+                BeginObjectLiteral
+                    BeginObjectLiteralMethod `destructMethod` -> v0, {"x":v1,"y":v2}
+                        Return v1
+                    EndObjectLiteralMethod
+                v3 <- EndObjectLiteral
+
+                """
+            #expect(actualFuzzIL2 == expectedFuzzIL2)
+        }
+    }
+
     @Test func testStrictFunctionLifting() {
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {

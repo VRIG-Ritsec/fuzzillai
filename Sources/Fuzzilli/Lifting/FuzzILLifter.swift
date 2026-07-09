@@ -46,6 +46,35 @@ public class FuzzILLifter: Lifter {
             return " [\(defaults)]"
         }
 
+        func liftParametersWithThis(_ parameters: Parameters, as variables: [String]) -> String {
+            guard !variables.isEmpty else { return "" }
+            let thisVar = variables[0]
+            let params = liftParameters(parameters, as: Array(variables.dropFirst()))
+            return params.isEmpty ? thisVar : "\(thisVar), \(params)"
+        }
+
+        func liftParameters(_ parameters: Parameters, as variables: [String]) -> String {
+            let iter = Ref(variables.makeIterator())
+            let paramList = (0..<parameters.count).map { i -> String in
+                let p: String
+                if let dp = parameters.destructuringParameters[i] {
+                    p = liftParameterDestructuringPattern(dp, iterator: iter)
+                } else {
+                    p = iter.val.next()!
+                }
+
+                if parameters.hasRestParameter && i == parameters.count - 1 {
+                    return "...\(p)"
+                } else {
+                    return p
+                }
+            }
+            assert(
+                iter.val.next() == nil,
+                "Mismatch between mapped inner outputs and destructuring pattern bindings")
+            return paramList.joined(separator: ", ")
+        }
+
         switch instr.op.opcode {
         case .loadInteger(let op):
             w.emit("\(output()) <- LoadInteger '\(op.value)'")
@@ -123,7 +152,7 @@ public class FuzzILLifter: Lifter {
             w.emit("ObjectLiteralSetPrototype \(input(0))")
 
         case .beginObjectLiteralMethod(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("BeginObjectLiteralMethod `\(op.methodName)`\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -133,7 +162,7 @@ public class FuzzILLifter: Lifter {
             w.emit("EndObjectLiteralMethod")
 
         case .beginObjectLiteralComputedMethod(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
             w.emit("BeginObjectLiteralComputedMethod \(input(0))\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -195,7 +224,7 @@ public class FuzzILLifter: Lifter {
             w.increaseIndentionLevel()
 
         case .beginClassConstructor(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("BeginClassConstructor\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -230,7 +259,7 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("BeginClassMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -241,7 +270,7 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassComputedMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
             w.emit("BeginClassComputedMethod \(maybeStatic)\(input(0))\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -308,7 +337,7 @@ public class FuzzILLifter: Lifter {
 
         case .beginClassPrivateMethod(let op):
             let maybeStatic = op.isStatic ? "static " : ""
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("BeginClassPrivateMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -424,7 +453,7 @@ public class FuzzILLifter: Lifter {
             .beginAsyncFunction(let op as BeginAnyFunction),
             .beginAsyncArrowFunction(let op as BeginAnyFunction),
             .beginAsyncGeneratorFunction(let op as BeginAnyFunction):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParameters(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("\(output()) <- \(op.name)\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -440,7 +469,7 @@ public class FuzzILLifter: Lifter {
             w.emit("\(op.name)")
 
         case .beginConstructor(let op):
-            let params = instr.innerOutputs.map(lift).joined(separator: ", ")
+            let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
             w.emit("\(output()) <- \(op.name)\(inputs) -> \(params)")
             w.increaseIndentionLevel()
@@ -547,17 +576,18 @@ public class FuzzILLifter: Lifter {
 
         case .destruct(let op):
             let outputs = instr.outputs.map(lift)
-            var inputIdx = 1
-            var outputIdx = 0
+            let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+            let outputIter = Ref(outputs.makeIterator())
             w.emit(
-                "\(liftDestructuringPattern(op.pattern, isReassign: false, inputIdx: &inputIdx, outputIdx: &outputIdx, inputs: instr.inputs.map(lift), outputs: outputs)) <- Destruct \(input(0))"
+                "\(liftDestructuringPattern(op.pattern, isReassign: false, inputIterator: inputIter, outputIterator: outputIter)) <- Destruct \(input(0))"
             )
 
         case .destructAndReassign(let op):
-            var inputIdx = 1
-            var outputIdx = 0
+            let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+            let outputs = [String]()
+            let outputIter = Ref(outputs.makeIterator())
             w.emit(
-                "\(liftDestructuringPattern(op.pattern, isReassign: true, inputIdx: &inputIdx, outputIdx: &outputIdx, inputs: instr.inputs.map(lift), outputs: [])) <- DestructAndReassign \(input(0))"
+                "\(liftDestructuringPattern(op.pattern, isReassign: true, inputIterator: inputIter, outputIterator: outputIter)) <- DestructAndReassign \(input(0))"
             )
 
         case .compare(let op):
@@ -724,7 +754,6 @@ public class FuzzILLifter: Lifter {
             w.increaseIndentionLevel()
 
         case .beginForLoop(let op):
-            let outputs = instr.innerOutputs.dropLast().map(lift)
             let label = lift(instr.innerOutputs.last!)
             var line = "BeginForLoop type='\(op.type)' async='\(op.isAsync)'"
             if op.usingType != .none {
@@ -736,12 +765,12 @@ public class FuzzILLifter: Lifter {
                 let allOutputs = instr.innerOutputs.map(lift).joined(separator: ", ")
                 w.emit("\(line) \(input(0)) -> \(allOutputs)")
             case .destruct(let pattern):
-                var nextInputIndex = 1
-                var nextOutputIndex = 0
+                let outputs = instr.innerOutputs.dropLast().map(lift)
+                let inputIter = Ref(instr.inputs.dropFirst().makeIterator())
+                let outputIter = Ref(outputs.makeIterator())
                 let patStr = liftDestructuringPattern(
                     pattern, isReassign: false,
-                    inputIdx: &nextInputIndex, outputIdx: &nextOutputIndex,
-                    inputs: instr.inputs.map(lift), outputs: outputs)
+                    inputIterator: inputIter, outputIterator: outputIter)
                 w.emit("\(line) \(input(0)) -> \(patStr), \(label)")
             }
             w.increaseIndentionLevel()
@@ -1766,114 +1795,81 @@ public class FuzzILLifter: Lifter {
         return objectPattern
     }
 
-    private func liftDestructuringTarget(
+    private func liftDestructuringTarget<InputIter: IteratorProtocol, OutputIter: IteratorProtocol>(
         _ target: DestructuringPattern.Target, isReassign: Bool,
-        inputIdx: inout Int, outputIdx: inout Int,
-        inputs: [String], outputs: [String]
-    ) -> String {
+        inputIterator: Ref<InputIter>, outputIterator: Ref<OutputIter>
+    ) -> String where InputIter.Element == Variable, OutputIter.Element == String {
         switch target {
         case .flatBinding:
-            let propertyName = isReassign ? inputs[inputIdx] : outputs[outputIdx]
-            if isReassign { inputIdx += 1 } else { outputIdx += 1 }
-            return propertyName
+            let s = isReassign ? lift(inputIterator.val.next()!) : outputIterator.val.next()!
+            return s
         case .pattern(let p):
             return liftDestructuringPattern(
-                p, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                inputs: inputs, outputs: outputs)
-        case .property(let propertyName):
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            return "\(obj).\(propertyName)"
-        case .element(let index):
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            return "\(obj)[\(index)]"
+                p, isReassign: isReassign,
+                inputIterator: inputIterator, outputIterator: outputIterator)
+        case .property(let s):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj).\(s)"
+        case .element(let i):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj)[\(i)]"
         case .computedProperty:
-            let obj = inputs[inputIdx]
-            inputIdx += 1
-            let key = inputs[inputIdx]
-            inputIdx += 1
+            let obj = lift(inputIterator.val.next()!)
+            let key = lift(inputIterator.val.next()!)
             return "\(obj)[\(key)]"
-        case .superProperty(let propertyName):
-            return "super.\(propertyName)"
-        case .superElement(let index):
-            return "super[\(index)]"
+        case .superProperty(let s):
+            return "super.\(s)"
+        case .superElement(let i):
+            return "super[\(i)]"
         case .superComputedProperty:
-            let key = inputs[inputIdx]
-            inputIdx += 1
+            let key = lift(inputIterator.val.next()!)
             return "super[\(key)]"
         }
     }
 
-    private func liftDestructuringPattern(
+    private func liftParameterDestructuringPattern<Iter: IteratorProtocol>(
+        _ pattern: DestructuringPattern, iterator: Ref<Iter>
+    ) -> String where Iter.Element == String {
+        return pattern.lift(
+            formatStringKey: { "\"\($0)\"" },
+            formatComputedKey: {
+                fatalError("Computed keys in parameter destructuring are not yet supported")
+            },
+            formatTarget: { target in
+                switch target {
+                case .flatBinding:
+                    return iterator.val.next()!
+                case .pattern(let p):
+                    return self.liftParameterDestructuringPattern(p, iterator: iterator)
+                default:
+                    fatalError("Invalid parameter destructuring target")
+                }
+            },
+            formatDefaultValue: {
+                fatalError("Default values in parameter destructuring are not yet supported")
+            }
+        )
+    }
+
+    private func liftDestructuringPattern<
+        InputIter: IteratorProtocol, OutputIter: IteratorProtocol
+    >(
         _ pattern: DestructuringPattern, isReassign: Bool,
-        inputIdx: inout Int, outputIdx: inout Int,
-        inputs: [String], outputs: [String]
-    ) -> String {
-        switch pattern {
-        case .object(let obj):
-            var props = [String]()
-            for prop in obj.properties {
-                var keyStr = ""
-                switch prop.key {
-                case .string(let s): keyStr = "\"\(s)\""
-                case .computed:
-                    keyStr = "[\(inputs[inputIdx])]"
-                    inputIdx += 1
-                }
-
-                let targetStr = liftDestructuringTarget(
-                    prop.target, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                    inputs: inputs, outputs: outputs)
-
-                var defStr = ""
-                if prop.hasDefaultValue {
-                    defStr = " = \(inputs[inputIdx])"
-                    inputIdx += 1
-                }
-
-                props.append("\(keyStr): \(targetStr)\(defStr)")
+        inputIterator: Ref<InputIter>, outputIterator: Ref<OutputIter>
+    ) -> String where InputIter.Element == Variable, OutputIter.Element == String {
+        return pattern.lift(
+            formatStringKey: { "\"\($0)\"" },
+            formatComputedKey: {
+                self.lift(inputIterator.val.next()!)
+            },
+            formatTarget: { target in
+                self.liftDestructuringTarget(
+                    target, isReassign: isReassign,
+                    inputIterator: inputIterator, outputIterator: outputIterator)
+            },
+            formatDefaultValue: {
+                self.lift(inputIterator.val.next()!)
             }
-            if obj.hasRestElement {
-                let targetStr =
-                    isReassign ? inputs[inputIdx] : outputs[outputIdx]
-                if isReassign { inputIdx += 1 } else { outputIdx += 1 }
-                props.append("...\(targetStr)")
-            }
-            return "{\(props.joined(separator: ", "))}"
-
-        case .array(let arr):
-            var elems = [String]()
-            for elem in arr.elements {
-                if let target = elem.target {
-                    let targetStr = liftDestructuringTarget(
-                        target, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                        inputs: inputs, outputs: outputs)
-                    if elem.hasDefaultValue {
-                        elems.append(
-                            "\(targetStr)=\(inputs[inputIdx])")
-                        inputIdx += 1
-                    } else {
-                        elems.append(targetStr)
-                    }
-                } else {
-                    assert(!elem.hasDefaultValue)
-                    elems.append("")
-                }
-            }
-            if let restTarget = arr.restTarget {
-                let targetStr = liftDestructuringTarget(
-                    restTarget, isReassign: isReassign, inputIdx: &inputIdx, outputIdx: &outputIdx,
-                    inputs: inputs, outputs: outputs)
-                elems.append("...\(targetStr)")
-            }
-            if let last = arr.elements.last, last.target == nil, arr.restTarget == nil {
-                // In JavaScript, a single trailing comma in an array destructuring pattern (e.g. `[x, ]`)
-                // is ignored, resulting in a pattern of length 1. To represent an actual elision at
-                // the very end (length 2), we must emit `[x, ,]`. Hence the extra empty element.
-                elems.append("")
-            }
-            return "[\(elems.joined(separator: ", "))]"
-        }
+        )
     }
 }

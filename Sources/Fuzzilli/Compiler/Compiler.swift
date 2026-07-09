@@ -158,14 +158,14 @@ public class JavaScriptCompiler {
 
             case .ctor(let constructor):
                 let defaultValues = defaultValuesPerSubroutine.removeLast()
-                let parameters = convertParameters(constructor.parameters)
+                let parameters = try convertParameters(constructor.parameters)
                 let head = emit(
                     BeginClassConstructor(parameters: parameters), withInputs: defaultValues)
 
                 try enterNewScope {
                     var parameters = head.innerOutputs
                     map("this", to: parameters.removeFirst())
-                    mapParameters(constructor.parameters, to: parameters)
+                    try mapParameters(constructor.parameters, to: parameters)
                     for statement in constructor.body {
                         try compileStatement(statement)
                     }
@@ -175,7 +175,7 @@ public class JavaScriptCompiler {
 
             case .method(let method):
                 let defaultValues = defaultValuesPerSubroutine.removeLast()
-                let parameters = convertParameters(method.parameters)
+                let parameters = try convertParameters(method.parameters)
                 let head: Instruction
 
                 guard let key = method.key.body else {
@@ -202,7 +202,7 @@ public class JavaScriptCompiler {
                 try enterNewScope {
                     var parameters = head.innerOutputs
                     map("this", to: parameters.removeFirst())
-                    mapParameters(method.parameters, to: parameters)
+                    try mapParameters(method.parameters, to: parameters)
                     for statement in method.body {
                         try compileStatement(statement)
                     }
@@ -442,7 +442,7 @@ public class JavaScriptCompiler {
 
         case .functionDeclaration(let functionDeclaration):
             let defaultValues = try compileDefaultValues(for: functionDeclaration.parameters)
-            let parameters = convertParameters(functionDeclaration.parameters)
+            let parameters = try convertParameters(functionDeclaration.parameters)
             let functionBegin: Operation
             let functionEnd: Operation
             switch functionDeclaration.type {
@@ -471,7 +471,7 @@ public class JavaScriptCompiler {
             // here we may overwrite an existing variable mapping.
             mapOrRemap(functionDeclaration.name, to: instr.output)
             try enterNewScope {
-                mapParameters(functionDeclaration.parameters, to: instr.innerOutputs)
+                try mapParameters(functionDeclaration.parameters, to: instr.innerOutputs)
                 for statement in functionDeclaration.body {
                     try compileStatement(statement)
                 }
@@ -1230,7 +1230,7 @@ public class JavaScriptCompiler {
                     }
                 case .method(let method):
                     let defaultValues = methodDefaultValues.removeLast()
-                    let parameters = convertParameters(method.parameters)
+                    let parameters = try convertParameters(method.parameters)
                     let head: Instruction
 
                     guard let key = method.key.body else {
@@ -1256,7 +1256,7 @@ public class JavaScriptCompiler {
                     try enterNewScope {
                         var parameters = head.innerOutputs
                         map("this", to: parameters.removeFirst())
-                        mapParameters(method.parameters, to: parameters)
+                        try mapParameters(method.parameters, to: parameters)
                         for statement in method.body {
                             try compileStatement(statement)
                         }
@@ -1361,7 +1361,7 @@ public class JavaScriptCompiler {
 
         case .functionExpression(let functionExpression):
             let defaultValues = try compileDefaultValues(for: functionExpression.parameters)
-            let parameters = convertParameters(functionExpression.parameters)
+            let parameters = try convertParameters(functionExpression.parameters)
             let functionBegin: Operation
             let functionEnd: Operation
             let name = functionExpression.name.isEmpty ? nil : functionExpression.name
@@ -1385,7 +1385,7 @@ public class JavaScriptCompiler {
 
             let instr = emit(functionBegin, withInputs: defaultValues)
             try enterNewScope {
-                mapParameters(functionExpression.parameters, to: instr.innerOutputs)
+                try mapParameters(functionExpression.parameters, to: instr.innerOutputs)
                 for statement in functionExpression.body {
                     try compileStatement(statement)
                 }
@@ -1396,7 +1396,7 @@ public class JavaScriptCompiler {
 
         case .arrowFunctionExpression(let arrowFunction):
             let defaultValues = try compileDefaultValues(for: arrowFunction.parameters)
-            let parameters = convertParameters(arrowFunction.parameters)
+            let parameters = try convertParameters(arrowFunction.parameters)
             let functionBegin: Operation
             let functionEnd: Operation
             switch arrowFunction.type {
@@ -1413,7 +1413,7 @@ public class JavaScriptCompiler {
 
             let instr = emit(functionBegin, withInputs: defaultValues)
             try enterNewScope {
-                mapParameters(arrowFunction.parameters, to: instr.innerOutputs)
+                try mapParameters(arrowFunction.parameters, to: instr.innerOutputs)
                 guard let body = arrowFunction.body else {
                     throw CompilerError.invalidNodeError("missing body in arrow function")
                 }
@@ -1785,10 +1785,66 @@ public class JavaScriptCompiler {
 
     private func mapParameters(
         _ parameters: Compiler_Protobuf_Parameters, to variables: ArraySlice<Variable>
-    ) {
-        assert(parameters.parameters.count == variables.count)
-        for (param, v) in zip(parameters.parameters, variables) {
-            map(param.name, to: v)
+    ) throws {
+        var iter = variables.makeIterator()
+        for param in parameters.parameters {
+            switch param.id {
+            case .objectPattern(let obj):
+                // e.g. function foo({a, b}) {}
+                try mapDestructuringPattern(obj, iterator: &iter)
+            case .arrayPattern(let arr):
+                // e.g. function bar([x, y]) {}
+                try mapDestructuringPattern(arr, iterator: &iter)
+            case .name(let name):
+                map(name, to: iter.next()!)
+            case nil:
+                break
+            }
+        }
+    }
+
+    private func mapDestructuringTarget<Iter: IteratorProtocol>(
+        _ target: Compiler_Protobuf_LValue, iterator: inout Iter
+    ) throws where Iter.Element == Variable {
+        switch target.value {
+        case .destructuringPattern(let dp):
+            switch dp.pattern {
+            case .objectPattern(let obj):
+                try mapDestructuringPattern(obj, iterator: &iterator)
+            case .arrayPattern(let arr):
+                try mapDestructuringPattern(arr, iterator: &iterator)
+            case nil:
+                throw CompilerError.invalidASTError(
+                    "Invalid destructuring assignment target in parameter")
+            }
+        case .identifier(let id):
+            map(id.name, to: iterator.next()!)
+        default:
+            throw CompilerError.invalidASTError(
+                "Invalid destructuring assignment target in parameter")
+        }
+    }
+
+    private func mapDestructuringPattern<Iter: IteratorProtocol>(
+        _ pattern: Compiler_Protobuf_ObjectPattern, iterator: inout Iter
+    ) throws where Iter.Element == Variable {
+        for prop in pattern.properties {
+            try mapDestructuringTarget(prop.target, iterator: &iterator)
+        }
+        if pattern.hasRestTarget {
+            try mapDestructuringTarget(pattern.restTarget, iterator: &iterator)
+        }
+    }
+
+    private func mapDestructuringPattern<Iter: IteratorProtocol>(
+        _ pattern: Compiler_Protobuf_ArrayPattern, iterator: inout Iter
+    ) throws where Iter.Element == Variable {
+        for elem in pattern.elements {
+            guard elem.hasTarget else { continue }
+            try mapDestructuringTarget(elem.target, iterator: &iterator)
+        }
+        if pattern.hasRestTarget {
+            try mapDestructuringTarget(pattern.restTarget, iterator: &iterator)
         }
     }
 
@@ -1804,14 +1860,116 @@ public class JavaScriptCompiler {
         return defaultValues
     }
 
-    private func convertParameters(_ parameters: Compiler_Protobuf_Parameters) -> Parameters {
+    private func convertParameterDestructuringPattern(
+        _ pattern: Compiler_Protobuf_DestructuringPattern
+    ) throws -> DestructuringPattern {
+        switch pattern.pattern {
+        case .objectPattern(let objProto):
+            var properties = [DestructuringPattern.ObjectProperty]()
+            for prop in objProto.properties {
+                let key: DestructuringPattern.ObjectProperty.Key
+                if case .name(let s) = prop.key.body {
+                    key = .string(s)
+                } else if case .index(let i) = prop.key.body {
+                    // e.g. function foo({1: a}) {}
+                    key = .string(String(i))
+                } else {
+                    throw CompilerError.invalidASTError(
+                        "Computed keys not supported in parameter destructuring")
+                }
+
+                let target: DestructuringPattern.Target
+                switch prop.target.value {
+                case .destructuringPattern(let dp):
+                    target = .pattern(try convertParameterDestructuringPattern(dp))
+                case .identifier:
+                    target = .flatBinding
+                default:
+                    throw CompilerError.invalidASTError(
+                        "Invalid destructuring assignment target in parameter")
+                }
+
+                assert(
+                    !prop.hasDefaultValue,
+                    "Default values in parameter destructuring are not yet supported")
+                properties.append(
+                    DestructuringPattern.ObjectProperty(
+                        key: key, target: target, hasDefaultValue: false))
+            }
+            // FuzzIL operations only need to know if a rest target exists, not its string name.
+            // The string name mapping (e.g. "myRestParams" -> v3) is handled separately by `mapDestructuringPattern`.
+            return .object(
+                DestructuringPattern.ObjectPattern(
+                    properties: properties, hasRestElement: objProto.hasRestTarget))
+
+        case .arrayPattern(let arrProto):
+            var elements = [DestructuringPattern.ArrayElement]()
+            for elem in arrProto.elements {
+                guard elem.hasTarget else {
+                    elements.append(
+                        DestructuringPattern.ArrayElement(target: nil, hasDefaultValue: false))
+                    continue
+                }
+                let target: DestructuringPattern.Target
+                switch elem.target.value {
+                case .destructuringPattern(let dp):
+                    target = .pattern(try convertParameterDestructuringPattern(dp))
+                case .identifier:
+                    target = .flatBinding
+                default:
+                    throw CompilerError.invalidASTError(
+                        "Invalid destructuring assignment target in parameter")
+                }
+                assert(
+                    !elem.hasDefaultValue,
+                    "Default values in parameter destructuring are not yet supported")
+                elements.append(
+                    DestructuringPattern.ArrayElement(
+                        target: target, hasDefaultValue: false))
+            }
+            let restTarget: DestructuringPattern.Target?
+            if arrProto.hasRestTarget {
+                switch arrProto.restTarget.value {
+                case .destructuringPattern(let dp):
+                    restTarget = .pattern(try convertParameterDestructuringPattern(dp))
+                default:
+                    restTarget = .flatBinding
+                }
+            } else {
+                restTarget = nil
+            }
+            return .array(
+                DestructuringPattern.ArrayPattern(elements: elements, restTarget: restTarget))
+
+        case nil:
+            throw CompilerError.invalidASTError("Missing pattern")
+        }
+    }
+
+    private func convertParameters(_ parameters: Compiler_Protobuf_Parameters) throws -> Parameters
+    {
         let defaultParameterIndices = parameters.parameters.enumerated()
             .filter { $0.element.hasDefaultValue }
             .map { $0.offset }
 
+        var destructuringParameters = [Int: DestructuringPattern]()
+        for (i, param) in parameters.parameters.enumerated() {
+            switch param.id {
+            case .objectPattern(let obj):
+                let dp = Compiler_Protobuf_DestructuringPattern.with { $0.objectPattern = obj }
+                destructuringParameters[i] = try convertParameterDestructuringPattern(dp)
+            case .arrayPattern(let arr):
+                let dp = Compiler_Protobuf_DestructuringPattern.with { $0.arrayPattern = arr }
+                destructuringParameters[i] = try convertParameterDestructuringPattern(dp)
+            default:
+                break
+            }
+        }
+
         return Parameters(
             count: parameters.parameters.count, hasRestParameter: parameters.hasRestElement_p,
-            defaultParameterIndices: defaultParameterIndices)
+            defaultParameterIndices: defaultParameterIndices,
+            destructuringParameters: destructuringParameters)
     }
 
     /// Convenience accessor for the currently active scope.
@@ -1978,6 +2136,9 @@ public class JavaScriptCompiler {
 
             var hasDefaultValue = false
             if propProto.hasDefaultValue {
+                // TODO(rherouart): we should not emit FuzzIL Code unless default is called, otherwise
+                // `let {a = default_with_side_effect()} = foo;`
+                // may behave differently in original and re-lifted code otherwise.
                 let defaultVar = try compileExpression(propProto.defaultValue)
                 hasDefaultValue = true
                 inputs.append(defaultVar)

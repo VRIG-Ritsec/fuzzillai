@@ -22,7 +22,11 @@ message AST {
 
 // A parameter in a function declaration. Not an expression on its own.
 message Parameter {
-    string name = 1;
+    oneof id {
+        string name = 1;
+        ObjectPattern objectPattern = 3;
+        ArrayPattern arrayPattern = 4;
+    }
     Expression defaultValue = 2;
 }
 

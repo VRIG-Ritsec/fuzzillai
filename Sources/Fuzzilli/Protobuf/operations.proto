@@ -22,6 +22,7 @@ message Parameters {
     uint32 count = 1;
     bool hasRest = 2;
     repeated uint32 defaultParameterIndices = 3;
+    map<uint32, FuzzILDestructuringPattern> destructuringParameters = 4;
 }
 
 message LoadInteger {

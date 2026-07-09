@@ -23,6 +23,11 @@ extension Lifter {
     }
 }
 
+class Ref<T> {
+    var val: T
+    init(_ val: T) { self.val = val }
+}
+
 public struct LiftingOptions: OptionSet {
     public let rawValue: Int
     public init(rawValue: Int) {
@@ -31,4 +36,59 @@ public struct LiftingOptions: OptionSet {
 
     public static let includeComments = LiftingOptions(rawValue: 1 << 0)
     public static let includeLineNumbers = LiftingOptions(rawValue: 1 << 1)
+}
+
+extension DestructuringPattern {
+    func lift(
+        formatStringKey: (String) -> String,
+        formatComputedKey: () -> String,
+        formatTarget: (Target) -> String,
+        formatDefaultValue: () -> String
+    ) -> String {
+        switch self {
+        case .object(let obj):
+            var props = [String]()
+            for prop in obj.properties {
+                let keyStr =
+                    switch prop.key {
+                    case .string(let s): formatStringKey(s)
+                    case .computed: "[\(formatComputedKey())]"
+                    }
+                let targetStr = formatTarget(prop.target)
+
+                let defStr = prop.hasDefaultValue ? "=\(formatDefaultValue())" : ""
+
+                props.append("\(keyStr):\(targetStr)\(defStr)")
+            }
+            if obj.hasRestElement {
+                let restStr = formatTarget(.flatBinding)
+                props.append("...\(restStr)")
+            }
+            return "{\(props.joined(separator: ","))}"
+        case .array(let arr):
+            var elems = [String]()
+            for elem in arr.elements {
+                if let target = elem.target {
+                    let targetStr = formatTarget(target)
+                    if elem.hasDefaultValue {
+                        elems.append("\(targetStr)=\(formatDefaultValue())")
+                    } else {
+                        elems.append(targetStr)
+                    }
+                } else {
+                    if elem.hasDefaultValue { _ = formatDefaultValue() }
+                    elems.append("")
+                }
+            }
+            if let restTarget = arr.restTarget {
+                let restStr = formatTarget(restTarget)
+                elems.append("...\(restStr)")
+            }
+            // Preserve trailing elision formatting for FuzzIL/JS compatibility
+            if let last = arr.elements.last, last.target == nil, arr.restTarget == nil {
+                elems.append("")
+            }
+            return "[\(elems.joined(separator: ","))]"
+        }
+    }
 }

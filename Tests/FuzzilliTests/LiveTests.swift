@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Foundation
+import Testing
 
 @testable import Fuzzilli
 
-class LiveTests: XCTestCase {
+@Suite(.serialized, .enabled(if: JavaScriptExecutor() != nil))
+struct LiveTests {
     enum ExecutionResult {
         case failed(failureMessage: String)
         case succeeded
@@ -26,8 +28,8 @@ class LiveTests: XCTestCase {
     static let VERBOSE = false
 
     /// Meta-test ensuring that the test framework can successfully terminate an endless loop.
-    func testEndlessLoopTermination() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest()
+    @Test func testEndlessLoopTermination() throws {
+        let runner = JavaScriptExecutor()!
 
         let results = try Self.runLiveTest(iterations: 1, withRunner: runner, timeoutInSeconds: 1) {
             b in
@@ -48,8 +50,8 @@ class LiveTests: XCTestCase {
         assert(results.failureMessages.count == 1)
     }
 
-    func testValueGeneration() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest()
+    @Test func testValueGeneration() throws {
+        let runner = JavaScriptExecutor()!
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             b.buildPrefix()
@@ -59,14 +61,14 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.15)
     }
 
-    func testWasmCodeGenerationAndCompilation() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(
+    @Test func testWasmCodeGenerationAndCompilation() throws {
+        let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
                 "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
                 "--experimental-wasm-acquire-release",
             ]
-        )
+        )!
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             // Fuzzilli can't handle situations where there aren't any variables available.
@@ -105,13 +107,13 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.01)
     }
 
-    func testWasmCodeGenerationAndCompilationAndExecution() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(
+    @Test func testWasmCodeGenerationAndCompilationAndExecution() throws {
+        let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
                 "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
             ]
-        )
+        )!
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             // Fuzzilli can't handle situations where there aren't any variables available.
@@ -180,20 +182,15 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.35)
     }
 
+    @Test(.enabled(if: findWasmOptInPath() != nil, "skipped due to missing wasm-opt"))
     func testBinaryenWasmCodeGenerationAndCompilation() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(
+        let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
                 "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
                 "--experimental-fuzzing",
             ]
-        )
-
-        guard findWasmOptInPath() != nil else {
-            throw XCTSkip(
-                "wasm-opt not found in PATH. To run this test, please ensure that the directory containing wasm-opt is added to your PATH environment variable. Skipping test for now."
-            )
-        }
+        )!
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             b.loadInt(123)  // dummy prefix
@@ -207,20 +204,15 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.1)
     }
 
+    @Test(.enabled(if: findWasmOptInPath() != nil, "skipped due to missing wasm-opt"))
     func testBinaryenWasmCodeGenerationAndCompilationAndExecution() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(
+        let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
                 "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
                 "--experimental-fuzzing",
             ]
-        )
-
-        guard findWasmOptInPath() != nil else {
-            throw XCTSkip(
-                "wasm-opt not found in PATH. To run this test, please ensure that the directory containing wasm-opt is added to your PATH environment variable. Skipping test for now."
-            )
-        }
+        )!
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             b.loadInt(123)  // dummy prefix
@@ -241,18 +233,17 @@ class LiveTests: XCTestCase {
         checkFailureRate(testResults: results, maxFailureRate: 0.50)
     }
 
+    @Test(.enabled(if: findWasmOptInPath() != nil, "skipped due to missing wasm-opt"))
     func testBinaryenWasmMutator() throws {
-        let runner = try GetJavaScriptExecutorOrSkipTest(
+        let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
                 "--wasm-staging", "--wasm-allow-mixed-eh-for-testing",
                 "--experimental-fuzzing",
             ]
-        )
+        )!
 
-        guard let wasmOptPath = findWasmOptInPath() else {
-            throw XCTSkip("wasm-opt not found in PATH")
-        }
+        let wasmOptPath = findWasmOptInPath()!
 
         let liveTestConfig = Configuration(
             logLevel: .error,
@@ -262,7 +253,7 @@ class LiveTests: XCTestCase {
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         let mutator = BinaryenWasmMutator()
 
-        let results = try Self.runLiveTest(withRunner: runner) { b in
+        let results = try Self.runLiveTest(withRunner: runner, using: fuzzer) { b in
             // Generate program in a separate builder.
             let genBuilder = fuzzer.makeBuilder()
             guard let metadata = runBinaryenWasmGenerator(b: genBuilder) else {
@@ -280,7 +271,7 @@ class LiveTests: XCTestCase {
                     break
                 }
             }
-            XCTAssertNotNil(originalMetadata, "Generated program should contain a Wasm module")
+            #expect(originalMetadata != nil, "Generated program should contain a Wasm module")
 
             // Mutate the program.
             let mutBuilder = fuzzer.makeBuilder(forMutating: program)
@@ -297,9 +288,9 @@ class LiveTests: XCTestCase {
                     break
                 }
             }
-            XCTAssertNotNil(mutatedMetadata, "Mutated program should contain a Wasm module")
-            XCTAssertEqual(
-                originalMetadata, mutatedMetadata,
+            #expect(mutatedMetadata != nil, "Mutated program should contain a Wasm module")
+            #expect(
+                originalMetadata == mutatedMetadata,
                 "Wasm metadata should NOT have changed after mutation")
 
             // Append the mutated program onto the ProgramBuilder.
@@ -318,6 +309,7 @@ class LiveTests: XCTestCase {
     // we stay below the maximum failure rate over the given number of iterations.
     static func runLiveTest(
         iterations n: Int = 250, withRunner runner: JavaScriptExecutor, timeoutInSeconds: Int = 5,
+        using customFuzzer: Fuzzer? = nil,
         body: (ProgramBuilder) -> Void
     ) throws -> (failureRate: Double, failureMessages: [String: Int]) {
         let liveTestConfig = Configuration(
@@ -328,7 +320,9 @@ class LiveTests: XCTestCase {
 
         // We have to use the proper JavaScriptEnvironment here.
         // This ensures that we use the available builtins.
-        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let fuzzer =
+            customFuzzer
+            ?? makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
         var failures = 0
         var failureMessages = [String: Int]()
 
@@ -349,15 +343,17 @@ class LiveTests: XCTestCase {
         // Pre-allocate this so that we don't need a lock in the `concurrentPerform`.
         var results = [ExecutionResult?](repeating: nil, count: n)
 
-        for _ in 0..<n {
-            let b = fuzzer.makeBuilder()
+        fuzzer.sync {
+            for _ in 0..<n {
+                let b = fuzzer.makeBuilder()
 
-            body(b)
+                body(b)
 
-            let program = b.finalize()
-            let jsProgram = fuzzer.lifter.lift(program)
+                let program = b.finalize()
+                let jsProgram = fuzzer.lifter.lift(program)
 
-            programs.append((program, jsProgram))
+                programs.append((program, jsProgram))
+            }
         }
 
         DispatchQueue.concurrentPerform(iterations: n) { i in
@@ -400,7 +396,7 @@ class LiveTests: XCTestCase {
                 message +=
                     "If you want to dump failing programs to disk you can set FUZZILLI_TEST_DEBUG=1 in your environment."
             }
-            XCTFail(message)
+            Issue.record("\(message)")
         }
     }
 
@@ -442,7 +438,7 @@ class LiveTests: XCTestCase {
                 return .failed(failureMessage: signature ?? "<Unrecognized error>")
             }
         } catch {
-            XCTFail("Could not execute script: \(error)")
+            Issue.record("Could not execute script: \(error)")
         }
 
         return .succeeded

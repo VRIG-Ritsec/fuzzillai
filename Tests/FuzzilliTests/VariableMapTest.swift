@@ -12,65 +12,66 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
+import Foundation
+import Testing
 
 @testable import Fuzzilli
 
-class VariableMapTests: XCTestCase {
-    func testBasicVariableMapFeatures() {
+struct VariableMapTests {
+    @Test func testBasicVariableMapFeatures() {
         var m = VariableMap<Int>()
-        XCTAssert(m.isEmpty)
+        #expect(m.isEmpty)
 
-        XCTAssertFalse(m.contains(v(0)))
-        XCTAssertNil(m[v(0)])
+        #expect(!m.contains(v(0)))
+        #expect(m[v(0)] == nil)
 
         m[v(42)] = 42
-        XCTAssert(m.contains(v(42)))
-        XCTAssertEqual(m[v(42)], 42)
+        #expect(m.contains(v(42)))
+        #expect(m[v(42)] == 42)
 
         m[v(0)] = 0
-        XCTAssert(m.contains(v(0)))
-        XCTAssertEqual(m[v(0)], 0)
-        XCTAssertFalse(m.contains(v(1)))
-        XCTAssertNil(m[v(1)])
+        #expect(m.contains(v(0)))
+        #expect(m[v(0)] == 0)
+        #expect(!m.contains(v(1)))
+        #expect(m[v(1)] == nil)
         m[v(1)] = 1
-        XCTAssert(m.contains(v(1)))
-        XCTAssertEqual(m[v(1)], 1)
+        #expect(m.contains(v(1)))
+        #expect(m[v(1)] == 1)
 
         m.removeValue(forKey: v(1))
-        XCTAssertFalse(m.contains(v(1)))
-        XCTAssertNil(m[v(1)])
-        XCTAssert(m.contains(v(0)))
-        XCTAssertEqual(m[v(0)], 0)
+        #expect(!m.contains(v(1)))
+        #expect(m[v(1)] == nil)
+        #expect(m.contains(v(0)))
+        #expect(m[v(0)] == 0)
 
         m.removeAll()
-        XCTAssertEqual(m, VariableMap<Int>())
-        XCTAssert(m.isEmpty)
+        #expect(m == VariableMap<Int>())
+        #expect(m.isEmpty)
 
         m[v(43)] = 100
-        XCTAssertFalse(m.isEmpty)
+        #expect(!m.isEmpty)
         m.removeValue(forKey: v(43))
-        XCTAssert(m.isEmpty)
+        #expect(m.isEmpty)
     }
 
-    func testVariableMapEquality() {
+    @Test func testVariableMapEquality() {
         var m1 = VariableMap<Bool>()
-        XCTAssertEqual(m1, m1)
+        #expect(m1 == m1)
 
         var m2 = VariableMap<Bool>()
-        XCTAssertEqual(m1, m2)
+        #expect(m1 == m2)
 
         for i in 0..<128 {
             let val = Bool.random()
             m1[v(i)] = val
             m2[v(i)] = val
         }
-        XCTAssertEqual(m1, m2)
+        #expect(m1 == m2)
 
         m1.removeValue(forKey: v(2))
-        XCTAssertNotEqual(m1, m2)
+        #expect(m1 != m2)
         m2.removeValue(forKey: v(2))
-        XCTAssertEqual(m1, m2)
+        #expect(m1 == m2)
 
         // Add another 128 elements and compare with a new map built up in the opposite order
         for i in 128..<256 {
@@ -79,29 +80,29 @@ class VariableMapTests: XCTestCase {
         }
 
         var m3 = VariableMap<Bool>()
-        XCTAssertNotEqual(m1, m3)
+        #expect(m1 != m3)
 
         for i in (0..<256).reversed() {
             m3[v(i)] = m2[v(i)] ?? false
         }
-        XCTAssertNotEqual(m1, m3)
+        #expect(m1 != m3)
         m3.removeValue(forKey: v(2))
-        XCTAssertEqual(m3, m2)
+        #expect(m3 == m2)
 
         // Remove last 128 variables from m3, should now be equal to m1
         for i in 128..<256 {
             m3.removeValue(forKey: v(i))
         }
-        XCTAssertEqual(m3, m1)
+        #expect(m3 == m1)
 
         // Remove all variables from m2, should now be equal to an empty map
         for i in 0..<256 {
             m2.removeValue(forKey: v(i))
         }
-        XCTAssertEqual(m2, VariableMap<Bool>())
+        #expect(m2 == VariableMap<Bool>())
     }
 
-    func testVariableMapEncoding() {
+    @Test func testVariableMapEncoding() {
         var map = VariableMap<Int>()
 
         for i in 0..<1000 {
@@ -116,10 +117,10 @@ class VariableMapTests: XCTestCase {
         let data = try! encoder.encode(map)
         let mapCopy = try! decoder.decode(VariableMap<Int>.self, from: data)
 
-        XCTAssertEqual(map, mapCopy)
+        #expect(map == mapCopy)
     }
 
-    func testVariableMapHashing() {
+    @Test func testVariableMapHashing() {
         var map1 = VariableMap<Int>()
         var map2 = VariableMap<Int>()
 
@@ -131,11 +132,11 @@ class VariableMapTests: XCTestCase {
             }
         }
 
-        XCTAssertEqual(map1, map2)
-        XCTAssertEqual(map1.hashValue, map2.hashValue)
+        #expect(map1 == map2)
+        #expect(map1.hashValue == map2.hashValue)
     }
 
-    func testVariableMapIteration() {
+    @Test func testVariableMapIteration() {
         var map = VariableMap<Int>()
         for i in 0..<1000 {
             withProbability(0.5) {
@@ -147,26 +148,26 @@ class VariableMapTests: XCTestCase {
         for (v, t) in map {
             copy[v] = t
         }
-        XCTAssertEqual(map, copy)
+        #expect(map == copy)
     }
 
-    func testEmptyVariableMapForHoles() {
+    @Test func testEmptyVariableMapForHoles() {
         let m = VariableMap<Int>()
 
-        XCTAssertEqual(m.hasHoles(), false)
+        #expect(m.hasHoles() == false)
     }
 
-    func testDenseVariableMapForHoles() {
+    @Test func testDenseVariableMapForHoles() {
         var m = VariableMap<Int>()
 
         for i in 0..<20 {
             m[v(i)] = Int.random(in: 0..<20)
         }
 
-        XCTAssertEqual(m.hasHoles(), false)
+        #expect(m.hasHoles() == false)
     }
 
-    func testForHolesAfterLastElementRemoval() {
+    @Test func testForHolesAfterLastElementRemoval() {
         var m = VariableMap<Int>()
 
         let mapSize = 15
@@ -175,10 +176,10 @@ class VariableMapTests: XCTestCase {
         }
         m.removeValue(forKey: v(mapSize - 1))
 
-        XCTAssertEqual(m.hasHoles(), false)
+        #expect(m.hasHoles() == false)
     }
 
-    func testForHolesAfterFirstElementRemoval() {
+    @Test func testForHolesAfterFirstElementRemoval() {
         var m = VariableMap<Int>()
 
         let mapSize = 15
@@ -187,10 +188,10 @@ class VariableMapTests: XCTestCase {
         }
         m.removeValue(forKey: v(0))
 
-        XCTAssertEqual(m.hasHoles(), true)
+        #expect(m.hasHoles() == true)
     }
 
-    func testForHolesAfterArbitraryElementRemoval() {
+    @Test func testForHolesAfterArbitraryElementRemoval() {
         var m = VariableMap<Int>()
 
         let mapSize = 15
@@ -199,6 +200,6 @@ class VariableMapTests: XCTestCase {
         }
         m.removeValue(forKey: v(Int.random(in: 0..<mapSize - 1)))
 
-        XCTAssertEqual(m.hasHoles(), true)
+        #expect(m.hasHoles() == true)
     }
 }

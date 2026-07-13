@@ -14,7 +14,6 @@
 
 import Foundation
 import Testing
-import XCTest
 
 @testable import Fuzzilli
 
@@ -47,26 +46,6 @@ extension Program: @retroactive Equatable {
 // Convenience variable constructor
 func v(_ n: Int) -> Variable {
     return Variable(number: n)
-}
-
-func GetJavaScriptExecutorOrSkipTest() throws -> JavaScriptExecutor {
-    guard let runner = JavaScriptExecutor() else {
-        throw XCTSkip(
-            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
-        )
-    }
-    return runner
-}
-
-func GetJavaScriptExecutorOrSkipTest(
-    type: JavaScriptExecutor.ExecutorType, withArguments args: [String]
-) throws -> JavaScriptExecutor {
-    guard let runner = JavaScriptExecutor(type: type, withArguments: args) else {
-        throw XCTSkip(
-            "Could not find js shell executable. Install Node.js (or if you want to use a different shell, modify the FUZZILLI_TEST_SHELL variable)."
-        )
-    }
-    return runner
 }
 
 func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (ProgramBuilder) -> Void)

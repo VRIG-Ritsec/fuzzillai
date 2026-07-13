@@ -156,9 +156,9 @@ func makeForInOfLoopGenerator(
         let elementType: ILType? =
             switch usingType {
             case .awaitUsing:
-                .asyncDisposable()
+                .asyncDisposable
             case .using:
-                .disposable()
+                .disposable
             case .none:
                 nil
             }
@@ -3499,7 +3499,7 @@ public let CodeGenerators: [CodeGenerator] = [
         b.setType(ofVariable: iterableObject, to: .iterable() + .object())
     },
 
-    CodeGenerator("DisposableGenerator", produces: [.disposable()], useInPrefix: true) { b in
+    CodeGenerator("DisposableGenerator", produces: [.disposable], useInPrefix: true) { b in
         let disposeSymbol = b.createSymbolProperty("dispose")
         b.hide(disposeSymbol)
         b.buildObjectLiteral { obj in
@@ -3508,7 +3508,7 @@ public let CodeGenerators: [CodeGenerator] = [
         }
     },
 
-    CodeGenerator("AsyncDisposableGenerator", produces: [.asyncDisposable()], useInPrefix: true) {
+    CodeGenerator("AsyncDisposableGenerator", produces: [.asyncDisposable], useInPrefix: true) {
         b in
         let asyncDisposeSymbol = b.createSymbolProperty("asyncDispose")
         b.hide(asyncDisposeSymbol)
@@ -3718,44 +3718,44 @@ public let CodeGenerators: [CodeGenerator] = [
 
     CodeGenerator(
         "DisposableArrayGenerator",
-        inputs: .required(.disposable()),
-        produces: [.createJsArrayType(ofElementType: .disposable())]
+        inputs: .required(.disposable),
+        produces: [.createJsArrayType(ofElementType: .disposable)]
     ) { b, disposable in
         let array = b.createArray(with: [disposable])
-        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .disposable()))
+        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .disposable))
     },
 
     CodeGenerator(
         "AsyncDisposableArrayGenerator",
-        inputs: .required(.asyncDisposable()),
-        produces: [.createJsArrayType(ofElementType: .asyncDisposable())]
+        inputs: .required(.asyncDisposable),
+        produces: [.createJsArrayType(ofElementType: .asyncDisposable)]
     ) { b, asyncDisposable in
         let array = b.createArray(with: [asyncDisposable])
-        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .asyncDisposable()))
+        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .asyncDisposable))
     },
 
     CodeGenerator(
         "AsyncIterableDisposableGenerator",
-        inputs: .required(.disposable()),
-        produces: [.asyncIterable(ofElementType: .disposable())]
+        inputs: .required(.disposable),
+        produces: [.asyncIterable(ofElementType: .disposable)]
     ) { b, disposable in
         let genFunc = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { _ in
             b.yield(disposable)
         }
         let iterator = b.callFunction(genFunc)
-        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .disposable()))
+        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .disposable))
     },
 
     CodeGenerator(
         "AsyncIterableAsyncDisposableGenerator",
-        inputs: .required(.asyncDisposable()),
-        produces: [.asyncIterable(ofElementType: .asyncDisposable())]
+        inputs: .required(.asyncDisposable),
+        produces: [.asyncIterable(ofElementType: .asyncDisposable)]
     ) { b, asyncDisposable in
         let genFunc = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { _ in
             b.yield(asyncDisposable)
         }
         let iterator = b.callFunction(genFunc)
-        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .asyncDisposable()))
+        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .asyncDisposable))
     },
 
     CodeGenerator("HomomorphicObjectsGenerator") { b in

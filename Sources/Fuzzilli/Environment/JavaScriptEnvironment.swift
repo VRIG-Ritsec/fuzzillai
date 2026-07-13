@@ -1314,14 +1314,10 @@ extension ILType {
     }
 
     /// A type that can be disposed.
-    public static func disposable() -> ILType {
-        return .object(withSymbolMethods: ["Symbol.dispose"])
-    }
+    public static let disposable = ILType.object(withSymbolMethods: ["Symbol.dispose"])
 
     /// A type that can be asynchronously disposed.
-    public static func asyncDisposable() -> ILType {
-        return .object(withSymbolMethods: ["Symbol.asyncDispose"])
-    }
+    public static let asyncDisposable = ILType.object(withSymbolMethods: ["Symbol.asyncDispose"])
 
     /// Type of a JavaScript function's arguments object.
     public static let jsArguments =

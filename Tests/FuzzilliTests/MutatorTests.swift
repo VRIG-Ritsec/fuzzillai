@@ -557,4 +557,28 @@ struct MutatorTests {
             #expect(mutatedProg == nil)
         }
     }
+
+    @Test func testInputMutatorFallbackWhenReplacementIsNil() {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let v0 = b.loadInt(10)
+            b.setType(ofVariable: v0, to: .wasmi32)
+            b.hide(v0)
+
+            let _ = b.getProperty("foo", of: v0)
+            let _ = b.loadInt(20)
+
+            let prog = b.finalize()
+            let inputMutator = InputMutator(typeAwareness: .loose)
+
+            let mutatedProg = inputMutator.mutate(prog, using: fuzzer.makeBuilder(), for: fuzzer)
+
+            #expect(mutatedProg != nil)
+            mutatedProg?.checkOrDie(onFailure: "Program must be statically valid")
+        }
+    }
 }

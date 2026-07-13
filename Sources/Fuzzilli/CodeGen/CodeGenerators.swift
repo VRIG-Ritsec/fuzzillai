@@ -153,14 +153,14 @@ func makeForInOfLoopGenerator(
         assert(!isAsyncIteration, "async for in is invalid")
         requiredType = .object()
     case .forOf:
-        let elementType: ILType? =
+        let elementType: ILType =
             switch usingType {
             case .awaitUsing:
                 .asyncDisposable
             case .using:
                 .disposable
             case .none:
-                nil
+                .jsAnything
             }
 
         if isAsyncIteration {

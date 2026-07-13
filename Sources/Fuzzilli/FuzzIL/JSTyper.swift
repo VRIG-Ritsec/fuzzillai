@@ -2175,13 +2175,37 @@ public struct JSTyper: Analyzer {
                 let elementType = self.environment.type(ofGroup: elementGroupName)
                 set(instr.output, .createJsArrayType(ofElementType: elementType))
             } else {
-                set(instr.output, .jsArray)
+                let iterableElementType =
+                    instr.inputs.isEmpty
+                    ? .jsAnything
+                    : instr.inputs.reduce(ILType.nothing) {
+                        $0 | self.type(of: $1)
+                    }
+                set(instr.output, .createJsArrayType(ofElementType: iterableElementType))
             }
 
-        case .createIntArray,
-            .createFloatArray,
-            .createArrayWithSpread:
-            set(instr.output, .jsArray)
+        case .createArrayWithSpread(let op):
+            let iterableElementType =
+                instr.inputs.isEmpty
+                ? .jsAnything
+                : zip(instr.inputs, op.spreads).reduce(ILType.nothing) {
+                    result, entry in
+                    let (input, isSpread) = entry
+                    let inputType = self.type(of: input)
+                    let resolvedElementType =
+                        isSpread ? (inputType.iterableElementType ?? .jsAnything) : inputType
+                    return result | resolvedElementType
+                }
+
+            set(instr.output, .createJsArrayType(ofElementType: iterableElementType))
+
+        case .createIntArray:
+            // TODO(rherouart): Evaluate if these packed generators (createIntArray/createFloatArray) are overly
+            // focusing on packed representations and ignoring holey variants, and consider their removal if redundant.
+            set(instr.output, .createJsArrayType(ofElementType: .integer))
+
+        case .createFloatArray:
+            set(instr.output, .createJsArrayType(ofElementType: .float))
 
         case .createTemplateString:
             set(instr.output, .jsString)

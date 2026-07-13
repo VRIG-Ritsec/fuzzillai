@@ -136,8 +136,8 @@ public struct ILType: Hashable {
     public static let regexp = ILType(definiteType: .regexp)
 
     /// A type that can be iterated over, such as an array or a generator.
-    public static func iterable(ofElementType: ILType? = nil) -> ILType {
-        guard let elementType = ofElementType else {
+    public static func iterable(ofElementType elementType: ILType = .jsAnything) -> ILType {
+        if elementType == .jsAnything {
             return ILType(definiteType: .iterable)
         }
 
@@ -148,8 +148,8 @@ public struct ILType: Hashable {
     }
 
     /// A type that can be asynchronously iterated over, which yields Promises.
-    public static func asyncIterable(ofElementType: ILType? = nil) -> ILType {
-        guard let elementType = ofElementType else {
+    public static func asyncIterable(ofElementType elementType: ILType = .jsAnything) -> ILType {
+        if elementType == .jsAnything {
             return ILType(definiteType: .asyncIterable)
         }
 

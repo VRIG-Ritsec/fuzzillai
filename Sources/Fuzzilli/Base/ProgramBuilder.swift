@@ -853,14 +853,23 @@ public class ProgramBuilder {
                     }
 
                     let element = self.generateTypeInternal(iterableElementType)
-                    guard let elementGroupName = iterableElementType.group else {
-                        self.logger.warning(
-                            "Type argument \(iterableElementType) does not have a group. Creating non-parameterized array."
-                        )
-                        return self.createArray(with: [element])
-                    }
+                    // Workaround for Mojo fuzzing: array literals can be annotated of being of a specific element type group.
+                    if let elementGroupName = iterableElementType.group {
+                        return self.createArray(with: [element], elementGroupName: elementGroupName)
+                    } else {
+                        let array = self.createArray(with: [element])
 
-                    return self.createArray(with: [element], elementGroupName: elementGroupName)
+                        // Ideally, `self.type(of: array)` should be a subtype of `type`.
+                        // Should this fail, we want a warning, but we should not abort!
+                        // These arrays used to be untyped and meaningful mutations were still being applied.
+                        if !self.type(of: array).Is(type) {
+                            self.logger.warning(
+                                "Type of generated array (\(self.type(of: array))) is not a subtype of the requested array type (\(type))."
+                            )
+                        }
+
+                        return array
+                    }
                 },
             .function():
                 {

@@ -1294,12 +1294,12 @@ extension ILType {
     }
 
     /// Type of a JavaScript array.
-    public static let jsArray = createJsArrayType(ofElementType: nil)
+    public static let jsArray = createJsArrayType()
 
     /// Create a jsArray parameterized by `ofELementType`. Note that the
     /// element type should have a group, or else type information will be
     /// lost.
-    public static func createJsArrayType(ofElementType: ILType? = nil) -> ILType {
+    public static func createJsArrayType(ofElementType: ILType = .jsAnything) -> ILType {
         return ILType.iterable(ofElementType: ofElementType)
             + ILType.object(
                 ofGroup: "Array", withProperties: ["length"],
@@ -1364,7 +1364,7 @@ extension ILType {
             (keyType == nil) == (valueType == nil),
             "Either both key and value types must be specified, or neither.")
 
-        let entryElementType: ILType? = keyType != nil ? (keyType! | valueType!) : nil
+        let entryElementType: ILType = keyType != nil ? (keyType! | valueType!) : .jsAnything
         let entryType = createJsArrayType(ofElementType: entryElementType)
 
         return ILType.iterable(ofElementType: entryType)

@@ -1168,6 +1168,62 @@ struct JSTyperTests {
         }
     }
 
+    @Test func testArrayCreationTyping() {
+        let builtins: [String: ILType] = [
+            "PureDisposable": .disposable,
+            "PureObjFooBar": .object(withMethods: ["foo", "bar"]),
+            "PureObjBarBaz": .object(withMethods: ["bar", "baz"]),
+        ]
+        let env = JavaScriptEnvironment(additionalBuiltins: builtins)
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let i = b.loadInt(42)
+            let f = b.loadFloat(13.37)
+            let s = b.loadString("foo")
+
+            // 1. Array with homogeneous elements
+            let a1 = b.createArray(with: [i, i])
+            #expect(b.type(of: a1) == .createJsArrayType(ofElementType: .integer))
+
+            // 2. Array with heterogeneous elements
+            let a2 = b.createArray(with: [i, f])
+            #expect(b.type(of: a2) == .createJsArrayType(ofElementType: .integer | .float))
+
+            // 3. Array with spread homogeneous
+            let a3 = b.createArray(with: [a1, a1], spreading: [true, true])
+            #expect(b.type(of: a3) == .createJsArrayType(ofElementType: .integer))
+
+            // 4. Array with spread heterogeneous
+            let a4 = b.createArray(with: [a1, s], spreading: [true, false])
+            #expect(b.type(of: a4) == .createJsArrayType(ofElementType: .integer | .jsString))
+
+            // 5. Spread an element that isn't statically typed as iterable
+            let bool = b.loadBool(true)
+            let a5 = b.createArray(with: [bool], spreading: [true])
+            #expect(b.type(of: a5) == .jsArray)
+
+            // 6. .jsAnything and .disposable
+            let disp = b.createNamedVariable(forBuiltin: "PureDisposable")
+            let jsAny = b.createNamedVariable(forBuiltin: "UnknownBuiltinThatYieldsAnything")
+            let a6 = b.createArray(with: [jsAny, disp])
+            #expect(b.type(of: a6) == .jsArray)
+
+            // 7. int and .disposable
+            let a7 = b.createArray(with: [i, disp])
+            #expect(b.type(of: a7) == .createJsArrayType(ofElementType: .integer | .disposable))
+
+            // 8. object(withMethods: [foo, bar]) and object(withMethods: [bar,baz])
+            let oFooAndBar = b.createNamedVariable(forBuiltin: "PureObjFooBar")
+            let oBarAndBaz = b.createNamedVariable(forBuiltin: "PureObjBarBaz")
+
+            let a8 = b.createArray(with: [oFooAndBar, oBarAndBaz])
+            #expect(
+                b.type(of: a8) == .createJsArrayType(ofElementType: .object(withMethods: ["bar"])))
+        }
+    }
+
     @Test func testParameterizedMapCreation() {
         let fooElement = ILType.object(ofGroup: "FooElement", withProperties: ["foo"])
         let stringElement = ILType.object(ofGroup: "StringElement")

@@ -1125,38 +1125,52 @@ public class WasmLifter {
 
         // TODO: in the future this should maybe be a context that allows instructions? Such that we can fuzz this expression as well?
         for case .global(let instruction) in self.exports {
-            let definition = instruction!.op as! WasmDefineGlobal
-            let global = definition.wasmGlobal
+            if let definition = instruction!.op as? WasmDefineGlobal {
+                if case .indexRef = definition.wasmGlobal {
+                    let typeVar = instruction!.input(0)
+                    let typeDesc = typer.getTypeDescription(of: typeVar)
+                    let typeIndexData = try encodeWasmGCType(typeDesc)
 
-            temp += try encodeType(global.toType())
-            temp += Data([definition.isMutable ? 0x1 : 0x0])
-            // This has to be a constant expression: https://webassembly.github.io/spec/core/valid/instructions.html#constant-expressions
-            var temporaryInstruction: Instruction? = nil
-            // Also create some temporary output variables that do not have a number, these are only to satisfy the instruction assertions, maybe this can be done more nicely somehow.
-            switch global {
-            case .wasmf32(let val):
-                temporaryInstruction = Instruction(Constf32(value: val), output: Variable())
-            case .wasmf64(let val):
-                temporaryInstruction = Instruction(Constf64(value: val), output: Variable())
-            case .wasmi32(let val):
-                temporaryInstruction = Instruction(Consti32(value: val), output: Variable())
-            case .wasmi64(let val):
-                temporaryInstruction = Instruction(Consti64(value: val), output: Variable())
-            case .externref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef()) + Data([0x0B])
-                continue
-            case .exnref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef()) + Data([0x0B])
-                continue
-            case .i31ref:
-                temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref()) + Data([0x0B])
-                continue
-            case .refFunc(_),
-                .imported(_):
-                fatalError("unreachable")
+                    // Type: (ref null $typeIndex). 0x63 is nullable ref.
+                    temp += Data([0x63]) + typeIndexData
+                    temp += Data([definition.isMutable ? 0x1 : 0x0])
+
+                    // Init expr: ref.null $typeIndex, then end (0x0B)
+                    temp += Data([0xD0]) + typeIndexData + Data([0x0B])
+                } else {
+                    let global = definition.wasmGlobal
+                    temp += try encodeType(global.toType())
+                    temp += Data([definition.isMutable ? 0x1 : 0x0])
+                    // This has to be a constant expression: https://webassembly.github.io/spec/core/valid/instructions.html#constant-expressions
+                    var temporaryInstruction: Instruction? = nil
+                    // Also create some temporary output variables that do not have a number, these are only to satisfy the instruction assertions, maybe this can be done more nicely somehow.
+                    switch global {
+                    case .wasmf32(let val):
+                        temporaryInstruction = Instruction(Constf32(value: val), output: Variable())
+                    case .wasmf64(let val):
+                        temporaryInstruction = Instruction(Constf64(value: val), output: Variable())
+                    case .wasmi32(let val):
+                        temporaryInstruction = Instruction(Consti32(value: val), output: Variable())
+                    case .wasmi64(let val):
+                        temporaryInstruction = Instruction(Consti64(value: val), output: Variable())
+                    case .externref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmExternRef()) + Data([0x0B])
+                        continue
+                    case .exnref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmExnRef()) + Data([0x0B])
+                        continue
+                    case .i31ref:
+                        temp += try! Data([0xD0]) + encodeHeapType(.wasmI31Ref()) + Data([0x0B])
+                        continue
+                    case .refFunc(_),
+                        .imported(_),
+                        .indexRef:
+                        fatalError("unreachable")
+                    }
+                    temp += try lift(temporaryInstruction!)
+                    temp += Data([0x0B])
+                }
             }
-            temp += try lift(temporaryInstruction!)
-            temp += Data([0x0B])
         }
 
         // Append the length of the section and the section contents itself.
@@ -1543,20 +1557,24 @@ public class WasmLifter {
     // TODO: check if this is still accurate as we now only have defined imports.
     // Also, we export the globals in the order we "see" them, which might mismatch the order in which they are laid out in the binary at the end, which is why we track the order of the globals separately.
     private func importAnalysis() throws {
+        func registerTypeDependencies(for typeDesc: WasmTypeDescription) throws {
+            guard typeDesc.typeGroupIndex != -1 else {
+                throw CompileError.fatalError("Missing type group index for \(typeDesc)")
+            }
+            // Add typegroups and their dependencies.
+            if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
+                typeGroups.formUnion(
+                    typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
+            }
+        }
+
         for instr in self.instructionBuffer {
             for (idx, input) in instr.inputs.enumerated() {
                 let inputType = typer.type(of: input)
 
                 if inputType.Is(.wasmTypeDef()) || inputType.Is(.anyIndexRef) {
                     let typeDesc = typer.getTypeDescription(of: input)
-                    guard typeDesc.typeGroupIndex != -1 else {
-                        throw CompileError.fatalError("Missing type group index for \(input)")
-                    }
-                    // Add typegroups and their dependencies.
-                    if typeGroups.insert(typeDesc.typeGroupIndex).inserted {
-                        typeGroups.formUnion(
-                            typer.getTypeGroupDependencies(typeGroupIndex: typeDesc.typeGroupIndex))
-                    }
+                    try registerTypeDependencies(for: typeDesc)
                 }
 
                 for importType in [Export.table(nil), Export.memory(nil), Export.global(nil)] {
@@ -1565,6 +1583,19 @@ public class WasmLifter {
                             .import(
                                 type: importType, variable: input, signature: nil, signatureDef: nil
                             ))
+
+                        // If the imported object uses a custom index type, ensure it's registered.
+                        var valueType: ILType? = nil
+                        if let globalType = inputType.wasmGlobalType {
+                            valueType = globalType.valueType
+                        } else if let tableType = inputType.wasmTableType {
+                            valueType = tableType.elementType
+                        }
+
+                        if let valueType = valueType, valueType.Is(.anyIndexRef) {
+                            let typeDesc = typer.getTypeDescription(of: valueType)
+                            try registerTypeDependencies(for: typeDesc)
+                        }
                     }
                 }
 

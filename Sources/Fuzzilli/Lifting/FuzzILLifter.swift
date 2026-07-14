@@ -975,7 +975,12 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- EndWasmFunction \(inputs)")
 
         case .wasmDefineGlobal(let op):
-            w.emit("\(output()) <- WasmDefineGlobal \(op.wasmGlobal)")
+            let isMutable = op.isMutable ? ", mutable" : ""
+            if case .indexRef = op.wasmGlobal {
+                w.emit("\(output()) <- WasmDefineGlobal (ref null \(input(0)))\(isMutable)")
+            } else {
+                w.emit("\(output()) <- WasmDefineGlobal \(op.wasmGlobal)\(isMutable)")
+            }
 
         case .wasmDefineTable(let op):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")

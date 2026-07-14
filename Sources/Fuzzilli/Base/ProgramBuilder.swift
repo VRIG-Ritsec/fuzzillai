@@ -6268,8 +6268,13 @@ public class ProgramBuilder {
         }
 
         @discardableResult
-        public func addGlobal(wasmGlobal: WasmGlobal, isMutable: Bool) -> Variable {
-            return b.emit(WasmDefineGlobal(wasmGlobal: wasmGlobal, isMutable: isMutable)).output
+        public func addGlobal(wasmGlobal: WasmGlobal, isMutable: Bool, typeDef: Variable? = nil)
+            -> Variable
+        {
+            let inputs = typeDef != nil ? [typeDef!] : []
+            return b.emit(
+                WasmDefineGlobal(wasmGlobal: wasmGlobal, isMutable: isMutable), withInputs: inputs
+            ).output
         }
 
         @discardableResult

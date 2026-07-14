@@ -851,6 +851,15 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     },
 
     CodeGenerator(
+        "WasmDefineIndexTypedGlobalGenerator", inContext: .single(.wasm),
+        inputs: .required(.wasmTypeDef()),
+        produces: [.object(ofGroup: "WasmGlobal")]
+    ) { b, type in
+        let module = b.currentWasmModule
+        module.addGlobal(wasmGlobal: .indexRef, isMutable: probability(0.5), typeDef: type)
+    },
+
+    CodeGenerator(
         "WasmDefineTableGenerator", inContext: .single(.wasm),
         produces: [.object(ofGroup: "WasmTable")]
     ) { b in

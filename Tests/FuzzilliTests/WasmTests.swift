@@ -988,6 +988,109 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1337\n")
     }
 
+    @Test func testGlobalIndexTyped() throws {
+        let runner = JavaScriptExecutor()!
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let jsProg = fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let structType = b.wasmDefineTypeGroup {
+                [
+                    b.wasmDefineStructType(
+                        fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                        indexTypes: [],
+                        isFinal: true
+                    )
+                ]
+            }[0]
+
+            let module = b.buildWasmModule { wasmModule in
+                let global = wasmModule.addGlobal(
+                    wasmGlobal: .indexRef, isMutable: true, typeDef: structType)
+
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let i32 = function.consti32(42)
+                    let structInst = function.wasmStructNew(structType: structType, fields: [i32])
+                    function.wasmStoreGlobal(globalVariable: global, to: structInst)
+
+                    let loadedStruct = function.wasmLoadGlobal(globalVariable: global)
+                    let loadedI32 = function.wasmStructGet(theStruct: loadedStruct, fieldIndex: 0)
+                    return [loadedI32]
+                }
+            }
+
+            let exports = module.loadExports()
+            let res = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [res])
+
+            let prog = b.finalize()
+            return fuzzer.lifter.lift(prog)
+        }
+
+        testForOutput(program: jsProg, runner: runner, outputString: "42\n")
+    }
+
+    @Test func testImportedGlobalIndexTyped() throws {
+        let runner = JavaScriptExecutor()!
+        let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+
+        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let jsProg = fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let structType = b.wasmDefineTypeGroup {
+                [
+                    b.wasmDefineStructType(
+                        fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                        indexTypes: [],
+                        isFinal: true
+                    )
+                ]
+            }[0]
+
+            let module1 = b.buildWasmModule { wasmModule in
+                let globalVar = wasmModule.addGlobal(
+                    wasmGlobal: .indexRef, isMutable: true, typeDef: structType)
+
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let i32 = function.consti32(42)
+                    let structInst = function.wasmStructNew(structType: structType, fields: [i32])
+                    function.wasmStoreGlobal(globalVariable: globalVar, to: structInst)
+                    return [i32]
+                }
+            }
+
+            let exports1 = module1.loadExports()
+            _ = b.callMethod(module1.getExportedMethod(at: 0), on: exports1)
+            let importedGlobal = b.getProperty("wg0", of: exports1)
+
+            let module2 = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    // Only load the global. Crucially, do NOT use it in an instruction that expects an .anyIndexRef
+                    // input type (like wasmStructGet), otherwise the lifter will implicitly pull in the type
+                    // definition and mask the bug.
+                    _ = function.wasmLoadGlobal(globalVariable: importedGlobal)
+                    return [function.consti32(42)]
+                }
+            }
+
+            let exports2 = module2.loadExports()
+            let res2 = b.callMethod(module2.getExportedMethod(at: 0), on: exports2)
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [res2])
+
+            let prog = b.finalize()
+            return fuzzer.lifter.lift(prog)
+        }
+
+        testForOutput(program: jsProg, runner: runner, outputString: "42\n")
+    }
+
     func importedTableTestCase(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)

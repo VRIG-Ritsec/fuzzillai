@@ -743,6 +743,9 @@ public enum WasmGlobal {
     // function reference
     case refFunc(Int)
 
+    // Globals with index types. The specific index is passed separately to the instruction.
+    case indexRef
+
     // This is the case for imported Globals, we just need the type here.
     case imported(ILType)
 
@@ -762,6 +765,10 @@ public enum WasmGlobal {
             return .wasmExnRef()
         case .i31ref:
             return .wasmI31Ref()
+        case .indexRef:
+            // The specific type definition is available as an input to the defining instruction.
+            // Here we just return the generic representation so that we know it's a reference type.
+            return .anyIndexRef
         case .imported(let type):
             assert(type.wasmGlobalType != nil)
             return type.wasmGlobalType!.valueType
@@ -805,7 +812,8 @@ public enum WasmGlobal {
         case .externref:
             return ""
         case .exnref,
-            .i31ref:
+            .i31ref,
+            .indexRef:
             return "null"
         default:
             fatalError("Unimplemented / unhandled")
@@ -823,7 +831,9 @@ final class WasmDefineGlobal: WasmOperation {
     init(wasmGlobal: WasmGlobal, isMutable: Bool) {
         self.wasmGlobal = wasmGlobal
         self.isMutable = isMutable
-        super.init(numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasm])
+        let numInputs = if case .indexRef = wasmGlobal { 1 } else { 0 }
+        super.init(
+            numInputs: numInputs, numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasm])
     }
 }
 

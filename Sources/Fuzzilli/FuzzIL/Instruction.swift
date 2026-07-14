@@ -528,6 +528,9 @@ extension Instruction: ProtobufConvertible {
             case .imported(let ilType):
                 return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.imported(
                     ILTypeToWasmTypeEnum(ilType))
+            case .indexRef:
+                return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.nullref(
+                    Fuzzilli_Protobuf_WasmReferenceTypeKind.index)
             }
         }
 
@@ -2047,6 +2050,8 @@ extension Instruction: ProtobufConvertible {
                     return .exnref
                 case .i31Ref:
                     return .i31ref
+                case .index:
+                    return .indexRef
                 default:
                     fatalError("Unrecognized global wasm reference type \(val)")
                 }

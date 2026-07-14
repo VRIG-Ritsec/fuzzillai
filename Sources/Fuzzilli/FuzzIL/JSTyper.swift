@@ -760,14 +760,17 @@ public struct JSTyper: Analyzer {
             to: type(of: typeDef).wasmTypeDefinition!.getReferenceTypeTo(nullability: nullability))
     }
 
+    func getTypeDescription(of type: ILType) -> WasmTypeDescription {
+        if case .Index(let desc) = type.wasmReferenceType?.kind {
+            return desc.get()!
+        }
+        return type.wasmTypeDefinition!.description!
+    }
+
     // Returns the type description for the provided variable which has to be either a type
     // definition or an instance (wasm reference) of the wasm type.
     func getTypeDescription(of variable: Variable) -> WasmTypeDescription {
-        let varType = type(of: variable)
-        if case .Index(let desc) = varType.wasmReferenceType?.kind {
-            return desc.get()!
-        }
-        return varType.wasmTypeDefinition!.description!
+        return getTypeDescription(of: type(of: variable))
     }
 
     // Helper function to type a "regular" wasm begin block (block, if, try).
@@ -882,10 +885,17 @@ public struct JSTyper: Analyzer {
             case .wasmSimdExtractLane(let op):
                 setType(of: instr.output, to: op.kind.laneType())
             case .wasmDefineGlobal(let op):
+                let valueType: ILType
+                if case .indexRef = op.wasmGlobal {
+                    valueType = type(of: instr.input(0)).wasmTypeDefinition!.getReferenceTypeTo(
+                        nullability: true)
+                } else {
+                    valueType = op.wasmGlobal.toType()
+                }
                 let type = ILType.object(
                     ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"],
                     withWasmType: WasmGlobalType(
-                        valueType: op.wasmGlobal.toType(), isMutable: op.isMutable))
+                        valueType: valueType, isMutable: op.isMutable))
                 dynamicObjectGroupManager.addWasmGlobal(
                     withType: type, forDefinition: instr, forVariable: instr.output)
                 setType(of: instr.output, to: type)
@@ -949,10 +959,15 @@ public struct JSTyper: Analyzer {
                     forVariable: instr.input(0))
             case .wasmLoadGlobal(let op):
                 let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+                let globalVarType = type(of: instr.input(0))
                 dynamicObjectGroupManager.addWasmGlobal(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                    withType: globalVarType, forDefinition: definingInstruction,
                     forVariable: instr.input(0))
-                setType(of: instr.output, to: op.globalType)
+                if let wasmGlobalType = globalVarType.wasmGlobalType {
+                    setType(of: instr.output, to: wasmGlobalType.valueType)
+                } else {
+                    setType(of: instr.output, to: op.globalType)
+                }
             case .wasmStoreGlobal(_):
                 let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
                 dynamicObjectGroupManager.addWasmGlobal(

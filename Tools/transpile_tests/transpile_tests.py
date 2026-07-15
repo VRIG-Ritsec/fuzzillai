@@ -21,7 +21,6 @@ state to track the progress of extending the compiler.
 """
 
 import argparse
-import importlib.machinery
 import json
 import multiprocessing
 import os
@@ -31,6 +30,8 @@ import sys
 
 from collections import defaultdict, Counter
 from pathlib import Path
+
+from parsers import DefaultMetaDataParser, Test262MetaDataParser
 
 BASE_DIR = Path(__file__).parent.parent.parent
 
@@ -53,56 +54,6 @@ def run_d8(d8_exec, harness_files, script_path, timeout=60):
     stderr = stderr_bytes.decode('utf-8', errors='replace') if isinstance(stderr_bytes, bytes) else stderr_bytes
     timeout_msg = f"\n[EXEC_FAILURE: TIMEOUT EXPIRED after {timeout} seconds]"
     return -9, stdout + stderr + timeout_msg
-
-
-class DefaultMetaDataParser:
-  """Class instantiated once per test configuration/suite, providing a
-  method to check for supported tests based on their metadata.
-  """
-  def __init__(self, _):
-    pass
-
-  def is_supported(self, abspath, relpath):
-    return any(relpath.name.endswith(ext) for ext in ['.js', '.mjs'])
-
-  def get_harness_files(self, abspath, harness_dir):
-    return []
-
-
-class Test262MetaDataParser(DefaultMetaDataParser):
-  def __init__(self, base_dir):
-    """Metadata parsing for Test262 analog to the V8 test suite definition."""
-    tools_abs_path = base_dir / 'test/test262/data/tools/packaging'
-    loader = importlib.machinery.SourceFileLoader(
-        'parseTestRecord', f'{tools_abs_path}/parseTestRecord.py')
-    self.parse = loader.load_module().parseTestRecord
-    self.excluded_suffixes = ['_FIXTURE.js']
-
-  def is_supported(self, abspath, relpath):
-    if not super().is_supported(abspath, relpath):
-      return False
-
-    if any(relpath.name.endswith(suffix)
-           for suffix in self.excluded_suffixes):
-      return False
-
-    with open(abspath, encoding='utf-8') as f:
-      content = f.read()
-    record = self.parse(content, relpath)
-    # We don't support negative tests, which typically exhibit syntax errors.
-    return 'negative' not in record
-
-  def get_harness_files(self, abspath, harness_dir):
-    with open(abspath, encoding='utf-8') as f:
-      content = f.read()
-    record = self.parse(content, abspath)
-    harness_files = [
-        os.path.join(harness_dir, "sta.js"),
-        os.path.join(harness_dir, "assert.js")
-    ]
-    for inc in record.get('includes', []):
-      harness_files.append(os.path.join(harness_dir, inc))
-    return harness_files
 
 
 TEST_CONFIGS = {

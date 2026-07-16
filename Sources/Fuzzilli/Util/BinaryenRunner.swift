@@ -35,7 +35,6 @@ public struct BinaryenRunner {
         "--enable-multimemory",
         "--enable-custom-descriptors",
         "--enable-multibyte",
-        "--enable-relaxed-atomics",
     ]
 
     struct BinaryenError: Error, CustomStringConvertible {

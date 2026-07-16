@@ -19,7 +19,6 @@ public struct BinaryenRunner {
     public static let featureArguments = [
         "--enable-gc",
         "--enable-reference-types",
-        "--enable-typed-function-references",
         "--enable-sign-ext",
         "--enable-threads",
         "--enable-mutable-globals",

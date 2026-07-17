@@ -136,7 +136,8 @@ let v8DumplingProfile = Profile(
         (ValueSerializerFuzzer, 1),
         (V8RegExpFuzzer, 1),
         (FastApiCallFuzzer, 1),
-        (LazyDeoptFuzzer, 1),
+        (RecursiveLazyDeoptFuzzer, 1),
+        (IndirectLazyDeoptFuzzer, 1),
     ]),
 
     disabledCodeGenerators: [],

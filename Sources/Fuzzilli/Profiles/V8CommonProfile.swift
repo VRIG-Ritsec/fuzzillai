@@ -710,8 +710,41 @@ public let HomomorphicFeedbackFuzzer = ProgramTemplate("HomomorphicFeedbackFuzze
     }
 }
 
+// Creates a trigger function for lazy-deopting an optimized function,
+// hoping that the trigger function will be used inside the optimized function
+// in an interersting way (e.g., passing it as a callback).
+public let IndirectLazyDeoptFuzzer = ProgramTemplate("IndirectLazyDeoptFuzzer") { b in
+    b.buildPrefix()
+    b.build(n: 30)
+
+    let mainFunctionParams = b.randomParameters()
+    let dummyFct = b.buildPlainFunction(with: mainFunctionParams) { args in
+        b.loadString("Dummy function to be reassigned later")
+    }
+
+    let triggerFunctionParams = b.randomParameters()
+    let triggerLazyDeopt = b.buildPlainFunction(with: triggerFunctionParams) { args in
+        b.build(n: 10)
+        b.eval("%DeoptimizeFunction(%@)", with: [dummyFct])
+    }
+    let realFct = b.buildPlainFunction(with: mainFunctionParams) { args in
+        // Hopefully this code will use `triggerLazyDeopt` somehow:
+        b.build(n: 30)
+        b.doReturn(b.randomJsVariable())
+    }
+
+    // Reassign so that `triggerLazyDeopt` will lazy deopt `realFct`
+    b.reassign(variable: dummyFct, value: realFct)
+    let args = b.randomArguments(forCalling: realFct)
+    let guardCalls = probability(0.5)
+    b.eval("%PrepareFunctionForOptimization(%@)", with: [realFct])
+    b.callFunction(realFct, withArgs: args, guard: guardCalls)
+    b.eval("%OptimizeFunctionOnNextCall(%@)", with: [realFct])
+    b.callFunction(realFct, withArgs: args, guard: guardCalls)
+}
+
 // Emits calls with recursive calls of limited depth.
-public let LazyDeoptFuzzer = ProgramTemplate("LazyDeoptFuzzer") { b in
+public let RecursiveLazyDeoptFuzzer = ProgramTemplate("RecursiveLazyDeoptFuzzer") { b in
     b.buildPrefix()
     b.build(n: 30)
 

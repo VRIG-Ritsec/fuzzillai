@@ -1100,7 +1100,7 @@ public struct PropertyFlags: OptionSet {
     }
 
     public static func randomWithoutWritable() -> PropertyFlags {
-        return PropertyFlags(rawValue: UInt8.random(in: 0..<8) & 0b1111_1110)
+        random().subtracting(.writable)
     }
 }
 

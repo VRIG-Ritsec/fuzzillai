@@ -581,4 +581,121 @@ struct MutatorTests {
             mutatedProg?.checkOrDie(onFailure: "Program must be statically valid")
         }
     }
+
+    struct PropertyAccessorTestCase: Sendable, CustomStringConvertible {
+        let name: String
+        let build: @Sendable (ProgramBuilder) -> Void
+        let verify: @Sendable (Program) throws -> Void
+        var description: String {
+            return name
+        }
+    }
+
+    static let propertyAccessorTestCases = [
+        PropertyAccessorTestCase(
+            name: "setProperty",
+            build: { b in
+                let obj = b.createObject(with: [:])
+                let val = b.loadInt(42)
+                b.setProperty("foo", of: obj, to: val)
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .configureProperty(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && op.type == .getterSetter
+                        }
+                        return false
+                    }, "Missing ConfigureProperty operation for 'foo' with getterSetter type")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "setElement",
+            build: { b in
+                let obj = b.createArray(with: [])
+                let val = b.loadInt(42)
+                b.setElement(5, of: obj, to: val)
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .configureElement(let op) = instr.op.opcode {
+                            return op.index == 5 && op.type == .getterSetter
+                        }
+                        return false
+                    }, "Missing ConfigureElement operation for index 5 with getterSetter type")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "objectLiteralAddProperty",
+            build: { b in
+                let val = b.loadInt(42)
+                let _ = b.buildObjectLiteral { obj in
+                    obj.addProperty("foo", as: val)
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo"
+                        }
+                        return false
+                    }, "Missing BeginObjectLiteralGetter operation for 'foo'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo"
+                        }
+                        return false
+                    }, "Missing BeginObjectLiteralSetter operation for 'foo'")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "objectLiteralAddElement",
+            build: { b in
+                let val = b.loadInt(42)
+                let _ = b.buildObjectLiteral { obj in
+                    obj.addElement(9, as: val)
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "9"
+                        }
+                        return false
+                    }, "Missing BeginObjectLiteralGetter operation for '9'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "9"
+                        }
+                        return false
+                    }, "Missing BeginObjectLiteralSetter operation for '9'")
+            }
+        ),
+    ]
+
+    @Test(arguments: propertyAccessorTestCases)
+    func testPropertyAccessorMutator(testCase: PropertyAccessorTestCase) throws {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        try fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            testCase.build(b)
+            let program = b.finalize()
+
+            let mutator = PropertyAccessorMutator()
+            let mutatedProg = try #require(
+                mutator.mutate(program, using: fuzzer.makeBuilder(), for: fuzzer))
+
+            mutatedProg.checkOrDie(onFailure: "Program must be statically valid")
+            try testCase.verify(mutatedProg)
+        }
+    }
 }

@@ -491,6 +491,7 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
         // Can be enabled for experimental use, ConcatMutator is a limited version of CombineMutator
         // (ConcatMutator(),                   1),
         (OperationMutator(), 1),
+        (PropertyAccessorMutator(), 1),
         (CombineMutator(), 1),
         // Include this once it does more than just remove unneeded try-catch
         // (FixupMutator()),                   1),

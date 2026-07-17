@@ -123,6 +123,7 @@ public func makeMockFuzzer(
     let mutators = WeightedList<Mutator>([
         (CodeGenMutator(), 1),
         (OperationMutator(), 1),
+        (PropertyAccessorMutator(), 1),
         (InputMutator(typeAwareness: .loose), 1),
         (CombineMutator(), 1),
     ])

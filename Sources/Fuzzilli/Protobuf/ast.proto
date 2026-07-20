@@ -101,6 +101,8 @@ message PropertyKey {
         int64 index = 2;
         // A computed property.
         Expression expression = 3;
+        // A #private property
+        string privateName = 4;
     }
 }
 
@@ -441,6 +443,8 @@ message MemberExpression {
         string name = 2;
         // A computed property or element.
         Expression expression = 3;
+        // A #private property
+        string privateName = 5;
     }
     bool isOptional = 4;
 }

@@ -231,6 +231,22 @@ message BeginClassPrivateMethod {
 message EndClassPrivateMethod {
 }
 
+message BeginClassPrivateGetter {
+    string propertyName = 1;
+    bool is_static = 2;
+}
+
+message EndClassPrivateGetter {
+}
+
+message BeginClassPrivateSetter {
+    string propertyName = 1;
+    bool is_static = 2;
+}
+
+message EndClassPrivateSetter {
+}
+
 message EndClassDefinition {
 }
 
@@ -617,10 +633,12 @@ message CallSuperMethod {
 
 message GetPrivateProperty {
     string propertyName = 1;
+    bool isGuarded = 2;
 }
 
 message SetPrivateProperty {
     string propertyName = 1;
+    bool isGuarded = 2;
 }
 
 message UpdatePrivateProperty {
@@ -630,6 +648,13 @@ message UpdatePrivateProperty {
 
 message CallPrivateMethod {
     string methodName = 1;
+    bool isGuarded = 2;
+}
+
+message CallPrivateMethodWithSpread {
+    string methodName = 1;
+    repeated bool spreads = 2;
+    bool isGuarded = 3;
 }
 
 message GetSuperProperty {
@@ -1829,6 +1854,7 @@ message FuzzILDestructuringPattern {
             string superProperty = 6;               // e.g. `[super.prop] = arr`
             int64 superElement = 7;                 // e.g. `[super[0]] = arr`
             Empty superComputedProperty = 8;        // e.g. `[super[key]] = arr`
+            string privateProperty = 9;             // e.g. `[this.#prop] = arr`
         }
     }
 

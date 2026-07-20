@@ -381,6 +381,11 @@ message Instruction {
         DeclarePendingBundleModule declarePendingBundleModule = 355;
         BeginPendingBundleModule beginPendingBundleModule = 356;
         EndPendingBundleModule endPendingBundleModule = 357;
+        BeginClassPrivateGetter beginClassPrivateGetter = 358;
+        EndClassPrivateGetter endClassPrivateGetter = 359;
+        BeginClassPrivateSetter beginClassPrivateSetter = 360;
+        EndClassPrivateSetter endClassPrivateSetter = 361;
+        CallPrivateMethodWithSpread callPrivateMethodWithSpread = 362;
     }
 }
 

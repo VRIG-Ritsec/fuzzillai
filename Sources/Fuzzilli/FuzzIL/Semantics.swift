@@ -162,6 +162,10 @@ extension Operation {
             return endOp is EndClassStaticInitializer
         case .beginClassPrivateMethod:
             return endOp is EndClassPrivateMethod
+        case .beginClassPrivateGetter:
+            return endOp is EndClassPrivateGetter
+        case .beginClassPrivateSetter:
+            return endOp is EndClassPrivateSetter
         case .beginPlainFunction:
             return endOp is EndPlainFunction
         case .beginWorkerFunction:

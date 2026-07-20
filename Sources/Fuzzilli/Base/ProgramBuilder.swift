@@ -3079,8 +3079,19 @@ public class ProgramBuilder {
         // once, regardless of whether it is a method or a property and whether it's per-instance or
         // static. However, we still track properties and methods separately to facilitate selecting
         // property and method names for private property accesses and private method calls.
-        public fileprivate(set) var privateProperties: [String] = []
-        public fileprivate(set) var privateMethods: [String] = []
+        public fileprivate(set) var privateInstanceProperties: [String] = []
+        public fileprivate(set) var privateStaticProperties: [String] = []
+        public fileprivate(set) var privateInstanceMethods: [String] = []
+        public fileprivate(set) var privateStaticMethods: [String] = []
+
+        public var privateProperties: [String] {
+            return privateInstanceProperties + privateStaticProperties
+        }
+
+        public var privateMethods: [String] {
+            return privateInstanceMethods + privateStaticMethods
+        }
+
         public var privateFields: [String] {
             return privateProperties + privateMethods
         }
@@ -4123,11 +4134,12 @@ public class ProgramBuilder {
 
     @discardableResult
     public func getPrivateProperty(_ name: String, of object: Variable) -> Variable {
-        return emit(GetPrivateProperty(propertyName: name), withInputs: [object]).output
+        return emit(GetPrivateProperty(propertyName: name, isGuarded: false), withInputs: [object])
+            .output
     }
 
     public func setPrivateProperty(_ name: String, of object: Variable, to value: Variable) {
-        emit(SetPrivateProperty(propertyName: name), withInputs: [object, value])
+        emit(SetPrivateProperty(propertyName: name, isGuarded: false), withInputs: [object, value])
     }
 
     public func updatePrivateProperty(
@@ -4141,7 +4153,7 @@ public class ProgramBuilder {
         _ name: String, on object: Variable, withArgs arguments: [Variable] = []
     ) -> Variable {
         return emit(
-            CallPrivateMethod(methodName: name, numArguments: arguments.count),
+            CallPrivateMethod(methodName: name, numArguments: arguments.count, isGuarded: false),
             withInputs: [object] + arguments
         ).output
     }
@@ -7339,9 +7351,32 @@ public class ProgramBuilder {
                 activeClassDefinitions.top.instanceComputedSetters.append(instr.input(0))
             }
         case .classAddPrivateProperty(let op):
-            activeClassDefinitions.top.privateProperties.append(op.propertyName)
+            if op.isStatic {
+                activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
+            } else {
+                activeClassDefinitions.top.privateInstanceProperties.append(op.propertyName)
+            }
         case .beginClassPrivateMethod(let op):
-            activeClassDefinitions.top.privateMethods.append(op.methodName)
+            if op.isStatic {
+                activeClassDefinitions.top.privateStaticMethods.append(op.methodName)
+            } else {
+                activeClassDefinitions.top.privateInstanceMethods.append(op.methodName)
+            }
+        case .beginClassPrivateGetter(let op):
+            if op.isStatic {
+                activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
+            } else {
+                activeClassDefinitions.top.privateInstanceProperties.append(op.propertyName)
+            }
+        case .beginClassPrivateSetter(let op):
+            if op.isStatic {
+                activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
+            } else {
+                activeClassDefinitions.top.privateInstanceProperties.append(op.propertyName)
+            }
+        case .endClassPrivateGetter,
+            .endClassPrivateSetter:
+            break
         case .beginClassStaticInitializer:
             break
         case .endClassDefinition:

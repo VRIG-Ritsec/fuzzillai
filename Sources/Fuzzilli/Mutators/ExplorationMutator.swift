@@ -118,41 +118,45 @@ public class ExplorationMutator: RuntimeAssistedMutator {
         // For that reason, we keep a stack of variables that still need to be explored. A variable in that stack is explored
         // when its entry is popped from the stack, which happens when the block end instruction is emitted.
         var pendingExploreStack = Stack<Variable?>()
-        b.adopting {
-            for instr in program.code {
-                b.adopt(instr)
+        for instr in program.code {
+            b.append(instr)
 
-                if instr.isBlockGroupStart {
-                    // Will be replaced with a variable if one needs to be explored.
-                    pendingExploreStack.push(nil)
-                } else if instr.isBlockGroupEnd {
-                    // Emit pending explore operation if any.
-                    if let v = pendingExploreStack.pop() {
-                        explore(v)
-                    }
-                }
-
-                for v in instr.outputs where variablesToExplore.contains(v) {
-                    // When the current instruction starts a new block, we defer exploration until after that block is closed.
-                    if instr.isBlockStart {
-                        // Currently we assume that inner block instructions don't have (outer) outputs. If they ever do, this logic probably needs to be revisited.
-                        assert(instr.isBlockGroupStart)
-                        // We currently assume that there can only be one such pending variable. If there are ever multiple ones, the stack simply needs to keep a list of Variables instead of a single one.
-                        assert(pendingExploreStack.top == nil)
-                        pendingExploreStack.top = v
-                    } else {
-                        explore(v)
-                    }
-                }
-                for v in instr.innerOutputs where variablesToExplore.contains(v) {
-                    // We always immediately explore inner outputs
+            if instr.isBlockGroupStart {
+                // Will be replaced with a variable if one needs to be explored.
+                pendingExploreStack.push(nil)
+            } else if instr.isBlockGroupEnd {
+                // Emit pending explore operation if any.
+                if let v = pendingExploreStack.pop() {
                     explore(v)
                 }
+            }
+
+            for v in instr.outputs where variablesToExplore.contains(v) {
+                // When the current instruction starts a new block, we defer exploration until after that block is closed.
+                if instr.isBlockStart {
+                    // Currently we assume that inner block instructions don't have (outer) outputs. If they ever do, this logic probably needs to be revisited.
+                    assert(instr.isBlockGroupStart)
+                    // We currently assume that there can only be one such pending variable. If there are ever multiple ones, the stack simply needs to keep a list of Variables instead of a single one.
+                    assert(pendingExploreStack.top == nil)
+                    pendingExploreStack.top = v
+                } else {
+                    explore(v)
+                }
+            }
+            for v in instr.innerOutputs where variablesToExplore.contains(v) {
+                // We always immediately explore inner outputs
+                explore(v)
             }
         }
 
         let instrumentedProgram = b.finalize()
+        if instrumentedProgram.code.lastVariable()?.number != program.code.lastVariable()?.number {
+            fatalError(
+                "ExplorationMutator: Instrumented program has a different number of variables than the original program:\n\(instrumentedProgram.description)"
+            )
+        }
         let numberOfInsertedExploreOps = instrumentedProgram.code.filter({ $0.op is Explore }).count
+
         averageNumberOfInsertedExploreOps.add(Double(numberOfInsertedExploreOps))
         return instrumentedProgram
     }

@@ -81,18 +81,7 @@ struct VariadicInputReducer: Reducer {
                     newOp = CallSuperConstructor(numArguments: op.numArguments - 1)
                 case .callPrivateMethod(let op):
                     newOp = CallPrivateMethod(
-                        methodName: op.methodName, numArguments: op.numArguments - 1,
-                        isGuarded: op.isGuarded)
-                case .callPrivateMethodWithSpread(let op):
-                    if op.numArguments == 1 {
-                        newOp = CallPrivateMethod(
-                            methodName: op.methodName, numArguments: 0, isGuarded: op.isGuarded)
-                    } else {
-                        newOp = CallPrivateMethodWithSpread(
-                            methodName: op.methodName, numArguments: op.numArguments - 1,
-                            spreads: op.spreads.dropLast(),
-                            isGuarded: op.isGuarded)
-                    }
+                        methodName: op.methodName, numArguments: op.numArguments - 1)
                 case .callSuperMethod(let op):
                     newOp = CallSuperMethod(
                         methodName: op.methodName, numArguments: op.numArguments - 1)

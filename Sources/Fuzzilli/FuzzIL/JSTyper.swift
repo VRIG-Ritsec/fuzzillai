@@ -1695,9 +1695,7 @@ public struct JSTyper: Analyzer {
             .beginClassComputedGetter,
             .beginClassSetter,
             .beginClassComputedSetter,
-            .beginClassPrivateMethod,
-            .beginClassPrivateGetter,
-            .beginClassPrivateSetter:
+            .beginClassPrivateMethod:
             activeFunctionDefinitions.push(instr)
             state.startSubroutine()
         case .endObjectLiteralMethod,
@@ -1721,9 +1719,7 @@ public struct JSTyper: Analyzer {
             .endClassComputedGetter,
             .endClassSetter,
             .endClassComputedSetter,
-            .endClassPrivateMethod,
-            .endClassPrivateGetter,
-            .endClassPrivateSetter:
+            .endClassPrivateMethod:
             //
             // Infer the return type of the subroutine (if necessary for the signature).
             //
@@ -2189,27 +2185,6 @@ public struct JSTyper: Analyzer {
                 parameters: inferSubroutineParameterList(of: op, at: instr.index),
                 opParameters: op.parameters)
 
-        case .beginClassPrivateGetter(let op):
-            if op.isStatic {
-                set(
-                    instr.innerOutput(0),
-                    dynamicObjectGroupManager.activeClasses.top.objectGroup.instanceType)
-            } else {
-                set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
-            }
-
-        case .beginClassPrivateSetter(let op):
-            if op.isStatic {
-                set(
-                    instr.innerOutput(0),
-                    dynamicObjectGroupManager.activeClasses.top.objectGroup.instanceType)
-            } else {
-                set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
-            }
-            processParameterDeclarations(
-                instr.innerOutputs(1...),
-                parameters: inferSubroutineParameterList(of: op, at: instr.index),
-                opParameters: op.parameters)
         case .createArray(let op):
             if let elementGroupName = op.elementGroupName {
                 let elementType = self.environment.type(ofGroup: elementGroupName)
@@ -2492,7 +2467,7 @@ public struct JSTyper: Analyzer {
             // We currently don't track the types of private properties
             set(instr.output, .jsAnything)
 
-        case .callPrivateMethod, .callPrivateMethodWithSpread:
+        case .callPrivateMethod:
             // We currently don't track the signatures of private methods
             set(instr.output, .jsAnything)
 
@@ -2842,7 +2817,7 @@ public struct JSTyper: Analyzer {
             processDestructuring(
                 p, on: sourceVar, isRoot: false, iterator: &iterator,
                 isReassignment: isReassignment)
-        case .property(_), .element(_), .superComputedProperty, .privateProperty:
+        case .property(_), .element(_), .superComputedProperty:
             if isReassignment { _ = iterator.next()! }
         case .computedProperty:
             if isReassignment {

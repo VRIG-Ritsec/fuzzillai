@@ -716,31 +716,6 @@ public class JavaScriptLifter: Lifter {
                 w.leaveCurrentBlock()
                 w.emit("}")
 
-            case .beginClassPrivateGetter(let op):
-                let PROPERTY = op.propertyName
-                let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)get #\(PROPERTY)() {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .endClassPrivateGetter:
-                w.leaveCurrentBlock()
-                w.emit("}")
-
-            case .beginClassPrivateSetter(let op):
-                assert(instr.numInnerOutputs == 2)
-                let vars = w.declareAll(instr.innerOutputs.dropFirst(), usePrefix: "a")
-                let PARAMS = liftParameters(op.parameters, as: vars)
-                let PROPERTY = op.propertyName
-                let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)set #\(PROPERTY)(\(PARAMS)) {")
-                w.enterNewBlock()
-                bindVariableToThis(instr.innerOutput(0))
-
-            case .endClassPrivateSetter:
-                w.leaveCurrentBlock()
-                w.emit("}")
-
             case .endClassDefinition:
                 w.leaveCurrentBlock()
                 w.emit("}")
@@ -1263,15 +1238,13 @@ public class JavaScriptLifter: Lifter {
 
             case .getPrivateProperty(let op):
                 let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
-                let expr = MemberExpression.new() + obj + opToken + op.propertyName
+                let expr = MemberExpression.new() + obj + ".#" + op.propertyName
                 w.assign(expr, to: instr.output)
 
             case .setPrivateProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of an assignment, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
-                let PROPERTY = MemberExpression.new() + obj + opToken + op.propertyName
+                let PROPERTY = MemberExpression.new() + obj + ".#" + op.propertyName
                 let VALUE = input(1)
                 w.emit("\(PROPERTY) = \(VALUE);")
 
@@ -1284,20 +1257,9 @@ public class JavaScriptLifter: Lifter {
 
             case .callPrivateMethod(let op):
                 let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
-                let method = MemberExpression.new() + obj + opToken + op.methodName
+                let method = MemberExpression.new() + obj + ".#" + op.methodName
                 let args = inputs.dropFirst()
                 let expr = CallExpression.new() + method + "(" + liftCallArguments(args) + ")"
-                w.assign(expr, to: instr.output)
-
-            case .callPrivateMethodWithSpread(let op):
-                let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
-                let method = MemberExpression.new() + obj + opToken + op.methodName
-                let args = inputs.dropFirst()
-                let expr =
-                    CallExpression.new() + method + "("
-                    + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
             case .getSuperProperty(let op):
@@ -2448,9 +2410,6 @@ public class JavaScriptLifter: Lifter {
         case .superComputedProperty:
             let key = inputIterator.val.next()!.1.text
             return "super[\(key)]"
-        case .privateProperty(let p):
-            let obj = inputIterator.val.next()!.1.text
-            return "\(obj).#\(p)"
         }
     }
 

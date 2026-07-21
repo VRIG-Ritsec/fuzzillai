@@ -1008,48 +1008,6 @@ final class EndClassPrivateMethod: EndAnySubroutine {
     override var opcode: Opcode { .endClassPrivateMethod(self) }
 }
 
-final class BeginClassPrivateGetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassPrivateGetter(self) }
-
-    let propertyName: String
-    let isStatic: Bool
-
-    init(propertyName: String, isStatic: Bool) {
-        self.propertyName = propertyName
-        self.isStatic = isStatic
-        // First inner output is the explicit |this| parameter
-        super.init(
-            parameters: Parameters(count: 0), numInnerOutputs: 1,
-            attributes: [.isBlockStart], requiredContext: .classDefinition,
-            contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassPrivateGetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassPrivateGetter(self) }
-}
-
-final class BeginClassPrivateSetter: BeginAnySubroutine {
-    override var opcode: Opcode { .beginClassPrivateSetter(self) }
-
-    let propertyName: String
-    let isStatic: Bool
-
-    init(propertyName: String, isStatic: Bool) {
-        self.propertyName = propertyName
-        self.isStatic = isStatic
-        // First inner output is the explicit |this| parameter, second is the setter argument
-        super.init(
-            parameters: Parameters(count: 1), numInnerOutputs: 2,
-            attributes: [.isBlockStart], requiredContext: .classDefinition,
-            contextOpened: [.javascript, .subroutine, .method, .classMethod])
-    }
-}
-
-final class EndClassPrivateSetter: EndAnySubroutine {
-    override var opcode: Opcode { .endClassPrivateSetter(self) }
-}
-
 final class EndClassDefinition: JsOperation {
     override var opcode: Opcode { .endClassDefinition(self) }
 
@@ -2003,32 +1961,29 @@ final class CallSuperMethod: JsOperation {
     }
 }
 
-final class GetPrivateProperty: GuardableOperation {
+final class GetPrivateProperty: JsOperation {
     override var opcode: Opcode { .getPrivateProperty(self) }
 
     let propertyName: String
 
-    init(propertyName: String, isGuarded: Bool) {
+    init(propertyName: String) {
         self.propertyName = propertyName
         // Accessing a private property that isn't declared in the surrounding class definition is a syntax error
         // (and so cannot even be handled with a try-catch). Since mutating private property names would often
         // result in an access to such an undefined private property, and therefore a syntax error, we do not mutate them.
-        super.init(
-            isGuarded: isGuarded, numInputs: 1, numOutputs: 1,
-            requiredContext: [.javascript, .classMethod])
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.javascript, .classMethod])
     }
 }
 
-final class SetPrivateProperty: GuardableOperation {
+final class SetPrivateProperty: JsOperation {
     override var opcode: Opcode { .setPrivateProperty(self) }
 
     let propertyName: String
 
-    init(propertyName: String, isGuarded: Bool) {
+    init(propertyName: String) {
         self.propertyName = propertyName
         // See comment in GetPrivateProperty for why these aren't mutable.
-        super.init(
-            isGuarded: isGuarded, numInputs: 2, requiredContext: [.javascript, .classMethod])
+        super.init(numInputs: 2, requiredContext: [.javascript, .classMethod])
     }
 }
 
@@ -2046,7 +2001,7 @@ final class UpdatePrivateProperty: JsOperation {
     }
 }
 
-final class CallPrivateMethod: GuardableOperation {
+final class CallPrivateMethod: JsOperation {
     override var opcode: Opcode { .callPrivateMethod(self) }
 
     let methodName: String
@@ -2055,33 +2010,11 @@ final class CallPrivateMethod: GuardableOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, isGuarded: Bool) {
+    init(methodName: String, numArguments: Int) {
         self.methodName = methodName
         // The reference object is the first input.
         // See comment in GetPrivateProperty for why these aren't mutable.
         super.init(
-            isGuarded: isGuarded,
-            numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
-            attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
-    }
-}
-
-final class CallPrivateMethodWithSpread: GuardableOperation {
-    override var opcode: Opcode { .callPrivateMethodWithSpread(self) }
-
-    let methodName: String
-    let spreads: [Bool]
-
-    var numArguments: Int {
-        return numInputs - 1
-    }
-
-    init(methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool) {
-        assert(spreads.count == numArguments)
-        self.methodName = methodName
-        self.spreads = spreads
-        super.init(
-            isGuarded: isGuarded,
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
     }
@@ -3297,7 +3230,7 @@ public indirect enum DestructuringPattern: Hashable, Equatable {
             case .pattern(let pattern):
                 return pattern.numberOfBindings
             case .property, .element, .computedProperty, .superProperty, .superElement,
-                .superComputedProperty, .privateProperty:
+                .superComputedProperty:
                 return 0
             }
         }
@@ -3309,7 +3242,6 @@ public indirect enum DestructuringPattern: Hashable, Equatable {
         case superProperty(String)
         case superElement(Int64)
         case superComputedProperty
-        case privateProperty(String)
     }
 
     public struct ObjectPattern: Hashable, Equatable {
@@ -3389,7 +3321,7 @@ extension DestructuringPattern {
         func countTargetInputs(_ target: DestructuringPattern.Target) -> Int {
             switch target {
             case .pattern(let p): return p.numExtraInputs
-            case .property, .element, .superComputedProperty, .privateProperty: return 1
+            case .property(_), .element(_), .superComputedProperty: return 1
             case .computedProperty: return 2
             default: return 0
             }
@@ -3501,7 +3433,7 @@ final class DestructAndReassign: JsOperation {
                     currentInputIdx += 1
                 case .pattern(let p):
                     traverse(p)
-                case .property, .element, .superComputedProperty, .privateProperty:
+                case .property(_), .element(_), .superComputedProperty:
                     currentInputIdx += 1
                 case .computedProperty:
                     currentInputIdx += 2

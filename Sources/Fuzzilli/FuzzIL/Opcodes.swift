@@ -386,9 +386,4 @@ enum Opcode {
     case declarePendingBundleModule(DeclarePendingBundleModule)
     case beginPendingBundleModule(BeginPendingBundleModule)
     case endPendingBundleModule(EndPendingBundleModule)
-    case beginClassPrivateGetter(BeginClassPrivateGetter)
-    case endClassPrivateGetter(EndClassPrivateGetter)
-    case beginClassPrivateSetter(BeginClassPrivateSetter)
-    case endClassPrivateSetter(EndClassPrivateSetter)
-    case callPrivateMethodWithSpread(CallPrivateMethodWithSpread)
 }

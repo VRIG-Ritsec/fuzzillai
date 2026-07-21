@@ -714,20 +714,6 @@ extension Instruction: ProtobufConvertible {
                 }
             case .endClassPrivateMethod:
                 $0.endClassPrivateMethod = Fuzzilli_Protobuf_EndClassPrivateMethod()
-            case .beginClassPrivateGetter(let op):
-                $0.beginClassPrivateGetter = Fuzzilli_Protobuf_BeginClassPrivateGetter.with {
-                    $0.propertyName = op.propertyName
-                    $0.isStatic = op.isStatic
-                }
-            case .endClassPrivateGetter:
-                $0.endClassPrivateGetter = Fuzzilli_Protobuf_EndClassPrivateGetter()
-            case .beginClassPrivateSetter(let op):
-                $0.beginClassPrivateSetter = Fuzzilli_Protobuf_BeginClassPrivateSetter.with {
-                    $0.propertyName = op.propertyName
-                    $0.isStatic = op.isStatic
-                }
-            case .endClassPrivateSetter:
-                $0.endClassPrivateSetter = Fuzzilli_Protobuf_EndClassPrivateSetter()
             case .beginClassMethod(let op):
                 $0.beginClassMethod = Fuzzilli_Protobuf_BeginClassMethod.with {
                     $0.methodName = op.methodName
@@ -1033,12 +1019,10 @@ extension Instruction: ProtobufConvertible {
             case .getPrivateProperty(let op):
                 $0.getPrivateProperty = Fuzzilli_Protobuf_GetPrivateProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isGuarded = op.isGuarded
                 }
             case .setPrivateProperty(let op):
                 $0.setPrivateProperty = Fuzzilli_Protobuf_SetPrivateProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isGuarded = op.isGuarded
                 }
             case .updatePrivateProperty(let op):
                 $0.updatePrivateProperty = Fuzzilli_Protobuf_UpdatePrivateProperty.with {
@@ -1048,14 +1032,6 @@ extension Instruction: ProtobufConvertible {
             case .callPrivateMethod(let op):
                 $0.callPrivateMethod = Fuzzilli_Protobuf_CallPrivateMethod.with {
                     $0.methodName = op.methodName
-                    $0.isGuarded = op.isGuarded
-                }
-            case .callPrivateMethodWithSpread(let op):
-                $0.callPrivateMethodWithSpread = Fuzzilli_Protobuf_CallPrivateMethodWithSpread.with
-                {
-                    $0.methodName = op.methodName
-                    $0.spreads = op.spreads
-                    $0.isGuarded = op.isGuarded
                 }
             case .getSuperProperty(let op):
                 $0.getSuperProperty = Fuzzilli_Protobuf_GetSuperProperty.with {
@@ -2250,14 +2226,6 @@ extension Instruction: ProtobufConvertible {
                 isStatic: p.isStatic)
         case .endClassPrivateMethod:
             op = EndClassPrivateMethod()
-        case .beginClassPrivateGetter(let p):
-            op = BeginClassPrivateGetter(propertyName: p.propertyName, isStatic: p.isStatic)
-        case .endClassPrivateGetter:
-            op = EndClassPrivateGetter()
-        case .beginClassPrivateSetter(let p):
-            op = BeginClassPrivateSetter(propertyName: p.propertyName, isStatic: p.isStatic)
-        case .endClassPrivateSetter:
-            op = EndClassPrivateSetter()
         case .endClassDefinition:
             op = EndClassDefinition()
         case .createArray(let p):
@@ -2440,20 +2408,15 @@ extension Instruction: ProtobufConvertible {
         case .callSuperMethod(let p):
             op = CallSuperMethod(methodName: p.methodName, numArguments: inouts.count - 1)
         case .getPrivateProperty(let p):
-            op = GetPrivateProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
+            op = GetPrivateProperty(propertyName: p.propertyName)
         case .setPrivateProperty(let p):
-            op = SetPrivateProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
+            op = SetPrivateProperty(propertyName: p.propertyName)
         case .updatePrivateProperty(let p):
             op = UpdatePrivateProperty(
                 propertyName: p.propertyName,
                 operator: try convertEnum(p.op, BinaryOperator.allCases))
         case .callPrivateMethod(let p):
-            op = CallPrivateMethod(
-                methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded)
-        case .callPrivateMethodWithSpread(let p):
-            op = CallPrivateMethodWithSpread(
-                methodName: p.methodName, numArguments: inouts.count - 2, spreads: p.spreads,
-                isGuarded: p.isGuarded)
+            op = CallPrivateMethod(methodName: p.methodName, numArguments: inouts.count - 2)
         case .getSuperProperty(let p):
             op = GetSuperProperty(propertyName: p.propertyName)
         case .setSuperProperty(let p):
@@ -3189,9 +3152,6 @@ private func encodeDestructuringTarget(
         case .superComputedProperty:
             checkValidTarget()
             encodedTarget.superComputedProperty = Fuzzilli_Protobuf_Empty()
-        case .privateProperty(let propertyName):
-            checkValidTarget()
-            encodedTarget.privateProperty = propertyName
         }
     }
 }
@@ -3231,9 +3191,6 @@ private func decodeDestructuringTarget(
     case .superComputedProperty(_):
         try checkValidTarget()
         return .superComputedProperty
-    case .privateProperty(let propertyName):
-        try checkValidTarget()
-        return .privateProperty(propertyName)
     case nil:
         throw FuzzilliError.instructionDecodingError("Missing or invalid target")
     }

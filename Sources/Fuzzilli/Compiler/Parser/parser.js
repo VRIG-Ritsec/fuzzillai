@@ -256,9 +256,6 @@ function parse(script, proto) {
                 body.index = member.key.value;
             } else if (member.key.type === 'StringLiteral') {
                 body.name = member.key.value;
-            } else if (member.key.type === 'PrivateName') {
-                assert(member.key.id.type === 'Identifier', "Expected private name ID to be an Identifier");
-                body.privateName = member.key.id.name;
             } else {
                 throw "Unknown member key type: " + member.key.type + " in declaration";
             }
@@ -278,7 +275,7 @@ function parse(script, proto) {
         }
         cls.fields = [];
         for (let field of node.body.body) {
-            if (field.type === 'ClassProperty' || field.type === 'ClassPrivateProperty') {
+            if (field.type === 'ClassProperty') {
                 let property = {};
                 property.isStatic = field.static;
                 if (field.value !== null) {
@@ -286,7 +283,7 @@ function parse(script, proto) {
                 }
                 property.key = visitMemberKey(field);
                 cls.fields.push(make('ClassField', { property: make('ClassProperty', property) }));
-            } else if (field.type === 'ClassMethod' || field.type === 'ClassPrivateMethod') {
+            } else if (field.type === 'ClassMethod') {
                 assert(!field.shorthand, 'Expected field.shorthand to be false');
                 assert(!field.generator, 'Expected field.generator to be false');
                 assert(!field.async, 'Expected field.async to be false');
@@ -573,9 +570,6 @@ function parse(script, proto) {
         let out = { object };
         if (node.computed) {
             out.expression = visitExpression(node.property);
-        } else if (node.property.type === 'PrivateName') {
-            assert(node.property.id.type === 'Identifier', "Expected private name ID to be an Identifier");
-            out.privateName = node.property.id.name;
         } else {
             assert(node.property.type === 'Identifier', "Expected node.property.type to be exactly 'Identifier'");
             out.name = node.property.name;

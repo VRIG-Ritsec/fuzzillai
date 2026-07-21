@@ -345,6 +345,28 @@ public class FuzzILLifter: Lifter {
         case .endClassPrivateMethod:
             w.decreaseIndentionLevel()
             w.emit("EndClassPrivateMethod")
+
+        case .beginClassPrivateGetter(let op):
+            let maybeStatic = op.isStatic ? "static " : ""
+            let params = liftParametersWithThis(
+                Parameters(count: 0), as: instr.innerOutputs.map(lift))
+            w.emit("BeginClassPrivateGetter '\(maybeStatic)\(op.propertyName)' -> \(params)")
+            w.increaseIndentionLevel()
+
+        case .endClassPrivateGetter:
+            w.decreaseIndentionLevel()
+            w.emit("EndClassPrivateGetter")
+
+        case .beginClassPrivateSetter(let op):
+            let maybeStatic = op.isStatic ? "static " : ""
+            let params = liftParametersWithThis(
+                Parameters(count: 1), as: instr.innerOutputs.map(lift))
+            w.emit("BeginClassPrivateSetter '\(maybeStatic)\(op.propertyName)' -> \(params)")
+            w.increaseIndentionLevel()
+
+        case .endClassPrivateSetter:
+            w.decreaseIndentionLevel()
+            w.emit("EndClassPrivateSetter")
         case .endClassDefinition:
             w.decreaseIndentionLevel()
             w.emit("EndClassDefinition")
@@ -669,17 +691,30 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getPrivateProperty(let op):
-            w.emit("\(output()) <- GetPrivateProperty '\(op.propertyName)'")
+            let opcode = op.isGuarded ? "GetPrivateProperty (guarded)" : "GetPrivateProperty"
+            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
 
         case .setPrivateProperty(let op):
-            w.emit("SetPrivateProperty '\(op.propertyName)', \(input(0))")
+            let opcode = op.isGuarded ? "SetPrivateProperty (guarded)" : "SetPrivateProperty"
+            w.emit("\(opcode) \(input(0)), '\(op.propertyName)', \(input(1))")
 
         case .updatePrivateProperty(let op):
-            w.emit("UpdatePrivateProperty '\(op.propertyName)', '\(op.op.token)', \(input(0))")
+            w.emit(
+                "UpdatePrivateProperty \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))"
+            )
 
         case .callPrivateMethod(let op):
+            let opcode = op.isGuarded ? "CallPrivateMethod (guarded)" : "CallPrivateMethod"
             w.emit(
-                "\(output()) <- CallPrivateMethod \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+            )
+
+        case .callPrivateMethodWithSpread(let op):
+            let opcode =
+                op.isGuarded
+                ? "CallPrivateMethodWithSpread (guarded)" : "CallPrivateMethodWithSpread"
+            w.emit(
+                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .getSuperProperty(let op):
@@ -1813,6 +1848,9 @@ public class FuzzILLifter: Lifter {
                 p, isReassign: isReassign,
                 inputIterator: inputIterator, outputIterator: outputIterator)
         case .property(let s):
+            let obj = lift(inputIterator.val.next()!)
+            return "\(obj).\(s)"
+        case .privateProperty(let s):
             let obj = lift(inputIterator.val.next()!)
             return "\(obj).\(s)"
         case .element(let i):

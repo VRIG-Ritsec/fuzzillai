@@ -430,6 +430,15 @@ public struct Compiler_Protobuf_PropertyKey: Sendable {
     set {body = .expression(newValue)}
   }
 
+  /// A #private property
+  public var privateName: String {
+    get {
+      if case .privateName(let v)? = body {return v}
+      return String()
+    }
+    set {body = .privateName(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable, Sendable {
@@ -439,6 +448,8 @@ public struct Compiler_Protobuf_PropertyKey: Sendable {
     case index(Int64)
     /// A computed property.
     case expression(Compiler_Protobuf_Expression)
+    /// A #private property
+    case privateName(String)
 
   }
 
@@ -2154,6 +2165,15 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
     set {_uniqueStorage()._property = .expression(newValue)}
   }
 
+  /// A #private property
+  public var privateName: String {
+    get {
+      if case .privateName(let v)? = _storage._property {return v}
+      return String()
+    }
+    set {_uniqueStorage()._property = .privateName(newValue)}
+  }
+
   public var isOptional: Bool {
     get {_storage._isOptional}
     set {_uniqueStorage()._isOptional = newValue}
@@ -2166,6 +2186,8 @@ public struct Compiler_Protobuf_MemberExpression: @unchecked Sendable {
     case name(String)
     /// A computed property or element.
     case expression(Compiler_Protobuf_Expression)
+    /// A #private property
+    case privateName(String)
 
   }
 
@@ -3476,7 +3498,7 @@ extension Compiler_Protobuf_FunctionDeclaration: SwiftProtobuf.Message, SwiftPro
 
 extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PropertyKey"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}index\0\u{1}expression\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}index\0\u{1}expression\0\u{1}privateName\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3513,6 +3535,14 @@ extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._M
           self.body = .expression(v)
         }
       }()
+      case 4: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.body != nil {try decoder.handleConflictingOneOf()}
+          self.body = .privateName(v)
+        }
+      }()
       default: break
       }
     }
@@ -3535,6 +3565,10 @@ extension Compiler_Protobuf_PropertyKey: SwiftProtobuf.Message, SwiftProtobuf._M
     case .expression?: try {
       guard case .expression(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .privateName?: try {
+      guard case .privateName(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 4)
     }()
     case nil: break
     }
@@ -7054,7 +7088,7 @@ extension Compiler_Protobuf_NewExpression: SwiftProtobuf.Message, SwiftProtobuf.
 
 extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".MemberExpression"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}object\0\u{1}name\0\u{1}expression\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}object\0\u{1}name\0\u{1}expression\0\u{1}isOptional\0\u{1}privateName\0")
 
   fileprivate class _StorageClass {
     var _object: Compiler_Protobuf_Expression? = nil
@@ -7114,6 +7148,14 @@ extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtob
           }
         }()
         case 4: try { try decoder.decodeSingularBoolField(value: &_storage._isOptional) }()
+        case 5: try {
+          var v: String?
+          try decoder.decodeSingularStringField(value: &v)
+          if let v = v {
+            if _storage._property != nil {try decoder.handleConflictingOneOf()}
+            _storage._property = .privateName(v)
+          }
+        }()
         default: break
         }
       }
@@ -7138,11 +7180,14 @@ extension Compiler_Protobuf_MemberExpression: SwiftProtobuf.Message, SwiftProtob
         guard case .expression(let v)? = _storage._property else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
       }()
-      case nil: break
+      default: break
       }
       if _storage._isOptional != false {
         try visitor.visitSingularBoolField(value: _storage._isOptional, fieldNumber: 4)
       }
+      try { if case .privateName(let v)? = _storage._property {
+        try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }

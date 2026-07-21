@@ -141,8 +141,12 @@ public class JavaScriptCompiler {
                 switch key {
                 case .name(let name):
                     op = ClassAddProperty(
-                        propertyName: name, hasValue: property.hasValue, isStatic: property.isStatic
-                    )
+                        propertyName: name, hasValue: property.hasValue,
+                        isStatic: property.isStatic)
+                case .privateName(let name):
+                    op = ClassAddPrivateProperty(
+                        propertyName: name, hasValue: property.hasValue,
+                        isStatic: property.isStatic)
                 case .index(let index):
                     op = ClassAddElement(
                         index: index, hasValue: property.hasValue, isStatic: property.isStatic)
@@ -187,6 +191,11 @@ public class JavaScriptCompiler {
                         BeginClassMethod(
                             methodName: name, parameters: parameters, isStatic: method.isStatic),
                         withInputs: defaultValues)
+                case .privateName(let name):
+                    head = emit(
+                        BeginClassPrivateMethod(
+                            methodName: name, parameters: parameters, isStatic: method.isStatic),
+                        withInputs: defaultValues)
                 case .index(let index):
                     head = emit(
                         BeginClassMethod(
@@ -209,10 +218,10 @@ public class JavaScriptCompiler {
                 }
 
                 switch key {
-                case .name:
+                case .name, .index:
                     emit(EndClassMethod())
-                case .index:
-                    emit(EndClassMethod())
+                case .privateName:
+                    emit(EndClassPrivateMethod())
                 case .expression:
                     emit(EndClassComputedMethod())
                 }
@@ -225,6 +234,9 @@ public class JavaScriptCompiler {
                 switch key {
                 case .name(let name):
                     head = emit(BeginClassGetter(propertyName: name, isStatic: getter.isStatic))
+                case .privateName(let name):
+                    head = emit(
+                        BeginClassPrivateGetter(propertyName: name, isStatic: getter.isStatic))
                 case .index(let index):
                     head = emit(
                         BeginClassGetter(propertyName: String(index), isStatic: getter.isStatic))
@@ -244,6 +256,8 @@ public class JavaScriptCompiler {
                 switch key {
                 case .name, .index:
                     emit(EndClassGetter())
+                case .privateName:
+                    emit(EndClassPrivateGetter())
                 case .expression:
                     emit(EndClassComputedGetter())
                 }
@@ -256,6 +270,9 @@ public class JavaScriptCompiler {
                 switch key {
                 case .name(let name):
                     head = emit(BeginClassSetter(propertyName: name, isStatic: setter.isStatic))
+                case .privateName(let name):
+                    head = emit(
+                        BeginClassPrivateSetter(propertyName: name, isStatic: setter.isStatic))
                 case .index(let index):
                     head = emit(
                         BeginClassSetter(propertyName: String(index), isStatic: setter.isStatic))
@@ -278,6 +295,8 @@ public class JavaScriptCompiler {
                 switch key {
                 case .name, .index:
                     emit(EndClassSetter())
+                case .privateName:
+                    emit(EndClassPrivateSetter())
                 case .expression:
                     emit(EndClassComputedSetter())
                 }
@@ -949,11 +968,20 @@ public class JavaScriptCompiler {
             case .name(let name):
                 if let op = assignmentOperator {
                     emit(
-                        UpdateProperty(propertyName: name, operator: op),
+                        UpdateProperty(propertyName: name, operator: op), withInputs: [object, rhs])
+                } else {
+                    emit(
+                        SetProperty(propertyName: name, isGuarded: memberExpression.isOptional),
+                        withInputs: [object, rhs])
+                }
+            case .privateName(let name):
+                if let op = assignmentOperator {
+                    emit(
+                        UpdatePrivateProperty(propertyName: name, operator: op),
                         withInputs: [object, rhs])
                 } else {
                     emit(
-                        SetProperty(
+                        SetPrivateProperty(
                             propertyName: name, isGuarded: memberExpression.isOptional),
                         withInputs: [object, rhs])
                 }
@@ -1227,6 +1255,9 @@ public class JavaScriptCompiler {
                         emit(
                             ObjectLiteralAddComputedProperty(),
                             withInputs: [computedKeys.removeLast()] + inputs)
+                    case .privateName:
+                        throw CompilerError.invalidNodeError(
+                            "Private properties are not valid in object literals")
                     }
                 case .method(let method):
                     let defaultValues = methodDefaultValues.removeLast()
@@ -1251,6 +1282,9 @@ public class JavaScriptCompiler {
                         head = emit(
                             BeginObjectLiteralComputedMethod(parameters: parameters),
                             withInputs: [computedKeys.removeLast()] + defaultValues)
+                    case .privateName:
+                        throw CompilerError.invalidNodeError(
+                            "Private properties are not valid in object literals")
                     }
 
                     try enterNewScope {
@@ -1267,6 +1301,8 @@ public class JavaScriptCompiler {
                         emit(EndObjectLiteralMethod())
                     case .expression:
                         emit(EndObjectLiteralComputedMethod())
+                    case .privateName:
+                        fatalError("Unreachable")
                     }
                 case .getter(let getter):
                     guard let key = getter.key.body else {
@@ -1283,6 +1319,9 @@ public class JavaScriptCompiler {
                         head = emit(
                             BeginObjectLiteralComputedGetter(),
                             withInputs: [computedKeys.removeLast()])
+                    case .privateName:
+                        throw CompilerError.invalidNodeError(
+                            "Private properties are not valid in object literals")
                     }
                     try enterNewScope {
                         map("this", to: head.innerOutput)
@@ -1295,6 +1334,8 @@ public class JavaScriptCompiler {
                         emit(EndObjectLiteralGetter())
                     case .expression:
                         emit(EndObjectLiteralComputedGetter())
+                    case .privateName:
+                        fatalError("Unreachable")
                     }
                 case .setter(let setter):
                     guard let key = setter.key.body else {
@@ -1311,6 +1352,9 @@ public class JavaScriptCompiler {
                         head = emit(
                             BeginObjectLiteralComputedSetter(),
                             withInputs: [computedKeys.removeLast()])
+                    case .privateName:
+                        throw CompilerError.invalidNodeError(
+                            "Private properties are not valid in object literals")
                     }
                     try enterNewScope {
                         var parameters = head.innerOutputs
@@ -1326,6 +1370,8 @@ public class JavaScriptCompiler {
                         emit(EndObjectLiteralSetter())
                     case .expression:
                         emit(EndObjectLiteralComputedSetter())
+                    case .privateName:
+                        fatalError("Unreachable")
                     }
                 }
             }
@@ -1443,21 +1489,29 @@ public class JavaScriptCompiler {
                 }
                 switch property {
                 case .name(let name):
+                    let operation: Operation
                     if isSpreading {
-                        return emit(
-                            CallMethodWithSpread(
-                                methodName: name, numArguments: arguments.count, spreads: spreads,
-                                isGuarded: callExpression.isOptional),
-                            withInputs: [object] + arguments
-                        ).output
+                        operation = CallMethodWithSpread(
+                            methodName: name, numArguments: arguments.count,
+                            spreads: spreads, isGuarded: callExpression.isOptional)
                     } else {
-                        return emit(
-                            CallMethod(
-                                methodName: name, numArguments: arguments.count,
-                                isGuarded: callExpression.isOptional),
-                            withInputs: [object] + arguments
-                        ).output
+                        operation = CallMethod(
+                            methodName: name, numArguments: arguments.count,
+                            isGuarded: callExpression.isOptional)
                     }
+                    return emit(operation, withInputs: [object] + arguments).output
+                case .privateName(let name):
+                    let operation: Operation
+                    if isSpreading {
+                        operation = CallPrivateMethodWithSpread(
+                            methodName: name, numArguments: arguments.count,
+                            spreads: spreads, isGuarded: callExpression.isOptional)
+                    } else {
+                        operation = CallPrivateMethod(
+                            methodName: name, numArguments: arguments.count,
+                            isGuarded: callExpression.isOptional)
+                    }
+                    return emit(operation, withInputs: [object] + arguments).output
                 case .expression(let expr):
                     let method = try compileExpression(expr)
                     if isSpreading {
@@ -1575,6 +1629,11 @@ public class JavaScriptCompiler {
                     GetProperty(propertyName: name, isGuarded: memberExpression.isOptional),
                     withInputs: [object]
                 ).output
+            case .privateName(let name):
+                return emit(
+                    GetPrivateProperty(propertyName: name, isGuarded: memberExpression.isOptional),
+                    withInputs: [object]
+                ).output
             case .expression(let expr):
                 if case .numberLiteral(let literal) = expr.expression,
                     let index = Int64(exactly: literal.value)
@@ -1631,6 +1690,11 @@ public class JavaScriptCompiler {
                 else {
                     throw CompilerError.invalidNodeError(
                         "delete operator must be applied to a member expression")
+                }
+                if case .privateName = memberExpression.property {
+                    throw CompilerError.invalidNodeError(
+                        "Deleting private properties is a syntax error in JavaScript and not supported"
+                    )
                 }
 
                 let obj = try compileExpression(memberExpression.object)
@@ -2023,7 +2087,10 @@ public class JavaScriptCompiler {
         }
         inputs.append(try compileExpression(memExpr.object))
         switch memExpr.property {
-        case .name(let s): return .property(s)
+        case .name(let s):
+            return .property(s)
+        case .privateName(let s):
+            return .privateProperty(s)
         case .expression(let expr):
             if case .numberLiteral(let literal) = expr.expression,
                 let index = Int64(exactly: literal.value)

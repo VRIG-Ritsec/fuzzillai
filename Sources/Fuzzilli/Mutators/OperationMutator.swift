@@ -270,11 +270,24 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CallMethodWithSpread(
                 methodName: methodName, numArguments: op.numArguments, spreads: spreads,
                 isGuarded: op.isGuarded)
+        // TODO(rherouart): Unify normal and spread calls (e.g. CallMethod vs CallMethodWithSpread) into a single opcode with an optional/empty spread array.
+        // This would allow more mutations, such as easily turning a non-spread call into a spread call.
+        // Do the same for callMethod/construct/callFunction
+        case .callPrivateMethodWithSpread(let op):
+            var spreads = op.spreads
+            assert(!spreads.isEmpty)
+            let idx = Int.random(in: 0..<spreads.count)
+            spreads[idx] = !spreads[idx]
+            newOp = CallPrivateMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments, spreads: spreads,
+                isGuarded: op.isGuarded)
         case .callComputedMethodWithSpread(let op):
             var spreads = op.spreads
             assert(!spreads.isEmpty)
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
+            // TODO(rherouart): Randomly mutate the `isGuarded` flag (e.g. flipping it) here
+            // and in other instructions to better explore optional chaining behavior.
             newOp = CallComputedMethodWithSpread(
                 numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
         case .unaryOperation(_):
@@ -706,6 +719,8 @@ public class OperationMutator: BaseInstructionMutator {
             .classAddPrivateProperty(_),
             .beginClassPrivateMethod(_),
             .endClassPrivateMethod(_),
+            .endClassPrivateGetter(_),
+            .endClassPrivateSetter(_),
             .endClassDefinition(_),
             .createArray(_),
             .getComputedProperty(_),
@@ -799,6 +814,8 @@ public class OperationMutator: BaseInstructionMutator {
             .wrapSuspending(_),
             .bindMethod(_),
             .bindFunction(_),
+            .beginClassPrivateGetter(_),
+            .beginClassPrivateSetter(_),
             .beginBundleScript(_),
             .endBundleScript(_),
             .beginBundleModule(_),
@@ -991,7 +1008,15 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CallSuperConstructor(numArguments: op.numArguments + 1)
         case .callPrivateMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallPrivateMethod(methodName: op.methodName, numArguments: op.numArguments + 1)
+            newOp = CallPrivateMethod(
+                methodName: op.methodName, numArguments: op.numArguments + 1,
+                isGuarded: op.isGuarded)
+        case .callPrivateMethodWithSpread(let op):
+            let spreads = op.spreads + [Bool.random()]
+            inputs.append(b.randomJsVariable())
+            newOp = CallPrivateMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
+                isGuarded: op.isGuarded)
         case .callSuperMethod(let op):
             inputs.append(b.randomJsVariable())
             newOp = CallSuperMethod(methodName: op.methodName, numArguments: op.numArguments + 1)

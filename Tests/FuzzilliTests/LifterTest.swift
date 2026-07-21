@@ -1062,6 +1062,13 @@ struct LifterTests {
                 cls.addPrivateInstanceMethod("in", with: .parameters(n: 1)) { args in
                     let this = args[0]
                     b.callPrivateMethod("im", on: this)
+                    let _ = b.emit(
+                        CallPrivateMethodWithSpread(
+                            methodName: "im", numArguments: 2, spreads: [true, false],
+                            isGuarded: false), withInputs: [this, args[1], args[1]])
+                    let _ = b.emit(
+                        GetPrivateProperty(propertyName: "ifoo", isGuarded: true),
+                        withInputs: [this])
                     b.updatePrivateProperty("ibar", of: this, with: args[1], using: .Add)
                 }
                 cls.addPrivateStaticProperty("sfoo")
@@ -1077,6 +1084,19 @@ struct LifterTests {
                     b.callPrivateMethod("sm", on: this)
                     b.updatePrivateProperty("sbar", of: this, with: args[1], using: .Add)
                 }
+                let _ = b.emit(BeginClassPrivateGetter(propertyName: "iget", isStatic: false))
+                b.doReturn(b.loadInt(1337))
+                b.emit(EndClassPrivateGetter())
+
+                let _ = b.emit(BeginClassPrivateSetter(propertyName: "iset", isStatic: false))
+                b.emit(EndClassPrivateSetter())
+
+                let _ = b.emit(BeginClassPrivateGetter(propertyName: "sget", isStatic: true))
+                b.doReturn(b.loadInt(1337))
+                b.emit(EndClassPrivateGetter())
+
+                let _ = b.emit(BeginClassPrivateSetter(propertyName: "sset", isStatic: true))
+                b.emit(EndClassPrivateSetter())
             }
             b.construct(C, withArgs: [b.loadInt(42)])
             b.reassign(variable: C, value: b.createNamedVariable(forBuiltin: "Uint8Array"))
@@ -1149,18 +1169,30 @@ struct LifterTests {
                     }
                     #in(a38) {
                         this.#im();
+                        this.#im(...a38, a38);
+                        try { this?.#ifoo; } catch (e) {}
                         this.#ibar += a38;
                     }
                     static #sfoo;
                     static #sbar = "baz";
                     static #sm() {
-                        const v41 = this.#sfoo;
-                        this.#sbar = v41;
-                        return v41;
+                        const v43 = this.#sfoo;
+                        this.#sbar = v43;
+                        return v43;
                     }
-                    static #sn(a43) {
+                    static #sn(a45) {
                         this.#sm();
-                        this.#sbar += a43;
+                        this.#sbar += a45;
+                    }
+                    get #iget() {
+                        return 1337;
+                    }
+                    set #iset(a50) {
+                    }
+                    static get #sget() {
+                        return 1337;
+                    }
+                    static set #sset(a54) {
                     }
                 }
                 new C7(42);

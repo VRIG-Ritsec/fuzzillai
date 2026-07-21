@@ -645,7 +645,7 @@ public class Fuzzer {
         for instr in program.code {
             var newOp = instr.op
             if let op = instr.op as? GuardableOperation {
-                newOp = GuardableOperation.enableGuard(of: op)
+                newOp = op.withGuardedState(true)
             }
             b.append(Instruction(newOp, inouts: instr.inouts, flags: instr.flags))
         }

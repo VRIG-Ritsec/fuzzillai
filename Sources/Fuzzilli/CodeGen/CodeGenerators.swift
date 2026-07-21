@@ -257,11 +257,11 @@ func makeObjectDestructForOfLoopGenerator(
     }
 }
 
-//
 // Code generators.
 //
 // These insert one or more instructions into a program.
 //
+// TODO(rherouart): Add CodeGenerators for the new private getter/setter and spread Operations.
 public let CodeGenerators: [CodeGenerator] = [
     // Code generators with useInPrefix: true are used to "bootstrap" code generation by creating some initial variables
     // that following code can then operate on.

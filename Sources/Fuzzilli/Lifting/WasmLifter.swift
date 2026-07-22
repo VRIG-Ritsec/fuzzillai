@@ -1775,7 +1775,7 @@ public class WasmLifter {
             flags |= 0x40
         }
         if ordering != .sequentiallyConsistent {
-            flags |= 0x20
+            flags |= 0x10
         }
 
         var result = Data([flags])

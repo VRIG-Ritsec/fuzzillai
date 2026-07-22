@@ -644,7 +644,7 @@ public class Fuzzer {
         // remove all guards that aren't needed (because no exception is thrown).
         for instr in program.code {
             var newOp = instr.op
-            if let op = instr.op as? GuardableOperation {
+            if let op = instr.op as? GuardableOperation, !op.isGuarded {
                 newOp = op.withGuardedState(true)
             }
             b.append(Instruction(newOp, inouts: instr.inouts, flags: instr.flags))

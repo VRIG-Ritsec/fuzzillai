@@ -112,13 +112,11 @@ struct InstructionSimplifier: Reducer {
         // This will attempt to turn guarded operations into unguarded ones.
         // In the lifted JavaScript code, this would turn something like `try { o.foo(); } catch (e) {}` into `o.foo();`
         for instr in helper.code {
-            guard let op = instr.op as? GuardableOperation else { continue }
+            guard let op = instr.op as? GuardableOperation, op.isGuarded else { continue }
             let newOp = op.withGuardedState(false)
-            if newOp !== op {
-                helper.tryReplacing(
-                    instructionAt: instr.index,
-                    with: Instruction(newOp, inouts: instr.inouts))
-            }
+            helper.tryReplacing(
+                instructionAt: instr.index,
+                with: Instruction(newOp, inouts: instr.inouts))
         }
     }
 

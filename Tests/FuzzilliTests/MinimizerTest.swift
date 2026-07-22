@@ -38,6 +38,29 @@ struct MinimizerTests {
         }
     }
 
+    @Test func testInstructionSimplifierGuardedOperation() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let obj = b.createObject(with: [:])
+            let val = b.loadInt(42)
+            b.setProperty("foo", of: obj, to: val)
+
+            let originalProgram = b.finalize()
+
+            evaluator.setOriginalProgram(originalProgram)
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+
+            InstructionSimplifier().reduce(with: helper)
+
+            #expect(!helper.didReduce)
+        }
+    }
+
     @Test func testGenericInstructionMinimization() {
         let evaluator = EvaluatorForMinimizationTests()
         let fuzzer = makeMockFuzzer(evaluator: evaluator)

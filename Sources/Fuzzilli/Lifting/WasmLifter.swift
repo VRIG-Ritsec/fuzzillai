@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Foundation
+import OrderedCollections
 
 /// Represents the type identifiers for each code section according to the wasm
 /// spec.
@@ -304,7 +305,7 @@ public class WasmLifter {
     // The function index space
     private var functionIdxBase = 0
 
-    private struct JSStringBuiltin: Equatable {
+    private struct JSStringBuiltin: Equatable, Hashable {
         let field: String
         let signature: WasmSignature
         var index: Int?
@@ -312,8 +313,13 @@ public class WasmLifter {
         static func == (lhs: JSStringBuiltin, rhs: JSStringBuiltin) -> Bool {
             return lhs.field == rhs.field && lhs.signature == rhs.signature
         }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(field)
+            hasher.combine(signature)
+        }
     }
-    private var jsStringBuiltins: [JSStringBuiltin] = []
+    private var jsStringBuiltins = OrderedSet<JSStringBuiltin>()
     // Synthetic type groups contain a single type description.
     // They are currently used to support importing JS string builtins,
     // some of which require a specific array type to compile.
@@ -324,76 +330,93 @@ public class WasmLifter {
         elementType: .wasmPackedI16, mutability: true,
         typeGroupIndex: WasmLifter.syntheticTypeGroupIndex, isFinal: true)
 
-    private func getJSStringBuiltin(forOp op: Operation) -> JSStringBuiltin? {
-        switch op {
-        case is WasmJSStringLength:
+    private func createJSStringBuiltinInfo(forOp op: Operation) -> JSStringBuiltin {
+        switch op.opcode {
+        case .wasmJSStringLength:
             return JSStringBuiltin(
                 field: "length", signature: [.wasmJSStringRef()] => [.wasmi32], index: nil)
-        case is WasmJSStringFromCharCodeArray:
+        case .wasmJSStringFromCharCodeArray:
             let signatureArrayType = ILType.wasmIndexRef(builtinArrayDesc, nullability: true)
             return JSStringBuiltin(
                 field: "fromCharCodeArray",
                 signature: [signatureArrayType, .wasmi32, .wasmi32] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringFromCharCode:
+        case .wasmJSStringFromCharCode:
             return JSStringBuiltin(
                 field: "fromCharCode",
                 signature: [.wasmi32] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringFromCodePoint:
+        case .wasmJSStringFromCodePoint:
             return JSStringBuiltin(
                 field: "fromCodePoint",
                 signature: [.wasmi32] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringCharCodeAt:
+        case .wasmJSStringCharCodeAt:
             return JSStringBuiltin(
                 field: "charCodeAt",
                 signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
                 index: nil)
-        case is WasmJSStringCodePointAt:
+        case .wasmJSStringCodePointAt:
             return JSStringBuiltin(
                 field: "codePointAt",
                 signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
                 index: nil)
-        case is WasmJSStringIntoCharCodeArray:
+        case .wasmJSStringIntoCharCodeArray:
             let signatureArrayType = ILType.wasmIndexRef(builtinArrayDesc, nullability: true)
             return JSStringBuiltin(
                 field: "intoCharCodeArray",
                 signature: [.wasmJSStringRef(), signatureArrayType, .wasmi32] => [.wasmi32],
                 index: nil)
-        case is WasmJSStringCast:
+        case .wasmJSStringCast:
             return JSStringBuiltin(
                 field: "cast",
                 signature: [.wasmExternRef()] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringTest:
+        case .wasmJSStringTest:
             return JSStringBuiltin(
                 field: "test",
                 signature: [.wasmExternRef()] => [.wasmi32],
                 index: nil)
-        case is WasmJSStringConcat:
+        case .wasmJSStringConcat:
             return JSStringBuiltin(
                 field: "concat",
                 signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringSubstring:
+        case .wasmJSStringSubstring:
             return JSStringBuiltin(
                 field: "substring",
                 signature: [.wasmJSStringRef(), .wasmi32, .wasmi32] => [.wasmRefJSString()],
                 index: nil)
-        case is WasmJSStringEquals:
+        case .wasmJSStringEquals:
             return JSStringBuiltin(
                 field: "equals",
                 signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
                 index: nil)
-        case is WasmJSStringCompare:
+        case .wasmJSStringCompare:
             return JSStringBuiltin(
                 field: "compare",
                 signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
                 index: nil)
         default:
-            return nil
+            fatalError("Unsupported JS string builtin: \(op.opcode)")
         }
+    }
+
+    private func trackJSStringBuiltinUsage(forOp op: Operation) {
+        let info = createJSStringBuiltinInfo(forOp: op)
+
+        if jsStringBuiltins.append(info).inserted {
+            if (op is WasmJSStringFromCharCodeArray || op is WasmJSStringIntoCharCodeArray)
+                && !syntheticTypeGroups.contains(builtinArrayDesc)
+            {
+                syntheticTypeGroups.append(builtinArrayDesc)
+            }
+        }
+    }
+
+    private func getJSStringBuiltin(forOp op: Operation) -> JSStringBuiltin {
+        let info = createJSStringBuiltinInfo(forOp: op)
+        return jsStringBuiltins.first { $0 == info }!
     }
 
     // The signature index space.
@@ -531,7 +554,7 @@ public class WasmLifter {
 
     private var currentFunction: FunctionInfo? = nil
 
-    public func lift(binaryOutPath path: String? = nil) throws -> (Data, [Variable]) {
+    public func lift(binaryOutPath path: String? = nil) throws -> (Data, [Variable], Bool) {
         // Lifting currently happens in three stages.
         // 1. Collect all necessary information to build all sections later on.
         //    - For now this only the importAnalysis, which needs to know how many imported vs internally defined types exist.
@@ -620,7 +643,9 @@ public class WasmLifter {
         // Step 3 done
         //
 
-        return (bytecode, exports.compactMap { $0.getImport()?.variable })
+        let didUseJSStringBuiltins = !jsStringBuiltins.isEmpty
+
+        return (bytecode, exports.compactMap { $0.getImport()?.variable }, didUseJSStringBuiltins)
     }
 
     private func buildHeader() {
@@ -925,7 +950,9 @@ public class WasmLifter {
             let sigIdx = getSignatureIndexStrict(jsStringBuiltins[i].signature)
             temp += [0x0] + Leb128.unsignedEncode(sigIdx)
 
-            jsStringBuiltins[i].index = functionIdxBase
+            var builtin = jsStringBuiltins[i]
+            builtin.index = functionIdxBase
+            jsStringBuiltins.updateOrAppend(builtin)
             functionIdxBase += 1
         }
 
@@ -1794,17 +1821,7 @@ public class WasmLifter {
                 .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_), .wasmJSStringTest(_),
                 .wasmJSStringConcat(_), .wasmJSStringSubstring(_), .wasmJSStringEquals(_),
                 .wasmJSStringCompare(_):
-                let builtin = self.getJSStringBuiltin(forOp: instr.op)!
-                if !jsStringBuiltins.contains(builtin) {
-                    jsStringBuiltins.append(builtin)
-                    if instr.op is WasmJSStringFromCharCodeArray
-                        || instr.op is WasmJSStringIntoCharCodeArray
-                    {
-                        if !syntheticTypeGroups.contains(builtinArrayDesc) {
-                            syntheticTypeGroups.append(builtinArrayDesc)
-                        }
-                    }
-                }
+                self.trackJSStringBuiltinUsage(forOp: instr.op)
 
             default:
                 continue
@@ -1839,7 +1856,9 @@ public class WasmLifter {
         // Assign builtin imports to the next available indices, and
         // store their indices for emission later.
         for i in 0..<jsStringBuiltins.count {
-            jsStringBuiltins[i].index = baseBuiltinIndex + i
+            var builtin = jsStringBuiltins[i]
+            builtin.index = baseBuiltinIndex + i
+            jsStringBuiltins.updateOrAppend(builtin)
         }
     }
 
@@ -2717,10 +2736,7 @@ public class WasmLifter {
             .wasmJSStringCodePointAt(_), .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_),
             .wasmJSStringTest(_), .wasmJSStringConcat(_), .wasmJSStringSubstring(_),
             .wasmJSStringEquals(_), .wasmJSStringCompare(_):
-            let builtinInfo = self.getJSStringBuiltin(
-                forOp: wasmInstruction.op)!
-            let builtinIdx = jsStringBuiltins.firstIndex(of: builtinInfo)!
-            let builtin = jsStringBuiltins[builtinIdx]
+            let builtin = self.getJSStringBuiltin(forOp: wasmInstruction.op)
             return Data([0x10]) + Leb128.unsignedEncode(builtin.index!)
 
         default:

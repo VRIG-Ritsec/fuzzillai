@@ -5074,7 +5074,7 @@ struct LifterTests {
             let expected = """
                 const v0 = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
                     0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
-                ]), { builtins: ['js-string'] }));
+                ])));
 
                 """
 

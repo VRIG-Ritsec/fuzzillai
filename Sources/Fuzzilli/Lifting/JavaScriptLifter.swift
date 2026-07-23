@@ -1788,7 +1788,7 @@ public class JavaScriptLifter: Lifter {
                 let V = w.declare(instr.output, as: "v\(instr.output.number)")
                 // TODO: support a better diagnostics mode which stores the .wasm binary file alongside the samples.
                 do {
-                    let (bytecode, importRefs) = try WasmLifter(
+                    let (bytecode, importRefs, didUseJSStringBuiltins) = try WasmLifter(
                         withTyper: typer!, withWasmCode: wasmInstructions,
                         startFunction: startFunction
                     ).lift()
@@ -1806,10 +1806,12 @@ public class JavaScriptLifter: Lifter {
                     w.enterNewBlock()
                     liftByteArray([UInt8](bytecode), to: &w)
                     w.leaveCurrentBlock()
+                    let moduleOptions =
+                        didUseJSStringBuiltins ? ", { builtins: ['js-string'] }" : ""
                     if importRefs.isEmpty {
-                        w.emit("]), { builtins: ['js-string'] }));")
+                        w.emit("])\(moduleOptions)));")
                     } else {
-                        w.emit("]), { builtins: ['js-string'] }),")
+                        w.emit("])\(moduleOptions)),")
                         w.emit("{ imports: {")
                         w.enterNewBlock()
                         for (idx, (importRef, expr)) in imports.enumerated() {
@@ -1856,6 +1858,7 @@ public class JavaScriptLifter: Lifter {
                 w.enterNewBlock()
                 liftByteArray(op.bytes, to: &w)
                 w.leaveCurrentBlock()
+                // We always include 'js-string' here because we don't know if the builtins are used.
                 w.emit("]), { builtins: ['js-string'] }), fuzzing_imports);")
 
             case .createWasmTable(let op):

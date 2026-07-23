@@ -558,6 +558,14 @@ final class WasmJSStringCast: WasmOperation {
     }
 }
 
+final class WasmJSStringTest: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringTest(self) }
+
+    init() {
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

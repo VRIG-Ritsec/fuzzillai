@@ -550,6 +550,14 @@ final class WasmJSStringIntoCharCodeArray: WasmOperation {
     }
 }
 
+final class WasmJSStringCast: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringCast(self) }
+
+    init() {
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

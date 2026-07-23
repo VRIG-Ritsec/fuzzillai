@@ -1907,3 +1907,4 @@ message WasmJSStringFromCodePoint {}
 message WasmJSStringCharCodeAt {}
 message WasmJSStringCodePointAt {}
 message WasmJSStringIntoCharCodeArray {}
+message WasmJSStringCast {}

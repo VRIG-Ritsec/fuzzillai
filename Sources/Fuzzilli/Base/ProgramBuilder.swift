@@ -4824,6 +4824,14 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmJSStringCast(_ string: Variable) -> Variable {
+            return b.emit(
+                WasmJSStringCast(), withInputs: [string],
+                types: [.wasmExternRef()]
+            ).output
+        }
+
+        @discardableResult
         public func truncatef32Toi32(_ input: Variable, isSigned: Bool) -> Variable {
             return b.emit(
                 WasmTruncatef32Toi32(isSigned: isSigned), withInputs: [input], types: [.wasmf32]

@@ -598,6 +598,36 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "true\n")
     }
 
+    @Test func testJSStringCast() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [.wasmExternRef()] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let str = function.wasmJSStringCast(args[0])
+                    return [str]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+
+            let inputStr = b.loadString("Cast me!")
+            let res = b.callMethod(main, on: exports, withArgs: [inputStr])
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+
+            b.buildTryCatchFinally {
+                let inputNum = b.loadInt(42)
+                b.callMethod(main, on: exports, withArgs: [inputNum])
+                b.callFunction(outputFunc, withArgs: [b.loadString("Success")])
+            } catchBody: { _ in
+                b.callFunction(outputFunc, withArgs: [b.loadString("Trapped!")])
+            }
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "Cast me!\nTrapped!\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

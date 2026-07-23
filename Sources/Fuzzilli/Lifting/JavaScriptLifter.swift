@@ -1965,6 +1965,7 @@ public class JavaScriptLifter: Lifter {
                 .wasmJSStringFromCharCode(_),
                 .wasmJSStringFromCodePoint(_),
                 .wasmJSStringCharCodeAt(_),
+                .wasmJSStringCodePointAt(_),
                 .wasmTruncatef32Toi32(_),
                 .wasmTruncatef64Toi32(_),
                 .wasmExtendi32Toi64(_),

@@ -350,6 +350,11 @@ public class WasmLifter {
                 field: "charCodeAt",
                 signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
                 index: nil)
+        case is WasmJSStringCodePointAt:
+            return JSStringBuiltin(
+                field: "codePointAt",
+                signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
+                index: nil)
         default:
             return nil
         }
@@ -1749,7 +1754,7 @@ public class WasmLifter {
                 self.exports.append(.tag(instr))
             case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
                 .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_),
-                .wasmJSStringCharCodeAt(_):
+                .wasmJSStringCharCodeAt(_), .wasmJSStringCodePointAt(_):
                 let builtin = self.getJSStringBuiltin(forOp: instr.op)!
                 if !jsStringBuiltins.contains(builtin) {
                     jsStringBuiltins.append(builtin)
@@ -2667,7 +2672,8 @@ public class WasmLifter {
 
         // Wasm JS String Builtins
         case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
-            .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_), .wasmJSStringCharCodeAt(_):
+            .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_), .wasmJSStringCharCodeAt(_),
+            .wasmJSStringCodePointAt(_):
             let builtinInfo = self.getJSStringBuiltin(
                 forOp: wasmInstruction.op)!
             let builtinIdx = jsStringBuiltins.firstIndex(of: builtinInfo)!

@@ -391,6 +391,7 @@ message Instruction {
         WasmJSStringFromCharCode wasmJSStringFromCharCode = 365;
         WasmJSStringFromCodePoint wasmJSStringFromCodePoint = 366;
         WasmJSStringCharCodeAt wasmJSStringCharCodeAt = 367;
+        WasmJSStringCodePointAt wasmJSStringCodePointAt = 368;
     }
 }
 

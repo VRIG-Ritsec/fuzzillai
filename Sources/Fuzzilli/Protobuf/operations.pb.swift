@@ -7082,6 +7082,16 @@ public struct Fuzzilli_Protobuf_WasmJSStringCharCodeAt: Sendable {
   public init() {}
 }
 
+public struct Fuzzilli_Protobuf_WasmJSStringCodePointAt: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate let _protobuf_package = "fuzzilli.protobuf"
@@ -18240,6 +18250,25 @@ extension Fuzzilli_Protobuf_WasmJSStringCharCodeAt: SwiftProtobuf.Message, Swift
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCharCodeAt, rhs: Fuzzilli_Protobuf_WasmJSStringCharCodeAt) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Fuzzilli_Protobuf_WasmJSStringCodePointAt: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WasmJSStringCodePointAt"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Fuzzilli_Protobuf_WasmJSStringCodePointAt, rhs: Fuzzilli_Protobuf_WasmJSStringCodePointAt) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

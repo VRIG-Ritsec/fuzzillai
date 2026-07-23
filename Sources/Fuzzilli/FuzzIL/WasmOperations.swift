@@ -534,6 +534,14 @@ final class WasmJSStringCharCodeAt: WasmOperation {
     }
 }
 
+final class WasmJSStringCodePointAt: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringCodePointAt(self) }
+
+    init() {
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

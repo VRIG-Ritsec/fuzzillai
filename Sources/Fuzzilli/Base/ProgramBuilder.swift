@@ -4806,6 +4806,14 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmJSStringCodePointAt(_ string: Variable, _ index: Variable) -> Variable {
+            return b.emit(
+                WasmJSStringCodePointAt(), withInputs: [string, index],
+                types: [.wasmJSStringRef(), .wasmi32]
+            ).output
+        }
+
+        @discardableResult
         public func truncatef32Toi32(_ input: Variable, isSigned: Bool) -> Variable {
             return b.emit(
                 WasmTruncatef32Toi32(isSigned: isSigned), withInputs: [input], types: [.wasmf32]

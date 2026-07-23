@@ -1905,3 +1905,4 @@ message WasmJSStringFromCharCodeArray {}
 message WasmJSStringFromCharCode {}
 message WasmJSStringFromCodePoint {}
 message WasmJSStringCharCodeAt {}
+message WasmJSStringCodePointAt {}

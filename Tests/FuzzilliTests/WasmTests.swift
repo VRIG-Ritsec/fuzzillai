@@ -536,6 +536,29 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "65\n")
     }
 
+    @Test func testJSStringCodePointAt() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) {
+                    function, _, args in
+                    let c = function.consti32(0x1F600)  // 😀
+                    let str = function.wasmJSStringFromCodePoint(c)
+                    let index = function.consti32(0)
+                    let charCode = function.wasmJSStringCodePointAt(str, index)
+                    return [charCode]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+            let res = b.callMethod(main, on: exports, withArgs: [])
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "128512\n")  // 0x1F600 is 128512 in decimal
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

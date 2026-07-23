@@ -1904,3 +1904,4 @@ message WasmJSStringLength {}
 message WasmJSStringFromCharCodeArray {}
 message WasmJSStringFromCharCode {}
 message WasmJSStringFromCodePoint {}
+message WasmJSStringCharCodeAt {}

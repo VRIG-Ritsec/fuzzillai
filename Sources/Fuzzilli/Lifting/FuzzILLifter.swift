@@ -1754,6 +1754,8 @@ public class FuzzILLifter: Lifter {
             w.emit(
                 "\(output()) <- WasmJSStringFromCharCodeArray \(input(0)), \(input(1)), \(input(2))"
             )
+        case .wasmJSStringFromCharCode(_):
+            w.emit("\(output()) <- WasmJSStringFromCharCode \(input(0))")
 
         default:
             fatalError("No FuzzIL lifting for this operation!")

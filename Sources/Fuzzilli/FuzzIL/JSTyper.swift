@@ -817,6 +817,8 @@ public struct JSTyper: Analyzer {
             case .wasmi32EqualZero(_),
                 .wasmi64EqualZero(_):
                 setType(of: instr.output, to: .wasmi32)
+            case .wasmJSStringFromCharCodeArray(_):
+                setType(of: instr.output, to: .wasmRefJSString())
             case .wasmi32BinOp(_),
                 .wasmi32UnOp(_),
                 .wasmWrapi64Toi32(_),

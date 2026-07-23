@@ -1372,6 +1372,8 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmWrapi64Toi32 = Fuzzilli_Protobuf_WasmWrapi64Toi32()
             case .wasmJSStringLength(_):
                 $0.wasmJsstringLength = Fuzzilli_Protobuf_WasmJSStringLength()
+            case .wasmJSStringFromCharCodeArray(_):
+                $0.wasmJsstringFromCharCodeArray = Fuzzilli_Protobuf_WasmJSStringFromCharCodeArray()
             case .wasmTruncatef32Toi32(let op):
                 $0.wasmTruncatef32Toi32 = Fuzzilli_Protobuf_WasmTruncatef32Toi32.with {
                     $0.isSigned = op.isSigned
@@ -2734,6 +2736,8 @@ extension Instruction: ProtobufConvertible {
             op = WasmWrapi64Toi32()
         case .wasmJsstringLength(_):
             op = WasmJSStringLength()
+        case .wasmJsstringFromCharCodeArray(_):
+            op = WasmJSStringFromCharCodeArray()
         case .wasmTruncatef32Toi32(let p):
             op = WasmTruncatef32Toi32(isSigned: p.isSigned)
         case .wasmTruncatef64Toi32(let p):

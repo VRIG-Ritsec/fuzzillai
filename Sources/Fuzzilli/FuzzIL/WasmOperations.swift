@@ -502,6 +502,14 @@ final class WasmJSStringLength: WasmOperation {
     }
 }
 
+final class WasmJSStringFromCharCodeArray: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringFromCharCodeArray(self) }
+
+    init() {
+        super.init(numInputs: 3, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

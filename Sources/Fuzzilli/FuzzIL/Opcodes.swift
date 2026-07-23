@@ -392,4 +392,5 @@ enum Opcode {
     case endClassPrivateSetter(EndClassPrivateSetter)
     case callPrivateMethodWithSpread(CallPrivateMethodWithSpread)
     case wasmJSStringLength(WasmJSStringLength)
+    case wasmJSStringFromCharCodeArray(WasmJSStringFromCharCodeArray)
 }

@@ -308,14 +308,33 @@ public class WasmLifter {
         let field: String
         let signature: WasmSignature
         var index: Int?
+
+        static func == (lhs: JSStringBuiltin, rhs: JSStringBuiltin) -> Bool {
+            return lhs.field == rhs.field && lhs.signature == rhs.signature
+        }
     }
     private var jsStringBuiltins: [JSStringBuiltin] = []
+    // Synthetic type groups contain a single type description.
+    // They are currently used to support importing JS string builtins,
+    // some of which require a specific array type to compile.
+    private var syntheticTypeGroups: [WasmTypeDescription] = []
+    static let syntheticTypeGroupIndex = -2
 
-    private static func getJSStringBuiltin(forOp op: Operation) -> JSStringBuiltin? {
+    private let builtinArrayDesc = WasmArrayTypeDescription(
+        elementType: .wasmPackedI16, mutability: true,
+        typeGroupIndex: WasmLifter.syntheticTypeGroupIndex, isFinal: true)
+
+    private func getJSStringBuiltin(forOp op: Operation) -> JSStringBuiltin? {
         switch op {
         case is WasmJSStringLength:
             return JSStringBuiltin(
                 field: "length", signature: [.wasmJSStringRef()] => [.wasmi32], index: nil)
+        case is WasmJSStringFromCharCodeArray:
+            let signatureArrayType = ILType.wasmIndexRef(builtinArrayDesc, nullability: true)
+            return JSStringBuiltin(
+                field: "fromCharCodeArray",
+                signature: [signatureArrayType, .wasmi32, .wasmi32] => [.wasmRefJSString()],
+                index: nil)
         default:
             return nil
         }
@@ -675,13 +694,18 @@ public class WasmLifter {
             registerSignature(builtin.signature)
         }
 
-        let typeCount = self.signatures.count + typeGroups.count
+        let typeCount = self.signatures.count + typeGroups.count + syntheticTypeGroups.count
         if typeCount == 0 {
             return
         }
 
         self.bytecode += [WasmSection.type.rawValue]
         var temp = Leb128.unsignedEncode(typeCount)
+
+        for syntheticDesc in syntheticTypeGroups {
+            temp += [0x4E, 0x01]  // Rec group of size 1
+            try buildTypeEntry(for: syntheticDesc, data: &temp)
+        }
 
         // TODO(mliedtke): Integrate this with the whole signature mechanism as
         // these signatures could contain wasm-gc types.
@@ -1708,10 +1732,15 @@ public class WasmLifter {
                 self.exports.append(.memory(instr))
             case .wasmDefineTag(_):
                 self.exports.append(.tag(instr))
-            case .wasmJSStringLength(_):
-                let builtin = WasmLifter.getJSStringBuiltin(forOp: instr.op)!
+            case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_):
+                let builtin = self.getJSStringBuiltin(forOp: instr.op)!
                 if !jsStringBuiltins.contains(builtin) {
                     jsStringBuiltins.append(builtin)
+                    if instr.op is WasmJSStringFromCharCodeArray {
+                        if !syntheticTypeGroups.contains(builtinArrayDesc) {
+                            syntheticTypeGroups.append(builtinArrayDesc)
+                        }
+                    }
                 }
 
             default:
@@ -1723,6 +1752,12 @@ public class WasmLifter {
         // building the type section as the instructions get lowered before we emit the type
         // section.)
         var currentTypeIndex = 0
+
+        for syntheticDesc in syntheticTypeGroups {
+            typeDescToIndex[syntheticDesc] = currentTypeIndex
+            currentTypeIndex += 1
+        }
+
         for typeGroupIndex in typeGroups.sorted() {
             for typeDef in typer.getTypeGroup(typeGroupIndex) {
                 let typeDesc = typer.getTypeDescription(of: typeDef)
@@ -2614,11 +2649,11 @@ public class WasmLifter {
             return Data()
 
         // Wasm JS String Builtins
-        case .wasmJSStringLength(_):
-            let builtinInfo = WasmLifter.getJSStringBuiltin(forOp: wasmInstruction.op)!
-            let builtin = jsStringBuiltins.first(where: {
-                $0.field == builtinInfo.field
-            })!
+        case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_):
+            let builtinInfo = self.getJSStringBuiltin(
+                forOp: wasmInstruction.op)!
+            let builtinIdx = jsStringBuiltins.firstIndex(of: builtinInfo)!
+            let builtin = jsStringBuiltins[builtinIdx]
             return Data([0x10]) + Leb128.unsignedEncode(builtin.index!)
 
         default:

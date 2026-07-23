@@ -438,6 +438,39 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "5\n")
     }
 
+    @Test func testJSStringFromCharCodeArray() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let typeGroup = b.wasmDefineTypeGroup {
+                return [
+                    b.wasmDefineArrayType(
+                        elementType: .wasmPackedI16, mutability: true, isFinal: true)
+                ]
+            }
+            let arrayi16 = typeGroup[0]
+
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let c1 = function.consti32(65)  // 'A'
+                    let c2 = function.consti32(66)  // 'B'
+                    let array = function.wasmArrayNewFixed(arrayType: arrayi16, elements: [c1, c2])
+                    let start = function.consti32(0)
+                    let end = function.consti32(2)
+                    let str = function.wasmJSStringFromCharCodeArray(array, start, end)
+                    return [str]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+            let res = b.callMethod(main, on: exports, withArgs: [])
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "AB\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

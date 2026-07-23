@@ -1750,6 +1750,10 @@ public class FuzzILLifter: Lifter {
         // Wasm JS String Builtins
         case .wasmJSStringLength(_):
             w.emit("\(output()) <- WasmJSStringLength \(input(0))")
+        case .wasmJSStringFromCharCodeArray(_):
+            w.emit(
+                "\(output()) <- WasmJSStringFromCharCodeArray \(input(0)), \(input(1)), \(input(2))"
+            )
 
         default:
             fatalError("No FuzzIL lifting for this operation!")

@@ -4772,6 +4772,16 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmJSStringFromCharCodeArray(
+            _ array: Variable, _ start: Variable, _ end: Variable
+        ) -> Variable {
+            return b.emit(
+                WasmJSStringFromCharCodeArray(), withInputs: [array, start, end],
+                types: [.wasmArrayRef(), .wasmi32, .wasmi32]
+            ).output
+        }
+
+        @discardableResult
         public func truncatef32Toi32(_ input: Variable, isSigned: Bool) -> Variable {
             return b.emit(
                 WasmTruncatef32Toi32(isSigned: isSigned), withInputs: [input], types: [.wasmf32]

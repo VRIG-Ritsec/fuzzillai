@@ -395,6 +395,10 @@ message Instruction {
         WasmJSStringIntoCharCodeArray wasmJSStringIntoCharCodeArray = 369;
         WasmJSStringCast wasmJSStringCast = 370;
         WasmJSStringTest wasmJSStringTest = 371;
+        WasmJSStringConcat wasmJSStringConcat = 372;
+        WasmJSStringSubstring wasmJSStringSubstring = 373;
+        WasmJSStringEquals wasmJSStringEquals = 374;
+        WasmJSStringCompare wasmJSStringCompare = 375;
     }
 }
 

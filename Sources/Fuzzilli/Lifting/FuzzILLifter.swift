@@ -1770,6 +1770,14 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- WasmJSStringCast \(input(0))")
         case .wasmJSStringTest(_):
             w.emit("\(output()) <- WasmJSStringTest \(input(0))")
+        case .wasmJSStringConcat(_):
+            w.emit("\(output()) <- WasmJSStringConcat \(input(0)), \(input(1))")
+        case .wasmJSStringSubstring(_):
+            w.emit("\(output()) <- WasmJSStringSubstring \(input(0)), \(input(1)), \(input(2))")
+        case .wasmJSStringEquals(_):
+            w.emit("\(output()) <- WasmJSStringEquals \(input(0)), \(input(1))")
+        case .wasmJSStringCompare(_):
+            w.emit("\(output()) <- WasmJSStringCompare \(input(0)), \(input(1))")
 
         default:
             fatalError("No FuzzIL lifting for this operation!")

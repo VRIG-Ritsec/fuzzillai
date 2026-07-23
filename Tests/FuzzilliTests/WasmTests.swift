@@ -655,6 +655,118 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1\n0\n")
     }
 
+    @Test func testJSStringConcat() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(
+                    with: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmRefJSString()]
+                ) {
+                    function, _, args in
+                    let concatenated = function.wasmJSStringConcat(args[0], args[1])
+                    return [concatenated]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let str1 = b.loadString("Hello, ")
+            let str2 = b.loadString("World!")
+            let res = b.callMethod(main, on: exports, withArgs: [str1, str2])
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "Hello, World!\n")
+    }
+
+    @Test func testJSStringSubstring() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [.wasmJSStringRef()] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let start = function.consti32(7)
+                    let end = function.consti32(11)
+                    let sub = function.wasmJSStringSubstring(args[0], start, end)
+                    return [sub]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let str = b.loadString("Hello, Wasm!")
+            let res = b.callMethod(main, on: exports, withArgs: [str])
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "Wasm\n")
+    }
+
+    @Test func testJSStringEquals() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(
+                    with: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32]
+                ) {
+                    function, _, args in
+                    let isEqual = function.wasmJSStringEquals(args[0], args[1])
+                    return [isEqual]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let str1 = b.loadString("Same")
+            let str2 = b.loadString("Same")
+            let str3 = b.loadString("ButDifferent")
+
+            let resEq = b.callMethod(main, on: exports, withArgs: [str1, str2])
+            let resNeq = b.callMethod(main, on: exports, withArgs: [str1, str3])
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: resEq)])
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: resNeq)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "1\n0\n")
+    }
+
+    @Test func testJSStringCompare() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(
+                    with: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32]
+                ) {
+                    function, _, args in
+                    let cmp = function.wasmJSStringCompare(args[0], args[1])
+                    return [cmp]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let strA = b.loadString("a")
+            let strB = b.loadString("b")
+
+            let resCmp1 = b.callMethod(main, on: exports, withArgs: [strA, strB])
+            let resCmp2 = b.callMethod(main, on: exports, withArgs: [strB, strA])
+            let resCmp3 = b.callMethod(main, on: exports, withArgs: [strA, strA])
+
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: resCmp1)])
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: resCmp2)])
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: resCmp3)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "-1\n1\n0\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

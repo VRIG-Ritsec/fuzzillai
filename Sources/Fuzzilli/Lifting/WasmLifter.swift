@@ -371,6 +371,26 @@ public class WasmLifter {
                 field: "test",
                 signature: [.wasmExternRef()] => [.wasmi32],
                 index: nil)
+        case is WasmJSStringConcat:
+            return JSStringBuiltin(
+                field: "concat",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmRefJSString()],
+                index: nil)
+        case is WasmJSStringSubstring:
+            return JSStringBuiltin(
+                field: "substring",
+                signature: [.wasmJSStringRef(), .wasmi32, .wasmi32] => [.wasmRefJSString()],
+                index: nil)
+        case is WasmJSStringEquals:
+            return JSStringBuiltin(
+                field: "equals",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
+                index: nil)
+        case is WasmJSStringCompare:
+            return JSStringBuiltin(
+                field: "compare",
+                signature: [.wasmJSStringRef(), .wasmJSStringRef()] => [.wasmi32],
+                index: nil)
         default:
             return nil
         }
@@ -1771,7 +1791,9 @@ public class WasmLifter {
             case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
                 .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_),
                 .wasmJSStringCharCodeAt(_), .wasmJSStringCodePointAt(_),
-                .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_), .wasmJSStringTest(_):
+                .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_), .wasmJSStringTest(_),
+                .wasmJSStringConcat(_), .wasmJSStringSubstring(_), .wasmJSStringEquals(_),
+                .wasmJSStringCompare(_):
                 let builtin = self.getJSStringBuiltin(forOp: instr.op)!
                 if !jsStringBuiltins.contains(builtin) {
                     jsStringBuiltins.append(builtin)
@@ -2693,7 +2715,8 @@ public class WasmLifter {
         case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
             .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_), .wasmJSStringCharCodeAt(_),
             .wasmJSStringCodePointAt(_), .wasmJSStringIntoCharCodeArray(_), .wasmJSStringCast(_),
-            .wasmJSStringTest(_):
+            .wasmJSStringTest(_), .wasmJSStringConcat(_), .wasmJSStringSubstring(_),
+            .wasmJSStringEquals(_), .wasmJSStringCompare(_):
             let builtinInfo = self.getJSStringBuiltin(
                 forOp: wasmInstruction.op)!
             let builtinIdx = jsStringBuiltins.firstIndex(of: builtinInfo)!

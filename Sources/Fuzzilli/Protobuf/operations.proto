@@ -1909,3 +1909,7 @@ message WasmJSStringCodePointAt {}
 message WasmJSStringIntoCharCodeArray {}
 message WasmJSStringCast {}
 message WasmJSStringTest {}
+message WasmJSStringConcat {}
+message WasmJSStringSubstring {}
+message WasmJSStringEquals {}
+message WasmJSStringCompare {}

@@ -1388,6 +1388,14 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmJsstringCast = Fuzzilli_Protobuf_WasmJSStringCast()
             case .wasmJSStringTest(_):
                 $0.wasmJsstringTest = Fuzzilli_Protobuf_WasmJSStringTest()
+            case .wasmJSStringConcat(_):
+                $0.wasmJsstringConcat = Fuzzilli_Protobuf_WasmJSStringConcat()
+            case .wasmJSStringSubstring(_):
+                $0.wasmJsstringSubstring = Fuzzilli_Protobuf_WasmJSStringSubstring()
+            case .wasmJSStringEquals(_):
+                $0.wasmJsstringEquals = Fuzzilli_Protobuf_WasmJSStringEquals()
+            case .wasmJSStringCompare(_):
+                $0.wasmJsstringCompare = Fuzzilli_Protobuf_WasmJSStringCompare()
             case .wasmTruncatef32Toi32(let op):
                 $0.wasmTruncatef32Toi32 = Fuzzilli_Protobuf_WasmTruncatef32Toi32.with {
                     $0.isSigned = op.isSigned
@@ -2766,6 +2774,14 @@ extension Instruction: ProtobufConvertible {
             op = WasmJSStringCast()
         case .wasmJsstringTest(_):
             op = WasmJSStringTest()
+        case .wasmJsstringConcat(_):
+            op = WasmJSStringConcat()
+        case .wasmJsstringSubstring(_):
+            op = WasmJSStringSubstring()
+        case .wasmJsstringEquals(_):
+            op = WasmJSStringEquals()
+        case .wasmJsstringCompare(_):
+            op = WasmJSStringCompare()
         case .wasmTruncatef32Toi32(let p):
             op = WasmTruncatef32Toi32(isSigned: p.isSigned)
         case .wasmTruncatef64Toi32(let p):

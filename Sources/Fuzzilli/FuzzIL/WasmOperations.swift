@@ -566,6 +566,38 @@ final class WasmJSStringTest: WasmOperation {
     }
 }
 
+final class WasmJSStringConcat: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringConcat(self) }
+
+    init() {
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+final class WasmJSStringSubstring: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringSubstring(self) }
+
+    init() {
+        super.init(numInputs: 3, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+final class WasmJSStringEquals: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringEquals(self) }
+
+    init() {
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+final class WasmJSStringCompare: WasmOperation {
+    override var opcode: Opcode { .wasmJSStringCompare(self) }
+
+    init() {
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

@@ -400,4 +400,8 @@ enum Opcode {
     case wasmJSStringIntoCharCodeArray(WasmJSStringIntoCharCodeArray)
     case wasmJSStringCast(WasmJSStringCast)
     case wasmJSStringTest(WasmJSStringTest)
+    case wasmJSStringConcat(WasmJSStringConcat)
+    case wasmJSStringSubstring(WasmJSStringSubstring)
+    case wasmJSStringEquals(WasmJSStringEquals)
+    case wasmJSStringCompare(WasmJSStringCompare)
 }

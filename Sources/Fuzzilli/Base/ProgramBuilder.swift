@@ -4840,6 +4840,40 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmJSStringConcat(_ str1: Variable, _ str2: Variable) -> Variable {
+            return b.emit(
+                WasmJSStringConcat(), withInputs: [str1, str2],
+                types: [.wasmJSStringRef(), .wasmJSStringRef()]
+            ).output
+        }
+
+        @discardableResult
+        public func wasmJSStringSubstring(_ string: Variable, _ start: Variable, _ end: Variable)
+            -> Variable
+        {
+            return b.emit(
+                WasmJSStringSubstring(), withInputs: [string, start, end],
+                types: [.wasmJSStringRef(), .wasmi32, .wasmi32]
+            ).output
+        }
+
+        @discardableResult
+        public func wasmJSStringEquals(_ str1: Variable, _ str2: Variable) -> Variable {
+            return b.emit(
+                WasmJSStringEquals(), withInputs: [str1, str2],
+                types: [.wasmJSStringRef(), .wasmJSStringRef()]
+            ).output
+        }
+
+        @discardableResult
+        public func wasmJSStringCompare(_ str1: Variable, _ str2: Variable) -> Variable {
+            return b.emit(
+                WasmJSStringCompare(), withInputs: [str1, str2],
+                types: [.wasmJSStringRef(), .wasmJSStringRef()]
+            ).output
+        }
+
+        @discardableResult
         public func truncatef32Toi32(_ input: Variable, isSigned: Bool) -> Variable {
             return b.emit(
                 WasmTruncatef32Toi32(isSigned: isSigned), withInputs: [input], types: [.wasmf32]

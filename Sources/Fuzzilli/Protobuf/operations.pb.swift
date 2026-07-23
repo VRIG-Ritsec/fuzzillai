@@ -629,6 +629,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   case noexternref // = 10
   case nofuncref // = 11
   case noexnref // = 12
+  case jsstringref // = 13
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -650,6 +651,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
     case 10: self = .noexternref
     case 11: self = .nofuncref
     case 12: self = .noexnref
+    case 13: self = .jsstringref
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -669,6 +671,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
     case .noexternref: return 10
     case .nofuncref: return 11
     case .noexnref: return 12
+    case .jsstringref: return 13
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -688,6 +691,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
     .noexternref,
     .nofuncref,
     .noexnref,
+    .jsstringref,
   ]
 
 }
@@ -7073,7 +7077,7 @@ extension Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0\u{1}JSSTRINGREF\0")
 }
 
 extension Fuzzilli_Protobuf_WasmMemoryLoadType: SwiftProtobuf._ProtoNameProviding {

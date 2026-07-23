@@ -1863,7 +1863,7 @@ public class JavaScriptLifter: Lifter {
                 let LET = w.varKeyword
                 let type: String
                 switch op.tableType.elementType {
-                case .wasmExternRef():
+                case .wasmExternRef(), .wasmJSStringRef():
                     type = "externref"
                 case .wasmFuncRef():
                     type = "anyfunc"
@@ -1914,7 +1914,7 @@ public class JavaScriptLifter: Lifter {
                         return "\"i64\""
                     case .wasmSimd128:
                         return "\"v128\""
-                    case ILType.wasmExternRef():
+                    case ILType.wasmExternRef(), ILType.wasmJSStringRef():
                         return "\"externref\""
                     case ILType.wasmFuncRef():
                         return "\"anyfunc\""

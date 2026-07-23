@@ -336,6 +336,12 @@ public struct ILType: Hashable {
     public static func wasmRefExtern(shared: Bool = false) -> ILType {
         wasmRef(.WasmExtern, shared: shared, nullability: false)
     }
+    public static func wasmJSStringRef(shared: Bool = false) -> ILType {
+        wasmRef(.WasmJSString, shared: shared, nullability: true)
+    }
+    public static func wasmRefJSString(shared: Bool = false) -> ILType {
+        wasmRef(.WasmJSString, shared: shared, nullability: false)
+    }
     public static func wasmFuncRef(shared: Bool = false) -> ILType {
         wasmRef(.WasmFunc, shared: shared, nullability: true)
     }
@@ -1882,12 +1888,14 @@ public class WasmTypeDefinition: WasmTypeExtension {
 }
 
 // TODO: Add continuation types for core stack switching.
-// TODO: Add internal string type for JS string builtins.
 public enum WasmAbstractHeapType: CaseIterable, Comparable {
     // Note: The union, intersection, ... implementations are inspired by Binaryen's implementation,
     // so when extending the type system, feel free to use that implemenation as an orientation.
     // https://github.com/WebAssembly/binaryen/blob/main/src/wasm/wasm-type.cpp
     case WasmExtern
+    // WasmJSString is a wrapper around WasmExtern that we use to keep track
+    // of JS strings in Fuzzilli. It is not a specified type.
+    case WasmJSString
     case WasmFunc
     case WasmAny
     case WasmEq
@@ -1918,7 +1926,7 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
 
     func getBottom() -> Self {
         switch self {
-        case .WasmExtern, .WasmNoExtern:
+        case .WasmExtern, .WasmJSString, .WasmNoExtern:
             return .WasmNoExtern
         case .WasmFunc, .WasmNoFunc:
             return .WasmNoFunc
@@ -1931,7 +1939,7 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
 
     func getTop() -> Self {
         switch self {
-        case .WasmExtern, .WasmNoExtern:
+        case .WasmExtern, .WasmJSString, .WasmNoExtern:
             return .WasmExtern
         case .WasmFunc, .WasmNoFunc:
             return .WasmFunc
@@ -1969,7 +1977,9 @@ public enum WasmAbstractHeapType: CaseIterable, Comparable {
             .WasmEq
         case .WasmArray:
             .WasmAny
-        case .WasmExtern, .WasmFunc, .WasmExn, .WasmNone, .WasmNoExtern, .WasmNoFunc, .WasmNoExn:
+        case .WasmExtern, .WasmJSString:
+            .WasmExtern
+        case .WasmFunc, .WasmExn, .WasmNone, .WasmNoExtern, .WasmNoFunc, .WasmNoExn:
             fatalError("unhandled subtyping for a=\(a) b=\(b)")
         }
     }

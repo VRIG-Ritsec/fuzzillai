@@ -927,6 +927,7 @@ enum WasmReferenceTypeKind {
   NOEXTERNREF = 10;
   NOFUNCREF = 11;
   NOEXNREF = 12;
+  JSSTRINGREF = 13;
 }
 
 message WasmReferenceType {

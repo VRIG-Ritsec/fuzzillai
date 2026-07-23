@@ -1761,7 +1761,7 @@ struct TypeSystemTests {
     func testWasmAbstractHeapTypeSubsumptionRules() {
         let groupAny: [WasmAbstractHeapType] =
             [.WasmAny, .WasmEq, .WasmI31, .WasmStruct, .WasmArray, .WasmNone]
-        let groupExtern: [WasmAbstractHeapType] = [.WasmExtern, .WasmNoExtern]
+        let groupExtern: [WasmAbstractHeapType] = [.WasmExtern, .WasmJSString, .WasmNoExtern]
         let groupFunc: [WasmAbstractHeapType] = [.WasmFunc, .WasmNoFunc]
         let groupExn: [WasmAbstractHeapType] = [.WasmExn, .WasmNoExn]
         let allGroups = [groupAny, groupExtern, groupFunc, groupExn]

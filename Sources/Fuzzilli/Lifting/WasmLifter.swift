@@ -547,6 +547,9 @@ public class WasmLifter {
         let opCode: UInt8 =
             switch heapTypeInfo.heapType {
             case .WasmExtern: 0x6F
+            // WasmJSString is a wrapper around WasmExtern that we use to keep track
+            // of JS strings in Fuzzilli. It is not a specified type.
+            case .WasmJSString: 0x6F
             case .WasmFunc: 0x70
             case .WasmAny: 0x6E
             case .WasmEq: 0x6D

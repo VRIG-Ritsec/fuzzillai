@@ -408,6 +408,8 @@ extension Instruction: ProtobufConvertible {
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.funcref
                             case .WasmExtern:
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.externref
+                            case .WasmJSString:
+                                Fuzzilli_Protobuf_WasmReferenceTypeKind.jsstringref
                             case .WasmAny:
                                 Fuzzilli_Protobuf_WasmReferenceTypeKind.anyref
                             case .WasmEq:
@@ -1965,6 +1967,8 @@ extension Instruction: ProtobufConvertible {
                     switch wasmType.refType.kind {
                     case .externref:
                         .WasmExtern
+                    case .jsstringref:
+                        .WasmJSString
                     case .funcref:
                         .WasmFunc
                     case .exnref:

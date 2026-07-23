@@ -397,4 +397,5 @@ enum Opcode {
     case wasmJSStringFromCodePoint(WasmJSStringFromCodePoint)
     case wasmJSStringCharCodeAt(WasmJSStringCharCodeAt)
     case wasmJSStringCodePointAt(WasmJSStringCodePointAt)
+    case wasmJSStringIntoCharCodeArray(WasmJSStringIntoCharCodeArray)
 }

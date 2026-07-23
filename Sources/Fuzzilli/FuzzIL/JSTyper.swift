@@ -827,6 +827,7 @@ public struct JSTyper: Analyzer {
                 .wasmJSStringLength(_),
                 .wasmJSStringCharCodeAt(_),
                 .wasmJSStringCodePointAt(_),
+                .wasmJSStringIntoCharCodeArray(_),
                 .wasmTruncatef32Toi32(_),
                 .wasmTruncatef64Toi32(_),
                 .wasmReinterpretf32Asi32(_),

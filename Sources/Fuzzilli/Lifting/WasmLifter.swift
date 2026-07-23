@@ -355,6 +355,12 @@ public class WasmLifter {
                 field: "codePointAt",
                 signature: [.wasmJSStringRef(), .wasmi32] => [.wasmi32],
                 index: nil)
+        case is WasmJSStringIntoCharCodeArray:
+            let signatureArrayType = ILType.wasmIndexRef(builtinArrayDesc, nullability: true)
+            return JSStringBuiltin(
+                field: "intoCharCodeArray",
+                signature: [.wasmJSStringRef(), signatureArrayType, .wasmi32] => [.wasmi32],
+                index: nil)
         default:
             return nil
         }
@@ -1754,11 +1760,14 @@ public class WasmLifter {
                 self.exports.append(.tag(instr))
             case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
                 .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_),
-                .wasmJSStringCharCodeAt(_), .wasmJSStringCodePointAt(_):
+                .wasmJSStringCharCodeAt(_), .wasmJSStringCodePointAt(_),
+                .wasmJSStringIntoCharCodeArray(_):
                 let builtin = self.getJSStringBuiltin(forOp: instr.op)!
                 if !jsStringBuiltins.contains(builtin) {
                     jsStringBuiltins.append(builtin)
-                    if instr.op is WasmJSStringFromCharCodeArray {
+                    if instr.op is WasmJSStringFromCharCodeArray
+                        || instr.op is WasmJSStringIntoCharCodeArray
+                    {
                         if !syntheticTypeGroups.contains(builtinArrayDesc) {
                             syntheticTypeGroups.append(builtinArrayDesc)
                         }
@@ -2673,7 +2682,7 @@ public class WasmLifter {
         // Wasm JS String Builtins
         case .wasmJSStringLength(_), .wasmJSStringFromCharCodeArray(_),
             .wasmJSStringFromCharCode(_), .wasmJSStringFromCodePoint(_), .wasmJSStringCharCodeAt(_),
-            .wasmJSStringCodePointAt(_):
+            .wasmJSStringCodePointAt(_), .wasmJSStringIntoCharCodeArray(_):
             let builtinInfo = self.getJSStringBuiltin(
                 forOp: wasmInstruction.op)!
             let builtinIdx = jsStringBuiltins.firstIndex(of: builtinInfo)!

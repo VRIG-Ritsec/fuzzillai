@@ -559,6 +559,45 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "128512\n")  // 0x1F600 is 128512 in decimal
     }
 
+    @Test func testJSStringIntoCharCodeArray() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let typeGroup = b.wasmDefineTypeGroup {
+                return [
+                    b.wasmDefineArrayType(
+                        elementType: .wasmPackedI16, mutability: true, isFinal: true)
+                ]
+            }
+            let arrayi16 = typeGroup[0]
+
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [.wasmRefJSString()] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let str = args[0]
+                    let length = function.wasmJSStringLength(str)
+
+                    let array = function.wasmArrayNewDefault(arrayType: arrayi16, size: length)
+                    let start = function.consti32(0)
+
+                    let _ = function.wasmJSStringIntoCharCodeArray(str, array, start)
+                    let resultStr = function.wasmJSStringFromCharCodeArray(array, start, length)
+
+                    return [resultStr]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let inputStr = b.loadString("Hello 😀")
+            let resultStr = b.callMethod(main, on: exports, withArgs: [inputStr])
+            let areEqual = b.compare(inputStr, with: resultStr, using: .strictEqual)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: areEqual)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "true\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

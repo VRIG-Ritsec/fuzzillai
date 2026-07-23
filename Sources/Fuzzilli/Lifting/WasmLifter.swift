@@ -1573,6 +1573,15 @@ public class WasmLifter {
                 let inputType = typer.type(of: input)
 
                 if inputType.Is(.wasmTypeDef()) || inputType.Is(.anyIndexRef) {
+                    // TODO(bettscheider): Remove this branch when debugging has concluded
+                    if case .Index(let desc) = inputType.wasmReferenceType?.kind, desc.get() == nil
+                    {
+                        print("Failed program:")
+                        print(FuzzILLifter().lift(self.instructionBuffer))
+                        fatalError(
+                            "Failed to get WasmTypeDescription for \(input) with ILType \(inputType)."
+                        )
+                    }
                     let typeDesc = typer.getTypeDescription(of: input)
                     try registerTypeDependencies(for: typeDesc)
                 }

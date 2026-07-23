@@ -93,51 +93,14 @@ public class OperationMutator: BaseInstructionMutator {
                     }
                 }
             }
-            let charSetAlNum = Array(
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-            // TODO(mliedtke): Should we also use some more esoteric characters in initial string
-            // creation, e.g. ProgramBuilder.randomString?
-            let charSetExtended =
-                charSetAlNum + Array("-_.,!?<>()[]{}`´^\\/|+#*=;:'~^²\t°ß¿ 🤯🙌🏿\u{202D}")
-            let randomIndex = { (s: String) in
-                s.index(s.startIndex, offsetBy: Int.random(in: 0..<s.count))
-            }
-            let randomCharacter = {
-                // Add an overweight to the alpha-numeric characters.
-                (Bool.random() ? charSetAlNum : charSetExtended).randomElement()!
-            }
-            // With a 50% chance create a new string, otherwise perform a modification on the
-            // existing string. Modifying the string can be especially interesting for
-            // decoders for RegEx, base64, hex, ...
-            let newString =
-                op.value.isEmpty || Bool.random()
-                ? b.randomString()
-                : withEqualProbability(
-                    {
-                        // Replace a single character.
-                        var result = op.value
-                        let index = randomIndex(result)
-                        result.replaceSubrange(
-                            index..<result.index(index, offsetBy: 1),
-                            with: String(randomCharacter()))
-                        return result
-                    },
-                    {
-                        // Insert a single character.
-                        var result = op.value
-                        result.insert(randomCharacter(), at: randomIndex(result))
-                        return result
-                    },
-                    {
-                        // Remove a single character.
-                        var result = op.value
-                        result.remove(at: randomIndex(result))
-                        return result
-                    }
-                )
+
+            let newString = mutateString(op.value, b)
             // Note: This explicitly discards customName since we may have created a string that no longer
             // matches the original schema.
             newOp = LoadString(value: newString)
+        case .wasmStringConstant(let op):
+            let newString = mutateString(op.value, b)
+            newOp = WasmStringConstant(value: newString)
         case .loadRegExp(let op):
             newOp = withEqualProbability(
                 {
@@ -1200,5 +1163,51 @@ extension OperationMutator {
             }
             return .object(.init(properties: newProps, hasRestElement: hasRest))
         }
+    }
+
+    private func mutateString(_ value: String, _ b: ProgramBuilder) -> String {
+        let charSetAlNum = Array(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        // TODO(mliedtke): Should we also use some more esoteric characters in initial string
+        // creation, e.g. ProgramBuilder.randomString?
+        let charSetExtended =
+            charSetAlNum + Array("-_.,!?<>()[]{}`´^\\/|+#*=;:'~^²\t°ß¿ 🤯🙌🏿\u{202D}")
+        let randomIndex = { (s: String) in
+            s.index(s.startIndex, offsetBy: Int.random(in: 0..<s.count))
+        }
+        let randomCharacter = {
+            // Add an overweight to the alpha-numeric characters.
+            (Bool.random() ? charSetAlNum : charSetExtended).randomElement()!
+        }
+        // With a 50% chance create a new string, otherwise perform a modification on the
+        // existing string. Modifying the string can be especially interesting for
+        // decoders for RegEx, base64, hex, ...
+        let newString =
+            value.isEmpty || Bool.random()
+            ? b.randomString()
+            : withEqualProbability(
+                {
+                    // Replace a single character.
+                    var result = value
+                    let index = randomIndex(result)
+                    result.replaceSubrange(
+                        index..<result.index(index, offsetBy: 1),
+                        with: String(randomCharacter()))
+                    return result
+                },
+                {
+                    // Insert a single character.
+                    var result = value
+                    result.insert(randomCharacter(), at: randomIndex(result))
+                    return result
+                },
+                {
+                    // Remove a single character.
+                    var result = value
+                    result.remove(at: randomIndex(result))
+                    return result
+                }
+            )
+        return newString
     }
 }

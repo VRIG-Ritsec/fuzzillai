@@ -1396,6 +1396,10 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmJsstringEquals = Fuzzilli_Protobuf_WasmJSStringEquals()
             case .wasmJSStringCompare(_):
                 $0.wasmJsstringCompare = Fuzzilli_Protobuf_WasmJSStringCompare()
+            case .wasmStringConstant(let op):
+                $0.wasmStringConstant = Fuzzilli_Protobuf_WasmStringConstant.with {
+                    $0.value = op.value
+                }
             case .wasmTruncatef32Toi32(let op):
                 $0.wasmTruncatef32Toi32 = Fuzzilli_Protobuf_WasmTruncatef32Toi32.with {
                     $0.isSigned = op.isSigned
@@ -2782,6 +2786,8 @@ extension Instruction: ProtobufConvertible {
             op = WasmJSStringEquals()
         case .wasmJsstringCompare(_):
             op = WasmJSStringCompare()
+        case .wasmStringConstant(let p):
+            op = WasmStringConstant(value: p.value)
         case .wasmTruncatef32Toi32(let p):
             op = WasmTruncatef32Toi32(isSigned: p.isSigned)
         case .wasmTruncatef64Toi32(let p):

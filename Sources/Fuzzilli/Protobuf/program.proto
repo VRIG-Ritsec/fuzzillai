@@ -399,6 +399,7 @@ message Instruction {
         WasmJSStringSubstring wasmJSStringSubstring = 373;
         WasmJSStringEquals wasmJSStringEquals = 374;
         WasmJSStringCompare wasmJSStringCompare = 375;
+        WasmStringConstant wasmStringConstant = 376;
     }
 }
 

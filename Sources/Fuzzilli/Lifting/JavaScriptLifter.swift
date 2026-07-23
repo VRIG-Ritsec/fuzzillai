@@ -1788,10 +1788,11 @@ public class JavaScriptLifter: Lifter {
                 let V = w.declare(instr.output, as: "v\(instr.output.number)")
                 // TODO: support a better diagnostics mode which stores the .wasm binary file alongside the samples.
                 do {
-                    let (bytecode, importRefs, didUseJSStringBuiltins) = try WasmLifter(
-                        withTyper: typer!, withWasmCode: wasmInstructions,
-                        startFunction: startFunction
-                    ).lift()
+                    let (bytecode, importRefs, didUseJSStringBuiltins, didImportStringConstants) =
+                        try WasmLifter(
+                            withTyper: typer!, withWasmCode: wasmInstructions,
+                            startFunction: startFunction
+                        ).lift()
                     // Get and check that we have the imports here as expressions and fail otherwise.
                     let imports: [(Variable, Expression)] = try importRefs.map { ref in
                         if let expr = w.retrieve(expressionsFor: [ref]) {
@@ -1806,8 +1807,16 @@ public class JavaScriptLifter: Lifter {
                     w.enterNewBlock()
                     liftByteArray([UInt8](bytecode), to: &w)
                     w.leaveCurrentBlock()
+
+                    var options: [String] = []
+                    if didUseJSStringBuiltins {
+                        options.append("builtins: ['js-string']")
+                    }
+                    if didImportStringConstants {
+                        options.append("importedStringConstants: '\"'")
+                    }
                     let moduleOptions =
-                        didUseJSStringBuiltins ? ", { builtins: ['js-string'] }" : ""
+                        options.isEmpty ? "" : ", { \(options.joined(separator: ", ")) }"
                     if importRefs.isEmpty {
                         w.emit("])\(moduleOptions)));")
                     } else {
@@ -1858,8 +1867,11 @@ public class JavaScriptLifter: Lifter {
                 w.enterNewBlock()
                 liftByteArray(op.bytes, to: &w)
                 w.leaveCurrentBlock()
+                // TODO(rezvan, mliedtke): Support string constants in the binaryen integration.
                 // We always include 'js-string' here because we don't know if the builtins are used.
-                w.emit("]), { builtins: ['js-string'] }), fuzzing_imports);")
+                w.emit(
+                    "]), { builtins: ['js-string'] }), fuzzing_imports);"
+                )
 
             case .createWasmTable(let op):
                 let V = w.declare(instr.output)
@@ -1976,6 +1988,7 @@ public class JavaScriptLifter: Lifter {
                 .wasmJSStringSubstring(_),
                 .wasmJSStringEquals(_),
                 .wasmJSStringCompare(_),
+                .wasmStringConstant(_),
                 .wasmTruncatef32Toi32(_),
                 .wasmTruncatef64Toi32(_),
                 .wasmExtendi32Toi64(_),

@@ -767,6 +767,32 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "-1\n1\n0\n")
     }
 
+    @Test func testWasmStringConstants() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let str1 = function.wasmStringConstant("Hello, ")
+                    let str2 = function.wasmStringConstant("World!")
+                    let result = function.wasmJSStringConcat(str1, str2)
+                    return [result]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+
+            let res = b.callMethod(main, on: exports, withArgs: [])
+
+            let expected = b.loadString("Hello, World!")
+            let areEqual = b.compare(expected, with: res, using: .strictEqual)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: areEqual)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "true\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

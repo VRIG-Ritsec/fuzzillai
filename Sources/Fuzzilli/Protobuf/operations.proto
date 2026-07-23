@@ -1913,3 +1913,6 @@ message WasmJSStringConcat {}
 message WasmJSStringSubstring {}
 message WasmJSStringEquals {}
 message WasmJSStringCompare {}
+message WasmStringConstant {
+    string value = 1;
+}

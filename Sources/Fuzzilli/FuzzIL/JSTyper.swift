@@ -822,7 +822,8 @@ public struct JSTyper: Analyzer {
                 .wasmJSStringFromCodePoint(_),
                 .wasmJSStringCast(_),
                 .wasmJSStringConcat(_),
-                .wasmJSStringSubstring(_):
+                .wasmJSStringSubstring(_),
+                .wasmStringConstant(_):
                 setType(of: instr.output, to: .wasmRefJSString())
             case .wasmi32BinOp(_),
                 .wasmi32UnOp(_),

@@ -404,4 +404,5 @@ enum Opcode {
     case wasmJSStringSubstring(WasmJSStringSubstring)
     case wasmJSStringEquals(WasmJSStringEquals)
     case wasmJSStringCompare(WasmJSStringCompare)
+    case wasmStringConstant(WasmStringConstant)
 }

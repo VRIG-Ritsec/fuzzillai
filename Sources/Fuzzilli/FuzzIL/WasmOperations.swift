@@ -598,6 +598,17 @@ final class WasmJSStringCompare: WasmOperation {
     }
 }
 
+final class WasmStringConstant: WasmOperation {
+    override var opcode: Opcode { .wasmStringConstant(self) }
+
+    let value: String
+
+    init(value: String) {
+        self.value = value
+        super.init(numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
+    }
+}
+
 final class WasmTruncatef32Toi32: WasmOperation {
     override var opcode: Opcode { .wasmTruncatef32Toi32(self) }
 

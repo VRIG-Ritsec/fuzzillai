@@ -553,8 +553,12 @@ public class WasmLifter {
     }
 
     private var currentFunction: FunctionInfo? = nil
+    public private(set) var importedStringConstants: [String] = []
 
-    public func lift(binaryOutPath path: String? = nil) throws -> (Data, [Variable], Bool) {
+    public func lift(binaryOutPath path: String? = nil) throws -> (
+        bytecode: Data, importRefs: [Variable], didUseJSStringBuiltins: Bool,
+        didImportStringConstants: Bool
+    ) {
         // Lifting currently happens in three stages.
         // 1. Collect all necessary information to build all sections later on.
         //    - For now this only the importAnalysis, which needs to know how many imported vs internally defined types exist.
@@ -644,8 +648,12 @@ public class WasmLifter {
         //
 
         let didUseJSStringBuiltins = !jsStringBuiltins.isEmpty
+        let didImportStringConstants = !importedStringConstants.isEmpty
 
-        return (bytecode, exports.compactMap { $0.getImport()?.variable }, didUseJSStringBuiltins)
+        return (
+            bytecode, exports.compactMap { $0.getImport()?.variable }, didUseJSStringBuiltins,
+            didImportStringConstants
+        )
     }
 
     private func buildHeader() {
@@ -848,8 +856,9 @@ public class WasmLifter {
     private func buildImportSection() throws {
         let importsCount = self.exports.count(where: { $0.getImport() != nil })
         let staticImportsCount = jsStringBuiltins.count
+        let stringConstantsCount = importedStringConstants.count
 
-        if importsCount + staticImportsCount == 0 {
+        if importsCount + staticImportsCount + stringConstantsCount == 0 {
             return
         }
 
@@ -857,7 +866,7 @@ public class WasmLifter {
 
         var temp = Data()
 
-        temp += Leb128.unsignedEncode(importsCount + staticImportsCount)
+        temp += Leb128.unsignedEncode(importsCount + staticImportsCount + stringConstantsCount)
 
         // Build the import components of this vector that consist of mod:name, nm:name, and d:importdesc
         for (idx, (_, importVariable, signature, signatureDef)) in self.exports.compactMap({
@@ -954,6 +963,18 @@ public class WasmLifter {
             builtin.index = functionIdxBase
             jsStringBuiltins.updateOrAppend(builtin)
             functionIdxBase += 1
+        }
+
+        for stringConstant in importedStringConstants {
+            let moduleName = "\""
+            temp += Leb128.unsignedEncode(moduleName.count)
+            temp += moduleName.data(using: .utf8)!
+            temp += Leb128.unsignedEncode(stringConstant.count)
+            temp += stringConstant.data(using: .utf8)!
+
+            temp += [0x3]  // global import
+            temp += try encodeType(.wasmRefJSString())  // value type
+            temp += [0x0]  // immutable
         }
 
         self.bytecode.append(Leb128.unsignedEncode(temp.count))
@@ -1709,6 +1730,12 @@ public class WasmLifter {
         }
 
         for instr in self.instructionBuffer {
+            if let loadStringOp = instr.op as? WasmStringConstant {
+                if !importedStringConstants.contains(loadStringOp.value) {
+                    importedStringConstants.append(loadStringOp.value)
+                }
+            }
+
             for (idx, input) in instr.inputs.enumerated() {
                 let inputType = typer.type(of: input)
 
@@ -1915,8 +1942,9 @@ public class WasmLifter {
         })
 
         if let idx = idx {
-            let offset = importType == .function ? jsStringBuiltins.count : 0
-            return imports.count + offset + idx
+            let offsetFunc = importType == .function ? jsStringBuiltins.count : 0
+            let offsetGlobal = importType == .global ? importedStringConstants.count : 0
+            return imports.count + offsetFunc + offsetGlobal + idx
         }
 
         throw WasmLifter.CompileError.failedIndexLookUp
@@ -2149,6 +2177,12 @@ public class WasmLifter {
             // The first input has to be in the global or imports arrays.
             let input = wasmInstruction.input(0)
             return Data([0x23]) + Leb128.unsignedEncode(try resolveIdx(ofType: .global, for: input))
+        case .wasmStringConstant(let op):
+            let importsCount = self.exports.compactMap { $0.getImport() }.filter {
+                IndexType.global.matches($0.type)
+            }.count
+            let stringIdx = importedStringConstants.firstIndex(of: op.value)!
+            return Data([0x23]) + Leb128.unsignedEncode(importsCount + stringIdx)
         case .wasmStoreGlobal(_):
 
             // Get the index for the global and emit it here magically.

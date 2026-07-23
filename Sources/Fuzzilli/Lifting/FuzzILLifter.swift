@@ -1778,6 +1778,8 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- WasmJSStringEquals \(input(0)), \(input(1))")
         case .wasmJSStringCompare(_):
             w.emit("\(output()) <- WasmJSStringCompare \(input(0)), \(input(1))")
+        case .wasmStringConstant(let op):
+            w.emit("\(output()) <- WasmStringConstant '\(op.value)'")
 
         default:
             fatalError("No FuzzIL lifting for this operation!")

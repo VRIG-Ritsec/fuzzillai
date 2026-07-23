@@ -417,6 +417,27 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "42\n4141\n1337\n")
     }
 
+    @Test func testJSStringLength() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [.wasmJSStringRef()] => [.wasmi32]) {
+                    function, _, args in
+                    let len = function.wasmJSStringLength(args[0])
+                    return [len]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+            let dummyString = b.loadString("dummy")
+            let res = b.callMethod(main, on: exports, withArgs: [dummyString])
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "5\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

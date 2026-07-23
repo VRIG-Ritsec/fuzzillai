@@ -820,6 +820,7 @@ public struct JSTyper: Analyzer {
             case .wasmi32BinOp(_),
                 .wasmi32UnOp(_),
                 .wasmWrapi64Toi32(_),
+                .wasmJSStringLength(_),
                 .wasmTruncatef32Toi32(_),
                 .wasmTruncatef64Toi32(_),
                 .wasmReinterpretf32Asi32(_),

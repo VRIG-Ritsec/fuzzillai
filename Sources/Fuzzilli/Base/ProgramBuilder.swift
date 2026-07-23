@@ -4766,6 +4766,12 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmJSStringLength(_ input: Variable) -> Variable {
+            return b.emit(WasmJSStringLength(), withInputs: [input], types: [.wasmJSStringRef()])
+                .output
+        }
+
+        @discardableResult
         public func truncatef32Toi32(_ input: Variable, isSigned: Bool) -> Variable {
             return b.emit(
                 WasmTruncatef32Toi32(isSigned: isSigned), withInputs: [input], types: [.wasmf32]

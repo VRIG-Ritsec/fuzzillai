@@ -386,6 +386,7 @@ message Instruction {
         BeginClassPrivateSetter beginClassPrivateSetter = 360;
         EndClassPrivateSetter endClassPrivateSetter = 361;
         CallPrivateMethodWithSpread callPrivateMethodWithSpread = 362;
+        WasmJSStringLength wasmJSStringLength = 363;
     }
 }
 

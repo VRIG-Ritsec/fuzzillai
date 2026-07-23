@@ -1747,6 +1747,10 @@ public class FuzzILLifter: Lifter {
         case .rawWasmModule(let op):
             w.emit("\(output()) <- RawWasmModule [\(op.bytes.count) bytes]")
 
+        // Wasm JS String Builtins
+        case .wasmJSStringLength(_):
+            w.emit("\(output()) <- WasmJSStringLength \(input(0))")
+
         default:
             fatalError("No FuzzIL lifting for this operation!")
         }

@@ -1807,9 +1807,9 @@ public class JavaScriptLifter: Lifter {
                     liftByteArray([UInt8](bytecode), to: &w)
                     w.leaveCurrentBlock()
                     if importRefs.isEmpty {
-                        w.emit("])));")
+                        w.emit("]), { builtins: ['js-string'] }));")
                     } else {
-                        w.emit("])),")
+                        w.emit("]), { builtins: ['js-string'] }),")
                         w.emit("{ imports: {")
                         w.enterNewBlock()
                         for (idx, (importRef, expr)) in imports.enumerated() {
@@ -1856,7 +1856,7 @@ public class JavaScriptLifter: Lifter {
                 w.enterNewBlock()
                 liftByteArray(op.bytes, to: &w)
                 w.leaveCurrentBlock()
-                w.emit("])), fuzzing_imports);")
+                w.emit("]), { builtins: ['js-string'] }), fuzzing_imports);")
 
             case .createWasmTable(let op):
                 let V = w.declare(instr.output)
@@ -1960,6 +1960,7 @@ public class JavaScriptLifter: Lifter {
                 .wasmi32EqualZero(_),
                 .wasmi64EqualZero(_),
                 .wasmWrapi64Toi32(_),
+                .wasmJSStringLength(_),
                 .wasmTruncatef32Toi32(_),
                 .wasmTruncatef64Toi32(_),
                 .wasmExtendi32Toi64(_),

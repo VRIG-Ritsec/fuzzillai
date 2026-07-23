@@ -304,6 +304,23 @@ public class WasmLifter {
     // The function index space
     private var functionIdxBase = 0
 
+    private struct JSStringBuiltin: Equatable {
+        let field: String
+        let signature: WasmSignature
+        var index: Int?
+    }
+    private var jsStringBuiltins: [JSStringBuiltin] = []
+
+    private static func getJSStringBuiltin(forOp op: Operation) -> JSStringBuiltin? {
+        switch op {
+        case is WasmJSStringLength:
+            return JSStringBuiltin(
+                field: "length", signature: [.wasmJSStringRef()] => [.wasmi32], index: nil)
+        default:
+            return nil
+        }
+    }
+
     // The signature index space.
     private var signatures: [WasmSignature] = []
     private var signatureIndexMap: [WasmSignature: Int] = [:]
@@ -654,6 +671,10 @@ public class WasmLifter {
             registerSignature(signature)
         }
 
+        for builtin in jsStringBuiltins {
+            registerSignature(builtin.signature)
+        }
+
         let typeCount = self.signatures.count + typeGroups.count
         if typeCount == 0 {
             return
@@ -720,7 +741,10 @@ public class WasmLifter {
     }
 
     private func buildImportSection() throws {
-        if self.exports.compactMap({ $0.getImport() }).isEmpty {
+        let importsCount = self.exports.count(where: { $0.getImport() != nil })
+        let staticImportsCount = jsStringBuiltins.count
+
+        if importsCount + staticImportsCount == 0 {
             return
         }
 
@@ -728,7 +752,7 @@ public class WasmLifter {
 
         var temp = Data()
 
-        temp += Leb128.unsignedEncode(self.exports.count { $0.getImport() != nil })
+        temp += Leb128.unsignedEncode(importsCount + staticImportsCount)
 
         // Build the import components of this vector that consist of mod:name, nm:name, and d:importdesc
         for (idx, (_, importVariable, signature, signatureDef)) in self.exports.compactMap({
@@ -808,6 +832,21 @@ public class WasmLifter {
             }
 
             throw WasmLifter.CompileError.unknownImportType
+        }
+
+        for i in 0..<jsStringBuiltins.count {
+            let moduleName = "wasm:js-string"
+            let fieldName = jsStringBuiltins[i].field
+            temp += Leb128.unsignedEncode(moduleName.count)
+            temp += moduleName.data(using: .utf8)!
+            temp += Leb128.unsignedEncode(fieldName.count)
+            temp += fieldName.data(using: .utf8)!
+
+            let sigIdx = getSignatureIndexStrict(jsStringBuiltins[i].signature)
+            temp += [0x0] + Leb128.unsignedEncode(sigIdx)
+
+            jsStringBuiltins[i].index = functionIdxBase
+            functionIdxBase += 1
         }
 
         self.bytecode.append(Leb128.unsignedEncode(temp.count))
@@ -1275,7 +1314,7 @@ public class WasmLifter {
         }
 
         // The predicate is used to filter for only a specific type of import.
-        let reexportAndExport: ((Export) -> Bool) -> Void = { predicate in
+        func reexportAndExport(builtinOffset: Int = 0, predicate: (Export) -> Bool) {
             let imported = self.exports.filter({
                 $0.getImport() != nil && predicate($0.getImport()!.type)
             })
@@ -1289,25 +1328,16 @@ public class WasmLifter {
             let defined = self.exports.filter { predicate($0) }
 
             for (idx, exp) in defined.enumerated() {
-                writeExportData(exp, idx, offset: imported.count)
+                writeExportData(exp, idx, offset: imported.count + builtinOffset)
             }
         }
 
-        reexportAndExport {
-            $0.isFunction
-        }
-        reexportAndExport {
-            $0.isGlobal
-        }
-        reexportAndExport {
-            $0.isTable
-        }
-        reexportAndExport {
-            $0.isMemory
-        }
-        reexportAndExport {
-            $0.isTag
-        }
+        // Do not export JS string builtins
+        reexportAndExport(builtinOffset: jsStringBuiltins.count) { $0.isFunction }
+        reexportAndExport { $0.isGlobal }
+        reexportAndExport { $0.isTable }
+        reexportAndExport { $0.isMemory }
+        reexportAndExport { $0.isTag }
 
         // Append the length of the section and the section contents itself.
         self.bytecode.append(Leb128.unsignedEncode(temp.count))
@@ -1678,6 +1708,11 @@ public class WasmLifter {
                 self.exports.append(.memory(instr))
             case .wasmDefineTag(_):
                 self.exports.append(.tag(instr))
+            case .wasmJSStringLength(_):
+                let builtin = WasmLifter.getJSStringBuiltin(forOp: instr.op)!
+                if !jsStringBuiltins.contains(builtin) {
+                    jsStringBuiltins.append(builtin)
+                }
 
             default:
                 continue
@@ -1696,6 +1731,18 @@ public class WasmLifter {
             }
         }
         userDefinedTypesCount = currentTypeIndex
+
+        // Find out how many "normal" imported functions we have
+        let baseBuiltinIndex = self.exports
+            .compactMap { $0.getImport() }
+            .filter { IndexType.function.matches($0.type) }
+            .count
+
+        // Assign builtin imports to the next available indices, and
+        // store their indices for emission later.
+        for i in 0..<jsStringBuiltins.count {
+            jsStringBuiltins[i].index = baseBuiltinIndex + i
+        }
     }
 
     /// Describes the types of indexes in the different index spaces in the Wasm binary format.
@@ -1751,7 +1798,8 @@ public class WasmLifter {
         })
 
         if let idx = idx {
-            return imports.count + idx
+            let offset = importType == .function ? jsStringBuiltins.count : 0
+            return imports.count + offset + idx
         }
 
         throw WasmLifter.CompileError.failedIndexLookUp
@@ -2564,6 +2612,14 @@ public class WasmLifter {
             // Nothing to do here, types are defined inside the typegroups, not inside a wasm
             // function.
             return Data()
+
+        // Wasm JS String Builtins
+        case .wasmJSStringLength(_):
+            let builtinInfo = WasmLifter.getJSStringBuiltin(forOp: wasmInstruction.op)!
+            let builtin = jsStringBuiltins.first(where: {
+                $0.field == builtinInfo.field
+            })!
+            return Data([0x10]) + Leb128.unsignedEncode(builtin.index!)
 
         default:
             fatalError("unreachable")

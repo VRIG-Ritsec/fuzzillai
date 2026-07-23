@@ -1903,3 +1903,4 @@ message EndPendingBundleModule {
 message WasmJSStringLength {}
 message WasmJSStringFromCharCodeArray {}
 message WasmJSStringFromCharCode {}
+message WasmJSStringFromCodePoint {}

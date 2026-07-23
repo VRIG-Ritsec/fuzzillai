@@ -848,6 +848,7 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmJSStringLength(_),
             .wasmJSStringFromCharCodeArray(_),
             .wasmJSStringFromCharCode(_),
+            .wasmJSStringFromCodePoint(_),
             .wasmDemotef64Tof32(_),
             .wasmPromotef32Tof64(_),
             .wasmReinterpretf32Asi32(_),

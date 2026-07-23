@@ -492,6 +492,27 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "A\n")
     }
 
+    @Test func testJSStringFromCodePoint() throws {
+        let runner = JavaScriptExecutor()!
+        let jsProg = buildAndLiftProgram { b in
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmRefJSString()]) {
+                    function, _, args in
+                    let c = function.consti32(0x1F600)  // 😀
+                    let str = function.wasmJSStringFromCodePoint(c)
+                    return [str]
+                }
+            }
+
+            let exports = module.loadExports()
+            let main = module.getExportedMethod(at: 0)
+            let res = b.callMethod(main, on: exports, withArgs: [])
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [b.callMethod("toString", on: res)])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "😀\n")
+    }
+
     @Test func testImports() throws {
         let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in

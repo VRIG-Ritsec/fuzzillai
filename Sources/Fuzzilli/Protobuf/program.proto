@@ -389,6 +389,7 @@ message Instruction {
         WasmJSStringLength wasmJSStringLength = 363;
         WasmJSStringFromCharCodeArray wasmJSStringFromCharCodeArray = 364;
         WasmJSStringFromCharCode wasmJSStringFromCharCode = 365;
+        WasmJSStringFromCodePoint wasmJSStringFromCodePoint = 366;
     }
 }
 

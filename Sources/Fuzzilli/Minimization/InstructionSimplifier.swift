@@ -91,6 +91,10 @@ struct InstructionSimplifier: Reducer {
                     isGuarded: op.isGuarded)
             case .callComputedMethodWithSpread(let op):
                 newOp = CallComputedMethod(numArguments: op.numArguments, isGuarded: op.isGuarded)
+            case .callPrivateMethodWithSpread(let op):
+                newOp = CallPrivateMethod(
+                    methodName: op.methodName, numArguments: op.numArguments,
+                    isGuarded: op.isGuarded)
 
             case .construct(let op):
                 // Prefer simple function calls over constructor calls if there's no difference

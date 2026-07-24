@@ -73,6 +73,8 @@ struct InliningReducer: Reducer {
                 .beginClassComputedGetter,
                 .beginClassSetter,
                 .beginClassComputedSetter,
+                .beginClassPrivateGetter,
+                .beginClassPrivateSetter,
                 .beginClassStaticInitializer, .beginClassPrivateMethod:
                 activeSubroutineDefinitions.append(instr.hasOneOutput ? instr.output : nil)
             case .endPlainFunction,
@@ -96,6 +98,8 @@ struct InliningReducer: Reducer {
                 .endClassComputedGetter,
                 .endClassSetter,
                 .endClassComputedSetter,
+                .endClassPrivateGetter,
+                .endClassPrivateSetter,
                 .endClassStaticInitializer, .endClassPrivateMethod:
                 activeSubroutineDefinitions.removeLast()
             default:

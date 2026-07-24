@@ -45,6 +45,8 @@ struct BlockReducer: Reducer {
                 .beginClassComputedGetter,
                 .beginClassSetter,
                 .beginClassComputedSetter,
+                .beginClassPrivateGetter,
+                .beginClassPrivateSetter,
                 .beginClassStaticInitializer, .beginClassPrivateMethod:
                 reduceFunctionInClassDefinition(group.block(0), with: helper)
 

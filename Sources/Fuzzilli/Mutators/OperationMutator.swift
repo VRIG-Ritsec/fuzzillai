@@ -979,6 +979,12 @@ public class OperationMutator: BaseInstructionMutator {
             inputs.append(b.randomJsVariable())
             newOp = CallComputedMethodWithSpread(
                 numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded)
+        case .callPrivateMethodWithSpread(let op):
+            let spreads = op.spreads + [Bool.random()]
+            inputs.append(b.randomJsVariable())
+            newOp = CallPrivateMethodWithSpread(
+                methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
+                isGuarded: op.isGuarded)
         case .callSuperConstructor(let op):
             inputs.append(b.randomJsVariable())
             newOp = CallSuperConstructor(numArguments: op.numArguments + 1)
@@ -987,12 +993,7 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CallPrivateMethod(
                 methodName: op.methodName, numArguments: op.numArguments + 1,
                 isGuarded: op.isGuarded)
-        case .callPrivateMethodWithSpread(let op):
-            let spreads = op.spreads + [Bool.random()]
-            inputs.append(b.randomJsVariable())
-            newOp = CallPrivateMethodWithSpread(
-                methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
-                isGuarded: op.isGuarded)
+
         case .callSuperMethod(let op):
             inputs.append(b.randomJsVariable())
             newOp = CallSuperMethod(methodName: op.methodName, numArguments: op.numArguments + 1)

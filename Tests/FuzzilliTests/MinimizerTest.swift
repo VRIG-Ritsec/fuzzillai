@@ -3128,4 +3128,96 @@ struct MinimizerTests {
             #expect(expectedProgram == actualProgram)
         }
     }
+
+    @Test func testPrivateGetterSetterInlining() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let f = b.buildPlainFunction(with: .parameters(n: 0)) { args in
+                let s = b.loadString("foo")
+                let _ = b.buildClassDefinition { cls in
+                    let _ = b.emit(BeginClassPrivateGetter(propertyName: "name", isStatic: false))
+                    b.doReturn(s)
+                    b.emit(EndClassPrivateGetter())
+                }
+                b.doReturn(b.loadInt(42))
+            }
+            let r = b.callFunction(f)
+            let o = b.createObject(with: [:])
+            evaluator.nextInstructionIsImportant(in: b)
+            b.setProperty("result", of: o, to: r)
+
+            evaluator.keepReturnsInFunctions = true
+
+            let originalProgram = b.finalize()
+
+            // Build expected output program.
+            let r2 = b.loadInt(42)
+            let o2 = b.createObject(with: [:])
+            b.setProperty("result", of: o2, to: r2)
+
+            let expectedProgram = b.finalize()
+
+            let actualProgram = minimize(originalProgram, with: fuzzer)
+            #expect(FuzzILLifter().lift(expectedProgram) == FuzzILLifter().lift(actualProgram))
+            #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testCallPrivateMethodWithSpreadSimplification() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let cls = b.buildClassDefinition { cls in
+                cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    let v = b.loadInt(42)
+                    b.emit(
+                        CallPrivateMethodWithSpread(
+                            methodName: "foo", numArguments: 1, spreads: [false], isGuarded: false),
+                        withInputs: [this, v])
+                }
+            }
+            evaluator.nextInstructionIsImportant(in: b)
+            b.construct(cls)
+            let originalProgram = b.finalize()
+
+            evaluator.setOriginalProgram(originalProgram)
+            evaluator.operationsAreImportant([
+                CallPrivateMethodWithSpread.self, CallPrivateMethod.self,
+            ])
+
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+
+            // Specifically test InstructionSimplifier to ensure it handles the new operation
+            // without relying on VariadicInputReducer's overlapping behavior.
+            InstructionSimplifier().reduce(with: helper)
+
+            #expect(helper.didReduce)
+
+            let b2 = fuzzer.makeBuilder()
+            let expectedCls = b2.buildClassDefinition { cls in
+                cls.addInstanceMethod("m", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    let v = b2.loadInt(42)
+                    b2.emit(
+                        CallPrivateMethod(
+                            methodName: "foo", numArguments: 1, isGuarded: false),
+                        withInputs: [this, v])
+                }
+            }
+            b2.construct(expectedCls)
+            let expectedProgram = b2.finalize()
+
+            let actualProgram = Program(with: helper.code)
+            #expect(FuzzILLifter().lift(expectedProgram) == FuzzILLifter().lift(actualProgram))
+            #expect(expectedProgram == actualProgram)
+        }
+    }
 }

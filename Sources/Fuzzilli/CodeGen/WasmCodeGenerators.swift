@@ -1634,7 +1634,69 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             {
                 let externRef = function.findOrGenerateWasmVar(ofType: .wasmRefExtern())
                 function.wasmJSStringTest(externRef)
+            },
+            {
+                let code = function.consti32(Int32(truncatingIfNeeded: Int.random(in: 0...0xFFFF)))
+                function.wasmJSStringFromCharCode(code)
+            },
+            {
+                let codePoint = function.consti32(
+                    Int32(truncatingIfNeeded: Int.random(in: 0...0x10FFFF)))
+                function.wasmJSStringFromCodePoint(codePoint)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let index = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringCharCodeAt(str, index)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let index = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringCodePointAt(str, index)
             })
+    },
+
+    CodeGenerator(
+        "WasmPackedI16ArrayTypeDefGenerator",
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmPackedI16Array)]
+    ) { b in
+        b.wasmDefineTypeGroup {
+            [b.wasmDefineArrayType(elementType: .wasmPackedI16, mutability: true, isFinal: true)]
+        }
+    },
+
+    CodeGenerator(
+        "WasmJSStringFromCharCodeArrayGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmPackedI16Array))
+    ) { b, arrayTypeDef in
+        let desc =
+            b.type(of: arrayTypeDef).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        let arrayType = ILType.wasmIndexRef(desc, nullability: true)
+        let array = function.findOrGenerateWasmVar(ofType: arrayType)
+        let startVar = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        let endVar = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        function.wasmJSStringFromCharCodeArray(array, startVar, endVar)
+    },
+
+    CodeGenerator(
+        "WasmJSStringIntoCharCodeArrayGenerator", inContext: .single(.wasmFunction),
+        inputs: .requiredComplex(.init(.wasmTypeDef(), .IsWasmPackedI16Array))
+    ) { b, arrayTypeDef in
+        let desc =
+            b.type(of: arrayTypeDef).wasmTypeDefinition!.description as! WasmArrayTypeDescription
+
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        let arrayType = ILType.wasmIndexRef(desc, nullability: true)
+        let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+        let array = function.findOrGenerateWasmVar(ofType: arrayType)
+        let start = function.findOrGenerateWasmVar(ofType: .wasmi32)
+        function.wasmJSStringIntoCharCodeArray(str, array, start)
     },
 
     // We cannot store to funcRefs or externRefs if they are not in a slot.

@@ -2786,6 +2786,13 @@ class WasmSignatureTypeDescription: WasmTypeDescription {
 class WasmArrayTypeDescription: WasmTypeDescription {
     var elementType: ILType
     let mutability: Bool
+    // The two "wasm:js-string" builtins `intoCharCodeArray()` and `fromCharCodeArray()` require
+    // a specifically typed array as a parameter. This array type must live in its own type group.
+    // We set the isCanonicalWasmPackedI16Array flag on type group finalization if the type group
+    // meets those specific constraints. We also have a code generator that generates this type group.
+    // Having the isCanonicalWasmPackedI16Array property on the type description allows the code
+    // generators of the two builtins to specify it as an input requirement.
+    var isCanonicalWasmPackedI16Array: Bool = false
 
     init(
         elementType: ILType, mutability: Bool, typeGroupIndex: Int,

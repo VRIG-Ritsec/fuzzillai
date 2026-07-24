@@ -739,6 +739,20 @@ public struct JSTyper: Analyzer {
                 resolve(&self, nil)
             }
         }
+
+        let currentTypeGroup = typeGroups.last!
+        if currentTypeGroup.count == 1 {
+            if let desc = getTypeDescription(of: currentTypeGroup.first!)
+                as? WasmArrayTypeDescription
+            {
+                if desc.elementType == .wasmPackedI16 && desc.mutability == true
+                    && desc.isFinal == true && desc.concreteHeapSupertype == nil
+                {
+                    desc.isCanonicalWasmPackedI16Array = true
+                }
+            }
+        }
+
         selfReferences.removeAll()
         isWithinTypeGroup = false
     }

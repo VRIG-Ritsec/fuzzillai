@@ -436,6 +436,9 @@ public let codeGeneratorWeights = [
     "WasmBranchOnCastFailGenerator":            5,
 
     // Wasm JS String Generators
+    "WasmPackedI16ArrayTypeDefGenerator":       5,
     "WasmJSStringConstantGenerator":            5,
     "WasmJSStringBuiltinGenerator":             5,
+    "WasmJSStringFromCharCodeArrayGenerator":   5,
+    "WasmJSStringIntoCharCodeArrayGenerator":   5,
 ]

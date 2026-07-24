@@ -75,6 +75,7 @@ public class GeneratorStub: Contributor {
     public enum AdditionalConstraints {
         case None
         case IsWasmArray
+        case IsWasmPackedI16Array
         case IsWasmStruct
         case IsWasmFunction  // On a type definition this means "signature".
     }
@@ -100,6 +101,17 @@ public class GeneratorStub: Contributor {
                     type.wasmTypeDefinition?.description is WasmArrayTypeDescription
                 } else if type.Is(.anyNonNullableIndexRef) {
                     type.Is(.wasmArrayRef())
+                } else {
+                    false
+                }
+            case .IsWasmPackedI16Array:
+                if type.Is(.wasmTypeDef()) {
+                    if let desc = type.wasmTypeDefinition?.description as? WasmArrayTypeDescription
+                    {
+                        desc.isCanonicalWasmPackedI16Array
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }

@@ -3722,7 +3722,6 @@ public let CodeGenerators: [CodeGenerator] = [
         produces: [.createJsArrayType(ofElementType: .disposable)]
     ) { b, disposable in
         let array = b.createArray(with: [disposable])
-        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .disposable))
     },
 
     CodeGenerator(
@@ -3731,7 +3730,6 @@ public let CodeGenerators: [CodeGenerator] = [
         produces: [.createJsArrayType(ofElementType: .asyncDisposable)]
     ) { b, asyncDisposable in
         let array = b.createArray(with: [asyncDisposable])
-        b.setType(ofVariable: array, to: .createJsArrayType(ofElementType: .asyncDisposable))
     },
 
     CodeGenerator(

@@ -1585,6 +1585,58 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         }
     },
 
+    CodeGenerator(
+        "WasmJSStringConstantGenerator", inContext: .single(.wasmFunction),
+        produces: [.wasmRefJSString()]
+    ) { b in
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        function.wasmStringConstant(b.randomString())
+    },
+
+    CodeGenerator(
+        "WasmJSStringBuiltinGenerator", inContext: .single(.wasmFunction)
+    ) { b in
+        let module = b.currentWasmModule
+        let function = module.currentWasmFunction
+
+        withEqualProbability(
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringLength(str)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringConcat(str1, str2)
+            },
+            {
+                let str = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let start = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                let end = function.findOrGenerateWasmVar(ofType: .wasmi32)
+                function.wasmJSStringSubstring(str, start, end)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringEquals(str1, str2)
+            },
+            {
+                let str1 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                let str2 = function.findOrGenerateWasmVar(ofType: .wasmRefJSString())
+                function.wasmJSStringCompare(str1, str2)
+            },
+            {
+                let externRef = function.findOrGenerateWasmVar(ofType: .wasmRefExtern())
+                function.wasmJSStringCast(externRef)
+            },
+            {
+                let externRef = function.findOrGenerateWasmVar(ofType: .wasmRefExtern())
+                function.wasmJSStringTest(externRef)
+            })
+    },
+
     // We cannot store to funcRefs or externRefs if they are not in a slot.
     CodeGenerator(
         "WasmReassignmentGenerator", inContext: .single(.wasmFunction),

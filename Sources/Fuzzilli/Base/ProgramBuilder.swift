@@ -5917,6 +5917,12 @@ public class ProgramBuilder {
                                     }
                                 ),
                                 (
+                                    .wasmRefJSString(),
+                                    {
+                                        return self.wasmStringConstant(self.b.randomString())
+                                    }
+                                ),
+                                (
                                     .wasmRefFunc(),
                                     {
                                         self.b.randomVariable(ofType: .wasmFunctionDef()).flatMap(

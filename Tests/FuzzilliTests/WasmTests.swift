@@ -289,8 +289,7 @@ struct WasmFoundationTests {
                         || (
                             // Non-nullable heap types unsupported for these types.
                             // TODO(mliedtke): Extend for exnref?
-                            // TODO(bettscheider): Remove .WasmJSString here once we can generate it.
-                            heapType != .WasmExn && heapType != .WasmJSString
+                            heapType != .WasmExn
                             // Bottom null-types must be nullable.
                             && !heapType.isBottom())
                 }.map { ILType.wasmRef($0.0, nullability: $0.1) }

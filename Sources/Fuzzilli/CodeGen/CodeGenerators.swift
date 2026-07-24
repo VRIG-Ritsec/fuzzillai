@@ -176,13 +176,9 @@ func makeForInOfLoopGenerator(
             GeneratorStub(
                 beginStubName,
                 inContext: context,
+                inputs: .preferred(requiredType),
                 provides: [.loop, .javascript]
-            ) { b in
-                // TODO(rherouart): Remove this workaround.
-                // It ensures loop variables have the correct inner type.
-                // Ex: "for(using x of array)" will throw if any non-disposable type is in the array
-                // Ultimately createRequiredInputVariables should be recursive.
-                let obj = b.findOrGenerateType(requiredType)
+            ) { b, obj in
                 body(b, obj)
             },
             GeneratorStub(

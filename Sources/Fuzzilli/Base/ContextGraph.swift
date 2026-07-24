@@ -141,6 +141,12 @@ public class ContextGraph {
     /// Get a shortest path (the least amount of generator stubs) from the `from` Context to the `to` Context. Returns an arbitrary one if there are several.
     /// TODO: Do this initially and cache all results?
     func getShortestPath(from src: Context, to dst: Context) -> [EdgeKey]? {
+        guard src.rawValue.nonzeroBitCount <= 1 else {
+            fatalError("getShortestPath called with multi-bit src context: \(src)")
+        }
+        guard dst.rawValue.nonzeroBitCount <= 1 else {
+            fatalError("getShortestPath called with multi-bit dst context: \(dst)")
+        }
         // Do simple BFS to find a shortest path, considering the edge weights.
         var queue: Deque<([Context], Int)> = [([src], 0)]
         var seenNodes: [Context: Int] = [:]
@@ -206,7 +212,7 @@ public class ContextGraph {
 
             // Get all possible edges from here on and push all of those to the queue.
             for edge in self.edges
-            where edge.key.from == currentNode && !seenNodes.contains(edge.key.to) {
+            where edge.key.from.isSubset(of: currentNode) && !seenNodes.contains(edge.key.to) {
                 // Prevent cycles, we don't care about complicated paths, but rather simple direct paths.
                 stillExploring = true
                 seenNodes.insert(edge.key.to)

@@ -93,4 +93,19 @@ struct ContextGraphTests {
             #expect(reachableContextsWasm.isSubset(of: reachableContextsJavaScript))
         }
     }
+
+    @Test
+    func testReachabilityCalculationForMultiBitContext() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let contextGraph = ContextGraph(
+                for: fuzzer.codeGenerators, isBundle: false, withLogger: Logger(withLabel: "Test"))
+
+            let multi: Context = [.javascript, .subroutine, .async]
+            let reachableContexts = Set(contextGraph.getReachableContexts(from: multi))
+
+            // We can reach contexts like .loop, since we can put a loop inside [.javascript, .subroutine, .async].
+            #expect(reachableContexts.contains(.loop))
+        }
+    }
 }

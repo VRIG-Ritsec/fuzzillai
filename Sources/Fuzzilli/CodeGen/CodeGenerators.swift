@@ -1798,9 +1798,10 @@ public let CodeGenerators: [CodeGenerator] = [
             },
             GeneratorStub(
                 "AsyncFunctionEndGenerator",
-                inContext: .single([.javascript, .subroutine, .async])
-            ) { b in
-                b.await(b.randomJsVariable())
+                inContext: .single([.javascript, .subroutine, .async]),
+                inputs: .preferred(.object(withMethods: ["then"]))
+            ) { b, val in
+                b.await(val)
                 b.doReturn(b.randomJsVariable())
                 b.emit(EndAsyncFunction())
                 let f = b.runtimeData.pop("asyncFunction")
@@ -1832,9 +1833,10 @@ public let CodeGenerators: [CodeGenerator] = [
             GeneratorStub(
                 "AsyncArrowFunctionAwaitGenerator",
                 inContext: .single([.javascript, .async]),
+                inputs: .preferred(.object(withMethods: ["then"])),
                 provides: [.javascript, .async]
-            ) { b in
-                b.await(b.randomJsVariable())
+            ) { b, val in
+                b.await(val)
             },
             GeneratorStub(
                 "AsyncArrowFunctionEndGenerator",
@@ -1872,9 +1874,10 @@ public let CodeGenerators: [CodeGenerator] = [
             },
             GeneratorStub(
                 "AsyncGeneratorFunctionEndGenerator",
-                inContext: .single([.javascript, .subroutine, .generatorFunction, .async])
-            ) { b in
-                b.await(b.randomJsVariable())
+                inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
+                inputs: .preferred(.object(withMethods: ["then"]))
+            ) { b, val in
+                b.await(val)
                 if probability(0.5) {
                     b.yield(b.randomJsVariable())
                 } else {
@@ -2384,7 +2387,10 @@ public let CodeGenerators: [CodeGenerator] = [
         b.yieldEach(val)
     },
 
-    CodeGenerator("AwaitGenerator", inContext: .single(.async), inputs: .preferred(.jsPromise)) {
+    CodeGenerator(
+        "AwaitGenerator", inContext: .single(.async),
+        inputs: .preferred(.object(withMethods: ["then"]))
+    ) {
         b, val in
         b.await(val)
     },
@@ -3165,7 +3171,10 @@ public let CodeGenerators: [CodeGenerator] = [
                 ).output
                 b.runtimeData.push("promiseHandler", handler)
             },
-            GeneratorStub("PromiseEndGenerator", inContext: .single([.subroutine, .javascript])) {
+            GeneratorStub(
+                "PromiseEndGenerator", inContext: .single([.subroutine, .javascript]),
+                produces: [.jsPromise],
+            ) {
                 b in
                 b.emit(EndPlainFunction())
                 let handler = b.runtimeData.pop("promiseHandler")

@@ -24,9 +24,9 @@ struct ContextGraphTests {
             let contextGraph = ContextGraph(
                 for: fuzzer.codeGenerators, isBundle: false, withLogger: Logger(withLabel: "Test"))
 
-            let reachableContexts = Set(contextGraph.getReachableContexts(from: .javascript))
+            let reachableContexts = contextGraph.getReachableContexts(from: .javascript)
 
-            let reachableContexts2 = Set(contextGraph.getReachableContexts(from: .javascript))
+            let reachableContexts2 = contextGraph.getReachableContexts(from: .javascript)
 
             #expect(reachableContexts == reachableContexts2)
 
@@ -51,9 +51,9 @@ struct ContextGraphTests {
             let contextGraph = ContextGraph(
                 for: fuzzer.codeGenerators, isBundle: true, withLogger: Logger(withLabel: "Test"))
 
-            let reachableContexts = Set(contextGraph.getReachableContexts(from: .bundle))
+            let reachableContexts = contextGraph.getReachableContexts(from: .bundle)
 
-            let reachableContexts2 = Set(contextGraph.getReachableContexts(from: .bundle))
+            let reachableContexts2 = contextGraph.getReachableContexts(from: .bundle)
 
             #expect(reachableContexts == reachableContexts2)
 
@@ -73,8 +73,8 @@ struct ContextGraphTests {
         fuzzer.sync {
             let contextGraph = ContextGraph(
                 for: fuzzer.codeGenerators, isBundle: false, withLogger: Logger(withLabel: "Test"))
-            let reachableContextsWasm = Set(contextGraph.getReachableContexts(from: .wasm))
-            let reachableContextsWasm2 = Set(contextGraph.getReachableContexts(from: .wasm))
+            let reachableContextsWasm = contextGraph.getReachableContexts(from: .wasm)
+            let reachableContextsWasm2 = contextGraph.getReachableContexts(from: .wasm)
 
             #expect(reachableContextsWasm == reachableContextsWasm2)
 
@@ -102,7 +102,7 @@ struct ContextGraphTests {
                 for: fuzzer.codeGenerators, isBundle: false, withLogger: Logger(withLabel: "Test"))
 
             let multi: Context = [.javascript, .subroutine, .async]
-            let reachableContexts = Set(contextGraph.getReachableContexts(from: multi))
+            let reachableContexts = contextGraph.getReachableContexts(from: multi)
 
             // We can reach contexts like .loop, since we can put a loop inside [.javascript, .subroutine, .async].
             #expect(reachableContexts.contains(.loop))

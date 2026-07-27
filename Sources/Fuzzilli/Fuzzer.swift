@@ -224,6 +224,20 @@ public class Fuzzer {
         // This creates a reference cycle, but Fuzzer instances aren't expected
         // to be deallocated, so this is ok.
         self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: self)
+
+        #if DEBUG
+            do {
+                let allNames =
+                    self.codeGenerators.map { $0.name }
+                    + self.mutators.map { $0.name }
+                    + self.programTemplates.map { $0.name }
+                var seen = Set<String>()
+                let duplicateNames = allNames.filter { !seen.insert($0).inserted }
+                assert(
+                    duplicateNames.isEmpty,
+                    "Contributor names must be unique, found duplicates: \(duplicateNames)")
+            }
+        #endif
     }
 
     /// Returns the fuzzer for the active DispatchQueue.

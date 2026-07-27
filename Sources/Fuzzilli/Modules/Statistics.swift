@@ -90,39 +90,39 @@ public class Statistics: Module {
         ownData.timeoutRate = timeoutRate.currentValue
 
         if let fuzzer = fuzzer {
-            ownData.contributorStats = []
-            for generator in fuzzer.codeGenerators {
-                for stub in generator.parts {
-                    var stats = Fuzzilli_Protobuf_Statistics.ContributorStats()
-                    stats.name = stub.name
-                    stats.invocationCount = UInt64(stub.invocationCount)
-                    stats.successfulGenerationCount = UInt64(stub.successfulGenerationCount)
-                    stats.totalSamples = UInt64(stub.totalSamples)
-                    stats.correctSamples = UInt64(stub.correctSamples)
-                    stats.isCodeGenerator = true
-                    ownData.contributorStats.append(stats)
+            let contributorsList: [(prefix: String?, list: [Contributor], isCodeGenerator: Bool)] =
+                fuzzer.codeGenerators.map { ($0.parts.count > 1 ? $0.name : nil, $0.parts, true) }
+                + [
+                    (nil, Array(fuzzer.programTemplates), false),
+                    (nil, Array(fuzzer.mutators), false),
+                ]
+            ownData.contributorStats = contributorsList.flatMap { (prefix, list, isCodeGenerator) in
+                list.map { contributor in
+                    Fuzzilli_Protobuf_Statistics.ContributorStats.with {
+                        $0.name = "\(prefix.flatMap { "\($0)/" } ?? "")\(contributor.name)"
+                        $0.invocationCount = UInt64(contributor.invocationCount)
+                        $0.successfulGenerationCount = UInt64(contributor.successfulGenerationCount)
+                        $0.totalSamples = UInt64(contributor.totalSamples)
+                        $0.correctSamples = UInt64(contributor.correctSamples)
+                        $0.isCodeGenerator = isCodeGenerator
+                        $0.interestingSamples = UInt64(contributor.interestingSamples)
+                        $0.invalidSamples = UInt64(contributor.invalidSamples)
+                        $0.timedOutSamples = UInt64(contributor.timedOutSamples)
+                        $0.crashingSamples = UInt64(contributor.crashingSamples)
+                        $0.differentialSamples = UInt64(contributor.differentialSamples)
+                        $0.failures = UInt64(contributor.failures)
+                        $0.totalInstructionsProduced = UInt64(contributor.totalInstructionsProduced)
+                    }
                 }
-            }
-            for template in fuzzer.programTemplates {
-                var stats = Fuzzilli_Protobuf_Statistics.ContributorStats()
-                stats.name = template.name
-                stats.invocationCount = UInt64(template.invocationCount)
-                stats.successfulGenerationCount = UInt64(template.successfulGenerationCount)
-                stats.totalSamples = UInt64(template.totalSamples)
-                stats.correctSamples = UInt64(template.correctSamples)
-                stats.isCodeGenerator = false
-                ownData.contributorStats.append(stats)
-
             }
         }
 
         // Compute global statistics data
         var data = ownData
 
-        var contributorStatsByName = [String: Fuzzilli_Protobuf_Statistics.ContributorStats]()
-        for stats in ownData.contributorStats {
-            contributorStatsByName[stats.name] = stats
-        }
+        var contributorStatsByName = Dictionary(
+            uniqueKeysWithValues: ownData.contributorStats.map { ($0.name, $0) }
+        )
 
         for (id, node) in nodes {
             // Add "global" fields, even from nodes that are no longer active
@@ -138,6 +138,13 @@ public class Statistics: Module {
                     existing.successfulGenerationCount += stats.successfulGenerationCount
                     existing.totalSamples += stats.totalSamples
                     existing.correctSamples += stats.correctSamples
+                    existing.interestingSamples += stats.interestingSamples
+                    existing.invalidSamples += stats.invalidSamples
+                    existing.timedOutSamples += stats.timedOutSamples
+                    existing.crashingSamples += stats.crashingSamples
+                    existing.differentialSamples += stats.differentialSamples
+                    existing.failures += stats.failures
+                    existing.totalInstructionsProduced += stats.totalInstructionsProduced
                     contributorStatsByName[stats.name] = existing
                 } else {
                     contributorStatsByName[stats.name] = stats
@@ -267,23 +274,33 @@ public class Statistics: Module {
         if fuzzer.config.logLevel.isAtLeast(.info) {
             fuzzer.timers.scheduleTask(every: 15 * Minutes) {
                 self.logger.info("Mutator Statistics:")
+                let globalStats = self.compute()
+                let statsByName = Dictionary(
+                    uniqueKeysWithValues: globalStats.contributorStats.map { ($0.name, $0) }
+                )
                 let nameMaxLength = fuzzer.mutators.map({ $0.name.count }).max()!
                 let maxSamplesGeneratedStringLength = fuzzer.mutators.map({
-                    String($0.totalSamples).count
+                    let total = statsByName[$0.name]?.totalSamples ?? 0
+                    return String(total).count
                 }).max()!
                 for mutator in fuzzer.mutators {
+                    let stats =
+                        statsByName[mutator.name]
+                        ?? Fuzzilli_Protobuf_Statistics.ContributorStats.with {
+                            $0.name = mutator.name
+                        }
                     let name = mutator.name.rightPadded(toLength: nameMaxLength)
-                    let correctnessRate = Self.percentageOrNa(mutator.correctnessRate, 7)
-                    let failureRate = Self.percentageOrNa(mutator.failureRate, 7)
-                    let timeoutRate = Self.percentageOrNa(mutator.timeoutRate, 6)
+                    let correctnessRate = Self.percentageOrNa(stats.correctnessRate, 7)
+                    let failureRate = Self.percentageOrNa(stats.failureRate, 7)
+                    let timeoutRate = Self.percentageOrNa(stats.timeoutRate, 6)
                     let interestingSamplesRate = Self.percentageOrNa(
-                        mutator.interestingSamplesRate, 7)
+                        stats.interestingSamplesRate, 7)
                     let avgInstructionsAdded = String(
-                        format: "%.2f", mutator.avgNumberOfInstructionsGenerated
+                        format: "%.2f", stats.avgNumberOfInstructionsGenerated
                     ).leftPadded(toLength: 5)
-                    let samplesGenerated = String(mutator.totalSamples).leftPadded(
+                    let samplesGenerated = String(stats.totalSamples).leftPadded(
                         toLength: maxSamplesGeneratedStringLength)
-                    let crashesFound = mutator.crashesFound
+                    let crashesFound = stats.crashesFound
                     self.logger.info(
                         "    \(name) : Correctness rate: \(correctnessRate), Failure rate: \(failureRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated), Total # of crashes found: \(crashesFound)"
                     )
@@ -294,23 +311,32 @@ public class Statistics: Module {
         if fuzzer.config.logLevel.isAtLeast(.verbose) {
             fuzzer.timers.scheduleTask(every: 30 * Minutes) {
                 self.logger.verbose("Code Generator Statistics:")
+                let globalStats = self.compute()
+                let statsByName = Dictionary(
+                    uniqueKeysWithValues: globalStats.contributorStats.map { ($0.name, $0) }
+                )
                 let nameMaxLength = fuzzer.codeGenerators.map({ $0.name.count }).max()!
 
                 for generator in fuzzer.codeGenerators {
                     for stub in generator.parts {
-                        let name = stub.name.rightPadded(toLength: nameMaxLength)
-                        let correctnessRate = Self.percentageOrNa(stub.correctnessRate, 7)
+                        let name =
+                            generator.parts.count > 1 ? "\(generator.name)/\(stub.name)" : stub.name
+                        let stats =
+                            statsByName[name]
+                            ?? Fuzzilli_Protobuf_Statistics.ContributorStats.with { $0.name = name }
+                        let namePadded = name.rightPadded(toLength: nameMaxLength)
+                        let correctnessRate = Self.percentageOrNa(stats.correctnessRate, 7)
                         let interestingSamplesRate = Self.percentageOrNa(
-                            stub.interestingSamplesRate, 7)
-                        let timeoutRate = Self.percentageOrNa(stub.timeoutRate, 6)
+                            stats.interestingSamplesRate, 7)
+                        let timeoutRate = Self.percentageOrNa(stats.timeoutRate, 6)
                         let avgInstructionsAdded = String(
-                            format: "%.2f", stub.avgNumberOfInstructionsGenerated
+                            format: "%.2f", stats.avgNumberOfInstructionsGenerated
                         ).leftPadded(toLength: 5)
                         let invocationSuccessRate = Self.percentageOrNa(
-                            stub.invocationSuccessRate, 6)
-                        let samplesGenerated = stub.totalSamples
+                            stats.invocationSuccessRate, 6)
+                        let samplesGenerated = stats.totalSamples
                         self.logger.verbose(
-                            "    \(name) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"
+                            "    \(namePadded) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"
                         )
                     }
                 }
@@ -333,5 +359,42 @@ extension Fuzzilli_Protobuf_Statistics {
     /// The ratio of timed-out samples to produced samples over the entire runtime of the fuzzer.
     public var overallTimeoutRate: Double {
         return totalSamples != 0 ? Double(timedOutSamples) / Double(totalSamples) : 0
+    }
+}
+
+extension Fuzzilli_Protobuf_Statistics.ContributorStats {
+    public var invocationSuccessRate: Double? {
+        guard invocationCount > 0 else { return nil }
+        return Double(successfulGenerationCount) / Double(invocationCount)
+    }
+
+    public var correctnessRate: Double? {
+        guard totalSamples > 0 else { return nil }
+        return Double(correctSamples) / Double(totalSamples)
+    }
+
+    public var interestingSamplesRate: Double? {
+        guard totalSamples > 0 else { return nil }
+        return Double(interestingSamples) / Double(totalSamples)
+    }
+
+    public var timeoutRate: Double? {
+        guard totalSamples > 0 else { return nil }
+        return Double(timedOutSamples) / Double(totalSamples)
+    }
+
+    public var failureRate: Double? {
+        let totalAttempts = totalSamples + failures
+        guard totalAttempts > 0 else { return nil }
+        return Double(failures) / Double(totalAttempts)
+    }
+
+    public var avgNumberOfInstructionsGenerated: Double {
+        guard totalSamples > 0 else { return 0.0 }
+        return Double(totalInstructionsProduced) / Double(totalSamples)
+    }
+
+    public var crashesFound: UInt64 {
+        return crashingSamples
     }
 }

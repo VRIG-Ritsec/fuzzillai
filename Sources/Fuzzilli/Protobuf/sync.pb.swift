@@ -209,6 +209,20 @@ public struct Fuzzilli_Protobuf_Statistics: @unchecked Sendable {
 
     public var isCodeGenerator: Bool = false
 
+    public var interestingSamples: UInt64 = 0
+
+    public var invalidSamples: UInt64 = 0
+
+    public var timedOutSamples: UInt64 = 0
+
+    public var crashingSamples: UInt64 = 0
+
+    public var differentialSamples: UInt64 = 0
+
+    public var failures: UInt64 = 0
+
+    public var totalInstructionsProduced: UInt64 = 0
+
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
     public init() {}
@@ -507,7 +521,7 @@ extension Fuzzilli_Protobuf_Statistics: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = Fuzzilli_Protobuf_Statistics.protoMessageName + ".ContributorStats"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}invocationCount\0\u{1}successfulGenerationCount\0\u{1}totalSamples\0\u{1}correctSamples\0\u{1}isCodeGenerator\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}invocationCount\0\u{1}successfulGenerationCount\0\u{1}totalSamples\0\u{1}correctSamples\0\u{1}isCodeGenerator\0\u{1}interestingSamples\0\u{1}invalidSamples\0\u{1}timedOutSamples\0\u{1}crashingSamples\0\u{1}differentialSamples\0\u{1}failures\0\u{1}totalInstructionsProduced\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -521,6 +535,13 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
       case 4: try { try decoder.decodeSingularUInt64Field(value: &self.totalSamples) }()
       case 5: try { try decoder.decodeSingularUInt64Field(value: &self.correctSamples) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.isCodeGenerator) }()
+      case 7: try { try decoder.decodeSingularUInt64Field(value: &self.interestingSamples) }()
+      case 8: try { try decoder.decodeSingularUInt64Field(value: &self.invalidSamples) }()
+      case 9: try { try decoder.decodeSingularUInt64Field(value: &self.timedOutSamples) }()
+      case 10: try { try decoder.decodeSingularUInt64Field(value: &self.crashingSamples) }()
+      case 11: try { try decoder.decodeSingularUInt64Field(value: &self.differentialSamples) }()
+      case 12: try { try decoder.decodeSingularUInt64Field(value: &self.failures) }()
+      case 13: try { try decoder.decodeSingularUInt64Field(value: &self.totalInstructionsProduced) }()
       default: break
       }
     }
@@ -545,6 +566,27 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
     if self.isCodeGenerator != false {
       try visitor.visitSingularBoolField(value: self.isCodeGenerator, fieldNumber: 6)
     }
+    if self.interestingSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.interestingSamples, fieldNumber: 7)
+    }
+    if self.invalidSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.invalidSamples, fieldNumber: 8)
+    }
+    if self.timedOutSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.timedOutSamples, fieldNumber: 9)
+    }
+    if self.crashingSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.crashingSamples, fieldNumber: 10)
+    }
+    if self.differentialSamples != 0 {
+      try visitor.visitSingularUInt64Field(value: self.differentialSamples, fieldNumber: 11)
+    }
+    if self.failures != 0 {
+      try visitor.visitSingularUInt64Field(value: self.failures, fieldNumber: 12)
+    }
+    if self.totalInstructionsProduced != 0 {
+      try visitor.visitSingularUInt64Field(value: self.totalInstructionsProduced, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -555,6 +597,13 @@ extension Fuzzilli_Protobuf_Statistics.ContributorStats: SwiftProtobuf.Message, 
     if lhs.totalSamples != rhs.totalSamples {return false}
     if lhs.correctSamples != rhs.correctSamples {return false}
     if lhs.isCodeGenerator != rhs.isCodeGenerator {return false}
+    if lhs.interestingSamples != rhs.interestingSamples {return false}
+    if lhs.invalidSamples != rhs.invalidSamples {return false}
+    if lhs.timedOutSamples != rhs.timedOutSamples {return false}
+    if lhs.crashingSamples != rhs.crashingSamples {return false}
+    if lhs.differentialSamples != rhs.differentialSamples {return false}
+    if lhs.failures != rhs.failures {return false}
+    if lhs.totalInstructionsProduced != rhs.totalInstructionsProduced {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

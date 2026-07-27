@@ -94,6 +94,13 @@ message Statistics {
             uint64 totalSamples = 4;
             uint64 correctSamples = 5;
             bool isCodeGenerator = 6;
+            uint64 interestingSamples = 7;
+            uint64 invalidSamples = 8;
+            uint64 timedOutSamples = 9;
+            uint64 crashingSamples = 10;
+            uint64 differentialSamples = 11;
+            uint64 failures = 12;
+            uint64 totalInstructionsProduced = 13;
         }
         repeated ContributorStats contributorStats = 19;
 }

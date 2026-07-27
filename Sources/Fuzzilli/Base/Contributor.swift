@@ -38,7 +38,7 @@ public class Contributor: Hashable {
     // Number of times this instance failed to generate/mutate code.
     public private(set) var failures = 0
     // Total number of instructions added to programs by this contributor.
-    public private(set) var totalInstructionProduced = 0
+    public private(set) var totalInstructionsProduced = 0
 
     public init(name: String) {
         self.name = name
@@ -74,7 +74,7 @@ public class Contributor: Hashable {
 
     func addedInstructions(_ n: Int) {
         assert(n >= 0)
-        totalInstructionProduced += n
+        totalInstructionsProduced += n
         if n > 0 {
             successfulGenerationCount += 1
         }
@@ -132,7 +132,7 @@ public class Contributor: Hashable {
     // slightly higher than one as the same CodeGenerator may run multiple times to generate one program.
     public var avgNumberOfInstructionsGenerated: Double {
         guard totalSamples > 0 else { return 0.0 }
-        return Double(totalInstructionProduced) / Double(totalSamples)
+        return Double(totalInstructionsProduced) / Double(totalSamples)
     }
 
     public func hash(into hasher: inout Hasher) {

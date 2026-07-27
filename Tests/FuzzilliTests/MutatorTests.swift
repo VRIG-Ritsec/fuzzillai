@@ -678,6 +678,109 @@ struct MutatorTests {
                     }, "Missing BeginObjectLiteralSetter operation for '9'")
             }
         ),
+        PropertyAccessorTestCase(
+            name: "classAddProperty",
+            build: { b in
+                let val = b.loadInt(42)
+                let _ = b.buildClassDefinition { cls in
+                    cls.addInstanceProperty("foo", value: val)
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassGetter operation for 'foo'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassSetter operation for 'foo'")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "classAddElement",
+            build: { b in
+                let val = b.loadInt(42)
+                let _ = b.buildClassDefinition { cls in
+                    cls.addInstanceElement(9, value: val)
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "9" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassGetter operation for '9'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "9" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassSetter operation for '9'")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "classAddStaticProperty",
+            build: { b in
+                let val = b.loadInt(42)
+                let _ = b.buildClassDefinition { cls in
+                    cls.addStaticProperty("foo", value: val)
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && op.isStatic
+                        }
+                        return false
+                    }, "Missing static BeginClassGetter operation for 'foo'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && op.isStatic
+                        }
+                        return false
+                    }, "Missing static BeginClassSetter operation for 'foo'")
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "classAddPropertyNoValue",
+            build: { b in
+                let _ = b.buildClassDefinition { cls in
+                    cls.addInstanceProperty("foo")
+                }
+            },
+            verify: { mutatedProg in
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassGetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassGetter operation for 'foo'")
+
+                #expect(
+                    mutatedProg.code.contains { instr in
+                        if case .beginClassSetter(let op) = instr.op.opcode {
+                            return op.propertyName == "foo" && !op.isStatic
+                        }
+                        return false
+                    }, "Missing BeginClassSetter operation for 'foo'")
+            }
+        ),
     ]
 
     @Test(arguments: propertyAccessorTestCases)

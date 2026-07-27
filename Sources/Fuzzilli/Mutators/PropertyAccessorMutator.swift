@@ -47,7 +47,8 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
 
     public override func canMutate(_ instr: Instruction) -> Bool {
         switch instr.op.opcode {
-        case .setProperty, .setElement, .objectLiteralAddProperty, .objectLiteralAddElement:
+        case .setProperty, .setElement, .objectLiteralAddProperty, .objectLiteralAddElement,
+            .classAddProperty, .classAddElement:
             true
         default:
             false
@@ -62,6 +63,12 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
         case .objectLiteralAddElement(let op):
             let value = b.adopt(instr.input(0))
             mutateObjectLiteralProperty(String(op.index), to: value, using: b)
+        case .classAddProperty(let op):
+            let value = op.hasValue ? b.adopt(instr.input(0)) : nil
+            mutateClassProperty(op.propertyName, to: value, isStatic: op.isStatic, using: b)
+        case .classAddElement(let op):
+            let value = op.hasValue ? b.adopt(instr.input(0)) : nil
+            mutateClassProperty(String(op.index), to: value, isStatic: op.isStatic, using: b)
         default:
             let target: PropertyTarget =
                 switch instr.op.opcode {
@@ -114,5 +121,20 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
         b.emit(BeginObjectLiteralSetter(propertyName: propertyName))
         b.build(n: Self.budgetPerAccessor, by: .generating)
         b.emit(EndObjectLiteralSetter())
+    }
+
+    private func mutateClassProperty(
+        _ propertyName: String, to value: Variable?, isStatic: Bool, using b: ProgramBuilder
+    ) {
+        // Build class getter block.
+        b.emit(BeginClassGetter(propertyName: propertyName, isStatic: isStatic))
+        b.build(n: Self.budgetPerAccessor, by: .generating)
+        b.doReturn(value ?? b.loadUndefined())
+        b.emit(EndClassGetter())
+
+        // Build class setter block.
+        b.emit(BeginClassSetter(propertyName: propertyName, isStatic: isStatic))
+        b.build(n: Self.budgetPerAccessor, by: .generating)
+        b.emit(EndClassSetter())
     }
 }

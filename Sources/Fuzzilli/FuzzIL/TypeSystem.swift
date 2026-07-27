@@ -530,24 +530,20 @@ public struct ILType: Hashable {
 
         // If we are a union (so our possible type is larger than the definite type)
         // then check that our possible type is larger than the other possible type.
-        // However, there are some special rules to consider:
-        //  1. If the other type is a merged type, it is enough if our possible
-        //    type is a superset of one of the merged base types.
         if isUnion {
-            // Verify that either the other definite type is empty or that there is some overlap between
-            // our possible type and the other definite type
-            guard
-                other.definiteType.isEmpty
-                    || !other.definiteType.intersection(self.possibleType).isEmpty
-            else {
-                return false
-            }
-
-            // Given the above, we can subtract the other's definite type here from its possible type so that
-            // e.g. StringObjects are correctly subsumed by both .string and .object.
-            guard
-                self.possibleType.isSuperset(of: other.possibleType.subtracting(other.definiteType))
-            else {
+            let remainingPossible = other.possibleType.subtracting(other.definiteType)
+            if !other.definiteType.intersection(self.possibleType).isEmpty {
+                // Every instance of other is guaranteed to have a type accepted by us.
+                // In that case, we don't need to check anything else.
+            } else if !remainingPossible.isEmpty {
+                // If there is no definite overlap, then our possible type must be a superset
+                // of all the other's non-definite possible types.
+                guard self.possibleType.isSuperset(of: remainingPossible) else {
+                    return false
+                }
+            } else {
+                // If there is no definite overlap and no remaining possible types,
+                // then other is not accepted by us.
                 return false
             }
         }

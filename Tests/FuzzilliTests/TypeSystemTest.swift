@@ -288,6 +288,20 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testUnionTypesOfMergedTypesSubsumption() {
+        let unionType = (.object() + .function()) | (.function() + .constructor())
+        #expect(unionType.Is(.function()))
+        #expect(unionType.Is(.function() | .integer))
+        #expect(unionType.Is(.object() | .constructor()))
+        #expect(unionType.Is(.object() | .constructor() | .integer))
+        #expect(!unionType.Is(.object()))
+        #expect(!unionType.Is(.object() + .function()))
+        #expect(!unionType.Is(.object() + .constructor()))
+        #expect(!unionType.Is(.constructor()))
+        #expect(!unionType.Is(.function() + .constructor()))
+    }
+
+    @Test
     func testObjectTypeSubsumption() {
         // Verify that object type A >= object type B implies that B has at least
         // the properties and methods of A.

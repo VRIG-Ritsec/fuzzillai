@@ -3220,4 +3220,48 @@ struct MinimizerTests {
             #expect(expectedProgram == actualProgram)
         }
     }
+
+    @Test func testWasmIndexRefGlobalMinimizationCrash() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let structType = b.wasmDefineTypeGroup {
+                [
+                    b.wasmDefineStructType(
+                        fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                        indexTypes: [],
+                        isFinal: true
+                    )
+                ]
+            }[0]
+
+            let module1 = b.buildWasmModule { wasmModule in
+                // Add a global, but do not use it in this module. This allows the minimizer to nop this instruction.
+                _ = wasmModule.addGlobal(
+                    wasmGlobal: .indexRef, isMutable: true, typeDef: structType)
+            }
+
+            let exports1 = module1.loadExports()
+            let importedGlobal = b.getProperty("wg0", of: exports1)
+
+            b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let loadedStruct = function.wasmLoadGlobal(globalVariable: importedGlobal)
+                    let loadedI32 = function.wasmStructGet(theStruct: loadedStruct, fieldIndex: 0)
+                    return [loadedI32]
+                }
+            }
+
+            let originalProgram = b.finalize()
+
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+            let reducer = GenericInstructionReducer()
+            reducer.reduce(with: helper)
+        }
+    }
 }

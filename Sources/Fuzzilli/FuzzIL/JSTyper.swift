@@ -995,6 +995,12 @@ public struct JSTyper: Analyzer {
                 if let wasmGlobalType = globalVarType.wasmGlobalType {
                     setType(of: instr.output, to: wasmGlobalType.valueType)
                 } else {
+                    // TODO(bettscheider): Remove once we fix this properly.
+                    if case .Index = op.globalType.wasmReferenceType?.kind {
+                        fatalError(
+                            "We don't track usages of exported globals across Wasm modules. The definition was probably removed by a minimizer."
+                        )
+                    }
                     setType(of: instr.output, to: op.globalType)
                 }
             case .wasmStoreGlobal(_):

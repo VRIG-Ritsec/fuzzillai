@@ -1764,7 +1764,7 @@ public struct JSTyper: Analyzer {
                 defaultReturnValueType = type(of: begin.innerOutput(0))
             }
 
-            let returnValueType = state.endSubroutine(
+            let resultType = state.endSubroutine(
                 typeChanges: &typeChanges, defaultReturnValueType: defaultReturnValueType)
 
             // Check if the signature is needed, otherwise, we don't need the return value type.
@@ -1774,14 +1774,23 @@ public struct JSTyper: Analyzer {
                 if let signature = funcType.signature {
                     switch begin.op.opcode {
                     case .beginGeneratorFunction:
+                        let elementType =
+                            resultType.yieldType == .nothing
+                            ? .jsAnything : resultType.yieldType
+                        let inferredType = ILType.createJsGeneratorType(ofYieldType: elementType)
                         setType(
                             of: begin.output,
-                            to: funcType.settingSignature(to: signature.parameters => .jsGenerator))
+                            to: funcType.settingSignature(to: signature.parameters => inferredType))
                     case .beginAsyncGeneratorFunction:
+                        let elementType =
+                            resultType.yieldType == .nothing
+                            ? .jsAnything : resultType.yieldType
+                        let inferredType = ILType.createJsAsyncGeneratorType(
+                            ofYieldType: elementType)
                         setType(
                             of: begin.output,
                             to: funcType.settingSignature(
-                                to: signature.parameters => .jsAsyncGenerator))
+                                to: signature.parameters => inferredType))
                     case .beginAsyncFunction,
                         .beginAsyncArrowFunction:
                         setType(
@@ -1791,7 +1800,7 @@ public struct JSTyper: Analyzer {
                         setType(
                             of: begin.output,
                             to: funcType.settingSignature(
-                                to: signature.parameters => returnValueType))
+                                to: signature.parameters => resultType.returnType))
                     }
                 }
             }
@@ -1806,32 +1815,32 @@ public struct JSTyper: Analyzer {
                     dynamicObjectGroupManager.updateClassStaticMethodSignature(
                         methodName: beginOp.methodName,
                         signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                            => returnValueType)
+                            => resultType.returnType)
                 } else {
                     dynamicObjectGroupManager.updateMethodSignature(
                         methodName: beginOp.methodName,
                         signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                            => returnValueType)
+                            => resultType.returnType)
                 }
             case .endClassGetter(_):
                 assert(begin.op is BeginClassGetter)
                 let beginOp = begin.op as! BeginClassGetter
                 if beginOp.isStatic {
                     dynamicObjectGroupManager.updateClassStaticPropertyType(
-                        propertyName: beginOp.propertyName, type: returnValueType)
+                        propertyName: beginOp.propertyName, type: resultType.returnType)
                 } else {
                     dynamicObjectGroupManager.updatePropertyType(
-                        propertyName: beginOp.propertyName, type: returnValueType)
+                        propertyName: beginOp.propertyName, type: resultType.returnType)
                 }
             case .endClassSetter(_):
                 assert(begin.op is BeginClassSetter)
                 let beginOp = begin.op as! BeginClassSetter
                 if beginOp.isStatic {
                     dynamicObjectGroupManager.updateClassStaticPropertyType(
-                        propertyName: beginOp.propertyName, type: returnValueType)
+                        propertyName: beginOp.propertyName, type: resultType.returnType)
                 } else {
                     dynamicObjectGroupManager.updatePropertyType(
-                        propertyName: beginOp.propertyName, type: returnValueType)
+                        propertyName: beginOp.propertyName, type: resultType.returnType)
                 }
             case .endObjectLiteralMethod(_):
                 assert(begin.op is BeginObjectLiteralMethod)
@@ -1839,17 +1848,17 @@ public struct JSTyper: Analyzer {
                 dynamicObjectGroupManager.updateMethodSignature(
                     methodName: beginOp.methodName,
                     signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                        => returnValueType)
+                        => resultType.returnType)
             case .endObjectLiteralGetter(_):
                 assert(begin.op is BeginObjectLiteralGetter)
                 let beginOp = begin.op as! BeginObjectLiteralGetter
                 dynamicObjectGroupManager.updatePropertyType(
-                    propertyName: beginOp.propertyName, type: returnValueType)
+                    propertyName: beginOp.propertyName, type: resultType.returnType)
             case .endObjectLiteralSetter(_):
                 assert(begin.op is BeginObjectLiteralSetter)
                 let beginOp = begin.op as! BeginObjectLiteralSetter
                 dynamicObjectGroupManager.updatePropertyType(
-                    propertyName: beginOp.propertyName, type: returnValueType)
+                    propertyName: beginOp.propertyName, type: resultType.returnType)
             default:
                 break
             }
@@ -2478,8 +2487,13 @@ public struct JSTyper: Analyzer {
             // TODO if input type is known, set to input type and possibly unwrap the Promise
             set(instr.output, .jsAnything)
 
-        case .yield:
+        case .yield(let op):
+            state.updateYieldValueType(to: op.hasArgument ? type(ofInput: 0) : .undefined)
             set(instr.output, .jsAnything)
+
+        case .yieldEach:
+            let yieldedType = type(ofInput: 0).iterableElementType ?? .jsAnything
+            state.updateYieldValueType(to: yieldedType)
 
         case .eval:
             if instr.hasOneOutput {
@@ -2898,6 +2912,8 @@ public struct JSTyper: Analyzer {
             // states that are not subroutines, as one of their parent states may
             // be a subroutine.
             var returnValueType = ILType.nothing
+            // Holds the current type of the yielded values.
+            var yieldValueType = ILType.nothing
             // Whether all execution paths leading to this state have already returned,
             // in which case the return value type will not be updated again.
             var hasReturned = false
@@ -3010,6 +3026,19 @@ public struct JSTyper: Analyzer {
             activeState.hasReturned = true
         }
 
+        mutating func updateYieldValueType(to t: ILType) {
+            guard states.elementsStartingAtTop().contains(where: { $0.last!.isSubroutineState })
+            else {
+                fatalError(
+                    "Handling a `yield` but neither the active state nor any of its parent states represents a subroutine"
+                )
+            }
+            guard !activeState.hasReturned else {
+                return
+            }
+            activeState.yieldValueType |= t
+        }
+
         /// Start a new group of conditionally executing blocks.
         ///
         /// At runtime, exactly one of the blocks in this group (added via `enterConditionallyExecutingBlock`) will be
@@ -3055,9 +3084,9 @@ public struct JSTyper: Analyzer {
         mutating func endGroupOfConditionallyExecutingBlocks(
             typeChanges: inout [(Variable, ILType)]
         ) {
-            let returnValueType = mergeNewestConditionalBlocks(
+            let result = mergeNewestConditionalBlocks(
                 typeChanges: &typeChanges, defaultReturnValueType: .nothing)
-            assert(returnValueType == nil)
+            assert(result.returnType == nil && result.yieldType == nil)
         }
 
         /// Start a new group of conditionally executing blocks representing a switch construct.
@@ -3122,14 +3151,18 @@ public struct JSTyper: Analyzer {
         /// function body may or may not have been executed, but it additionally computes and returns the inferred type for the subroutine's return value.
         mutating func endSubroutine(
             typeChanges: inout [(Variable, ILType)], defaultReturnValueType: ILType
-        ) -> ILType {
-            guard
-                let returnValueType = mergeNewestConditionalBlocks(
-                    typeChanges: &typeChanges, defaultReturnValueType: defaultReturnValueType)
-            else {
+        ) -> (returnType: ILType, yieldType: ILType) {
+            let types = mergeNewestConditionalBlocks(
+                typeChanges: &typeChanges, defaultReturnValueType: defaultReturnValueType)
+
+            if types.returnType == nil {
                 fatalError("Leaving a subroutine that was never entered")
             }
-            return returnValueType
+            guard let returnValueType = types.returnType, let yieldValueType = types.yieldType
+            else {
+                fatalError("Missing return or yield type for subroutine")
+            }
+            return (returnValueType, yieldValueType)
         }
 
         /// Merge the current conditional block and all its alternative blocks and compute both variable- and return value type changes.
@@ -3138,28 +3171,30 @@ public struct JSTyper: Analyzer {
         /// active state is a subroutine state, this will return the final return value type, otherwise it will return nil.
         private mutating func mergeNewestConditionalBlocks(
             typeChanges: inout [(Variable, ILType)], defaultReturnValueType: ILType
-        ) -> ILType? {
+        ) -> (returnType: ILType?, yieldType: ILType?) {
             let statesToMerge = states.pop()
 
-            let maybeReturnValueType = computeReturnValueType(
+            let types = computeSubroutineTypes(
                 whenMerging: statesToMerge, defaultReturnValueType: defaultReturnValueType)
             let newTypes = computeVariableTypes(whenMerging: statesToMerge)
             makeParentStateTheActiveStateAndUpdateVariableTypes(to: newTypes, &typeChanges)
 
-            return maybeReturnValueType
+            return types
         }
 
-        private func computeReturnValueType(
+        private func computeSubroutineTypes(
             whenMerging states: [State], defaultReturnValueType: ILType
-        ) -> ILType? {
+        ) -> (returnType: ILType?, yieldType: ILType?) {
             assert(states.last === activeState)
 
             // Need to compute how many sibling states have returned and what their overall return value type is.
             var returnedStates = 0
             var returnValueType = ILType.nothing
+            var yieldValueType = ILType.nothing
 
             for state in states {
                 returnValueType |= state.returnValueType
+                yieldValueType |= state.yieldValueType
                 if state.hasReturned {
                     assert(state.returnValueType != .nothing)
                     returnedStates += 1
@@ -3171,14 +3206,18 @@ public struct JSTyper: Analyzer {
             // Otherwise, we may need to merge our return value type with that
             // of our parent state.
             var maybeReturnValue: ILType? = nil
+            var maybeYieldValue: ILType? = nil
             if activeState.isSubroutineState {
                 assert(returnValueType == activeState.returnValueType)
+                assert(yieldValueType == activeState.yieldValueType)
                 if !activeState.hasReturned {
                     returnValueType |= defaultReturnValueType
                 }
                 maybeReturnValue = returnValueType
+                maybeYieldValue = yieldValueType
             } else if !parentState.hasReturned {
                 parentState.returnValueType |= returnValueType
+                parentState.yieldValueType |= yieldValueType
                 if returnedStates == states.count {
                     // All conditional branches have returned, so the parent state
                     // must also have returned now.
@@ -3188,7 +3227,7 @@ public struct JSTyper: Analyzer {
             // None of our sibling states can be a subroutine state as that wouldn't make sense semantically.
             assert(states.dropLast().allSatisfy({ !$0.isSubroutineState }))
 
-            return maybeReturnValue
+            return (maybeReturnValue, maybeYieldValue)
         }
 
         private func computeVariableTypes(whenMerging states: [State]) -> VariableMap<ILType> {

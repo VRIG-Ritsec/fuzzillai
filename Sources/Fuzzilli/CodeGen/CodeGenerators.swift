@@ -3746,7 +3746,6 @@ public let CodeGenerators: [CodeGenerator] = [
             b.yield(disposable)
         }
         let iterator = b.callFunction(genFunc)
-        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .disposable))
     },
 
     CodeGenerator(
@@ -3758,7 +3757,6 @@ public let CodeGenerators: [CodeGenerator] = [
             b.yield(asyncDisposable)
         }
         let iterator = b.callFunction(genFunc)
-        b.setType(ofVariable: iterator, to: .asyncIterable(ofElementType: .asyncDisposable))
     },
 
     CodeGenerator("HomomorphicObjectsGenerator") { b in

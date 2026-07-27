@@ -645,12 +645,41 @@ struct JSTyperTests {
             let g1 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
                 b.yield(b.loadInt(42))
             }
-            #expect(b.type(of: g1).signature?.outputType == .jsGenerator)
+            #expect(
+                b.type(of: g1).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: .integer))
 
             let g2 = b.buildAsyncGeneratorFunction(with: .parameters(n: 0)) { _ in
                 b.yield(b.loadInt(42))
             }
-            #expect(b.type(of: g2).signature?.outputType == .jsAsyncGenerator)
+            #expect(
+                b.type(of: g2).signature?.outputType
+                    == ILType.createJsAsyncGeneratorType(ofYieldType: .integer))
+
+            let g3 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
+                let array = b.createArray(with: [b.loadInt(42)])
+                b.yieldEach(array)
+            }
+            #expect(
+                b.type(of: g3).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: .integer))
+
+            let g4 = b.buildGeneratorFunction(with: .parameters(n: 0)) { _ in
+                b.buildIfElse(
+                    b.loadBool(true),
+                    ifBody: {
+                        b.yield(b.loadInt(1))
+                        b.yield(b.loadString("foo"))
+                    },
+                    elseBody: {
+                        b.yield(b.loadFloat(1.5))
+                    })
+                b.yield(b.loadBool(false))
+            }
+            let expectedYield = ILType.integer | .jsString | .float | .boolean
+            #expect(
+                b.type(of: g4).signature?.outputType
+                    == ILType.createJsGeneratorType(ofYieldType: expectedYield))
 
             let a2 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in }
             #expect(b.type(of: a2).signature?.outputType == .jsPromise)

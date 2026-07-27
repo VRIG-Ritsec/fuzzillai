@@ -1339,14 +1339,23 @@ extension ILType {
         ofGroup: "IteratorConstructor", withProperties: ["prototype"],
         withMethods: ["from", "concat", "zip", "zipKeyed"])
 
-    /// Type of a JavaScript generator object.
-    public static let jsGenerator =
-        ILType.iterable()
-        + ILType.object(ofGroup: "Generator", withMethods: ["next", "return", "throw"])
+    public static func createJsGeneratorType(ofYieldType yieldType: ILType = .jsAnything) -> ILType
+    {
+        return ILType.iterable(ofElementType: yieldType)
+            + ILType.object(ofGroup: "Generator", withMethods: ["next", "return", "throw"])
+    }
 
-    public static let jsAsyncGenerator =
-        ILType.asyncIterable()
-        + ILType.object(ofGroup: "AsyncGenerator", withMethods: ["next", "return", "throw"])
+    /// Type of a JavaScript generator object.
+    public static let jsGenerator = createJsGeneratorType()
+
+    public static func createJsAsyncGeneratorType(ofYieldType yieldType: ILType = .jsAnything)
+        -> ILType
+    {
+        return ILType.asyncIterable(ofElementType: yieldType)
+            + ILType.object(ofGroup: "AsyncGenerator", withMethods: ["next", "return", "throw"])
+    }
+
+    public static let jsAsyncGenerator = createJsAsyncGeneratorType()
 
     /// Type of a JavaScript Promise object.
     public static let jsPromise = ILType.object(

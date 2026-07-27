@@ -1,0 +1,9 @@
+# Wide arithmetics not yet available
+testWideArithmetics()
+# Relaxed atomics binary encoding changed
+testCmpxchgOrdering()
+testRMWOrdering()
+testMemoryOrdering()
+# Emits both wide arithmetics and relaxed atomics
+testWasmCodeGenerationAndCompilation()
+testWasmCodeGenerationAndCompilationAndExecution()

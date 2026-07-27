@@ -154,7 +154,7 @@ struct RuntimeAssistedMutatorTests {
         build: (ProgramBuilder) -> Void,
         expected: String
     ) {
-        let config = Configuration(forDifferentialFuzzing: true)
+        let config = Configuration(logLevel: .error, forDifferentialFuzzing: true)
         let fuzzer = makeMockFuzzer(config: config)
         fuzzer.sync {
             let mutator = ExplorationMutator()
@@ -241,7 +241,7 @@ struct RuntimeAssistedMutatorTests {
         actions: [RuntimeAssistedMutator.Action],
         expected: String
     ) {
-        let config = Configuration(forDifferentialFuzzing: true)
+        let config = Configuration(logLevel: .error, forDifferentialFuzzing: true)
         let fuzzer = makeMockFuzzer(config: config)
         fuzzer.sync {
             let mutator = ExplorationMutator()

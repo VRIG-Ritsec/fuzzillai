@@ -71,7 +71,7 @@ public class Statistics: Module {
         return if let percentage = percentage {
             String(format: "%.2f%%", percentage * 100).leftPadded(toLength: padding)
         } else {
-            "N/A"
+            "N/A".leftPadded(toLength: padding)
         }
     }
 
@@ -333,7 +333,7 @@ public class Statistics: Module {
                             format: "%.2f", stats.avgNumberOfInstructionsGenerated
                         ).leftPadded(toLength: 5)
                         let invocationSuccessRate = Self.percentageOrNa(
-                            stats.invocationSuccessRate, 6)
+                            stats.invocationSuccessRate, 7)
                         let samplesGenerated = stats.totalSamples
                         self.logger.verbose(
                             "    \(namePadded) : Invocation Success: \(invocationSuccessRate), Correctness rate: \(correctnessRate), Interesting sample rate: \(interestingSamplesRate), Timeout rate: \(timeoutRate), Avg. # of instructions added: \(avgInstructionsAdded), Total # of generated samples: \(samplesGenerated)"

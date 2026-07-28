@@ -1319,6 +1319,9 @@ extension ILType {
     /// A type that can be asynchronously disposed.
     public static let asyncDisposable = ILType.object(withSymbolMethods: ["Symbol.asyncDispose"])
 
+    /// A thenable object.
+    public static let thenable = ILType.object(withMethods: ["then"])
+
     /// Type of a JavaScript function's arguments object.
     public static let jsArguments =
         ILType.iterable()

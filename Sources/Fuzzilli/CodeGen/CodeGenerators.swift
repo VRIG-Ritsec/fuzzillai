@@ -1799,7 +1799,7 @@ public let CodeGenerators: [CodeGenerator] = [
             GeneratorStub(
                 "AsyncFunctionEndGenerator",
                 inContext: .single([.javascript, .subroutine, .async]),
-                inputs: .preferred(.object(withMethods: ["then"]))
+                inputs: .preferred(.thenable)
             ) { b, val in
                 b.await(val)
                 b.doReturn(b.randomJsVariable())
@@ -1833,7 +1833,7 @@ public let CodeGenerators: [CodeGenerator] = [
             GeneratorStub(
                 "AsyncArrowFunctionAwaitGenerator",
                 inContext: .single([.javascript, .async]),
-                inputs: .preferred(.object(withMethods: ["then"])),
+                inputs: .preferred(.thenable),
                 provides: [.javascript, .async]
             ) { b, val in
                 b.await(val)
@@ -1875,7 +1875,7 @@ public let CodeGenerators: [CodeGenerator] = [
             GeneratorStub(
                 "AsyncGeneratorFunctionEndGenerator",
                 inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
-                inputs: .preferred(.object(withMethods: ["then"]))
+                inputs: .preferred(.thenable)
             ) { b, val in
                 b.await(val)
                 if probability(0.5) {
@@ -2389,7 +2389,7 @@ public let CodeGenerators: [CodeGenerator] = [
 
     CodeGenerator(
         "AwaitGenerator", inContext: .single(.async),
-        inputs: .preferred(.object(withMethods: ["then"]))
+        inputs: .preferred(.thenable)
     ) {
         b, val in
         b.await(val)

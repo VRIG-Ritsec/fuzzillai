@@ -2114,4 +2114,9 @@ struct TypeSystemTests {
             .wasmMemory(limits: Limits(min: 10)),
             .wasmMemory(limits: Limits(min: 10, max: 20)),
         ] + ILType.allNullableAbstractWasmRefTypes()
+
+    @Test
+    func testPromiseIsThenable() {
+        #expect(ILType.jsPromise.Is(ILType.thenable))
+    }
 }

@@ -85,7 +85,18 @@ When the user asks to add support for a specific JavaScript feature in the FuzzI
   protoc --swift_opt=Visibility=Public --swift_out=. program.proto operations.proto sync.proto ast.proto
   ```
 
-- **USER VERIFICATION**: Tell the user how to run `swift run FuzzILTool --compile /tmp/out.[feature_name].ast.protobuf /tmp/out.[feature_name].program.protobuf` to compile the AST to FuzzIL. Instruct them on using `protoc` to dump the resulting binary FuzzIL files so they can confirm the human readable diff.
+- **USER VERIFICATION**: Tell the user how to run:
+
+```bash
+# 1. Compile the JS files directly to `.fzil` (FuzzILTool will write .fzil next to the source files)
+swift run FuzzILTool --compile Tests/FuzzilliTests/CompilerTests/[feature_name].js`
+swift run FuzzILTool --compile Tests/FuzzilliTests/CompilerTests/[feature_name_diff].js`
+# 2. Decode the generated .fzil files to text protobuf with protoc
+protoc --decode=fuzzilli.protobuf.Program -I=Sources/Fuzzilli/Protobuf Sources/Fuzzilli/Protobuf/program.proto < Tests/FuzzilliTests/CompilerTests/[feature_name].fzil > /tmp/[feature_name].program.txt
+protoc --decode=fuzzilli.protobuf.Program -I=Sources/Fuzzilli/Protobuf Sources/Fuzzilli/Protobuf/program.proto < Tests/FuzzilliTests/CompilerTests/[feature_name_diff].fzil > /tmp/[feature_name_diff].program.txt
+# 3. Diff the decoded FuzzIL protobufs to verify the node structures!
+diff -u /tmp/[feature_name_diff].program.txt /tmp/[feature_name].program.txt
+```
 
 ## Step 5: Lifters (FuzzIL -> "FuzzIL Textual Representation" and FuzzIL -> JS)
 

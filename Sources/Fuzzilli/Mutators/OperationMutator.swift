@@ -1083,10 +1083,9 @@ extension OperationMutator {
     ) -> DestructuringPattern? {
         switch pattern {
         case .array(let arr):
-            // Check flat
-            // TODO(rherouart): Support mutating indices when default values are present.
+            // Non-flat patterns (nested patterns or complex targets) require recursive traversal to correctly adjust variable mapping in `inouts`.
+            // Bail out here to avoid corrupting variable indices.
             for elem in arr.elements {
-                if elem.hasDefaultValue { return nil }
                 switch elem.target {
                 case .flatBinding?, nil: break
                 default: return nil
@@ -1097,40 +1096,86 @@ extension OperationMutator {
             default: return nil
             }
 
-            // TODO(rherouart): Simplify this by directly adding or removing random elisions instead of mapping to and from indices.
-            var indices: [Int64] = []
-            for (idx, elem) in arr.elements.enumerated() {
-                if case .flatBinding = elem.target { indices.append(Int64(idx)) }
-            }
-            if case .flatBinding = arr.restTarget {
-                indices.append((indices.last ?? -1) + 1)
-            }
+            var newElements = arr.elements
 
-            guard let indexToReplace = indices.indices.randomElement() else { return nil }
-            let newValue = Int64.random(in: 0..<10)
-            guard !indices.contains(newValue) else { return nil }
-            indices[indexToReplace] = newValue
+            if !newElements.isEmpty {
+                let mutateIdx = Int.random(in: 0..<newElements.count)
+                let elem = newElements[mutateIdx]
 
-            let sortedIndices = indices.sorted()
-            // TODO(rherouart): Toggle this behind some probability.
-            let lastIsRest = (arr.restTarget == nil)  // Toggle it
+                if isReassign {
+                    // Compute the index in `inouts` corresponding to `mutateIdx`.
+                    // inouts[0] is the source object (input(0)). Each preceding element consumes 1 input if it has a target
+                    // plus 1 input if it has a default value.
+                    var inoutIdx = 1
+                    for i in 0..<mutateIdx {
+                        let e = newElements[i]
+                        if e.target != nil { inoutIdx += 1 }
+                        if e.hasDefaultValue { inoutIdx += 1 }
+                    }
 
-            var elements: [DestructuringPattern.ArrayElement] = []
-            var currentIndex: Int64 = 0
-            for idx in sortedIndices {
-                while currentIndex < idx {
-                    elements.append(.init(target: nil))
-                    currentIndex += 1
+                    if elem.target == nil {
+                        // There is an elision: we replace it with a value
+                        newElements[mutateIdx] = .init(target: .flatBinding)
+                        inouts.insert(b.randomJsVariable(), at: inoutIdx)
+                    } else {
+                        // There is a value: toggle default with 50% chance, OR replace with elision with 50% chance
+                        if probability(0.5) {
+                            // Toggle default value
+                            let currentDefault = elem.hasDefaultValue
+                            newElements[mutateIdx] = .init(
+                                target: elem.target, hasDefaultValue: !currentDefault)
+                            // A default value consumes an extra input variable in the AST, right after targetVariable.
+                            if currentDefault {
+                                inouts.remove(at: inoutIdx + 1)
+                            } else {
+                                inouts.insert(b.randomJsVariable(), at: inoutIdx + 1)
+                            }
+                        } else {
+                            // Replace with elision
+                            newElements[mutateIdx] = .init(target: nil)
+                            inouts.remove(at: inoutIdx)
+                            // If it had a default value, that was mapped to a second variable at the same shifted index.
+                            if elem.hasDefaultValue {
+                                inouts.remove(at: inoutIdx)
+                            }
+                        }
+                    }
+                } else {
+                    // We can ONLY safely shuffle elements around or swap the rest element,
+                    // we cannot change target counts or input counts.
+                    if probability(0.5) && newElements.count > 1 {
+                        var swapIdx = Int.random(in: 0..<newElements.count)
+                        if swapIdx == mutateIdx {
+                            swapIdx = (swapIdx + 1) % newElements.count
+                        }
+                        newElements.swapAt(mutateIdx, swapIdx)
+                    }
                 }
-                if lastIsRest && idx == sortedIndices.last! { break }
-                elements.append(.init(target: .flatBinding))
-                currentIndex += 1
             }
-            assert(!sortedIndices.isEmpty)
-            let restTarget: DestructuringPattern.Target? =
-                lastIsRest ? .flatBinding : .none
 
-            return .array(.init(elements: elements, restTarget: restTarget))
+            // Toggle the rest element with 50% probability
+            var newRestTarget: DestructuringPattern.Target? = arr.restTarget
+            if probability(0.5) {
+                if newRestTarget != nil {
+                    // Toggling OFF: Promote the rest element back into a normal trailing flat binding.
+                    newElements.append(.init(target: newRestTarget))
+                    newRestTarget = nil
+                } else {
+                    // Toggling ON: Promote the very last flat binding in the array to become a rest parameter.
+                    // Trim trailing elisions on a temporary copy and promote the last binding if it has no default value.
+                    var tempElements = newElements
+                    while let last = tempElements.last, last.target == nil {
+                        tempElements.removeLast()
+                    }
+                    if let lastElem = tempElements.last, !lastElem.hasDefaultValue {
+                        newRestTarget = lastElem.target
+                        tempElements.removeLast()
+                        newElements = tempElements
+                    }
+                }
+            }
+
+            return .array(.init(elements: newElements, restTarget: newRestTarget))
 
         case .object(let obj):
             for prop in obj.properties {

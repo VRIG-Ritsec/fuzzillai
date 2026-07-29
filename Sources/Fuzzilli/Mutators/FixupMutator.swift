@@ -207,6 +207,14 @@ public class FixupMutator: RuntimeAssistedMutator {
                     instr, performing: .DeleteProperty, guarded: op.isGuarded,
                     withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
+            // Private properties/methods cannot be dynamically accessed via JS Actions outside class scope.
+            // TODO(rherouart): FixupMutator should be improved to support these
+            case .getPrivateProperty,
+                .setPrivateProperty,
+                .callPrivateMethod,
+                .callPrivateMethodWithSpread:
+                b.append(instr)
+
             default:
                 // At least all guardable operations should be handled by this mutator.
                 assert(

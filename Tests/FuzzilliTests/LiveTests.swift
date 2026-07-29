@@ -216,16 +216,7 @@ struct LiveTests {
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             b.loadInt(123)  // dummy prefix
-
-            guard let metadata = runBinaryenWasmGenerator(b: b) else {
-                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
-                b.throwException(errorMsg)
-                return
-            }
-
-            // The last instruction in our generator was `b.getProperty("exports", of: instance)`.
-            let exports = b.lastInstruction().output
-
+            let (metadata, exports) = runBinaryenWasmGenerator(b: b)
             Self.generateACallToWasmExport(b: b, metadata: metadata, exports: exports)
         }
 
@@ -256,11 +247,7 @@ struct LiveTests {
         let results = try Self.runLiveTest(withRunner: runner, using: fuzzer) { b in
             // Generate program in a separate builder.
             let genBuilder = fuzzer.makeBuilder()
-            guard let metadata = runBinaryenWasmGenerator(b: genBuilder) else {
-                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
-                b.throwException(errorMsg)
-                return
-            }
+            let (metadata, _) = runBinaryenWasmGenerator(b: genBuilder)
             let program = genBuilder.finalize()
 
             // Verify original metadata.

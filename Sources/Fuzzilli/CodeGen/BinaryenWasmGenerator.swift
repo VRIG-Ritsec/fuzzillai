@@ -64,7 +64,7 @@ private func mapBinaryenTypeToILType(_ typeStr: String) -> ILType {
     }
 }
 
-public func runBinaryenWasmGenerator(b: ProgramBuilder) -> WasmModuleMetadata? {
+public func runBinaryenWasmGenerator(b: ProgramBuilder) -> (WasmModuleMetadata, Variable) {
     let extraArguments = [
         "--print-boundary"
     ]
@@ -125,9 +125,8 @@ public func runBinaryenWasmGenerator(b: ProgramBuilder) -> WasmModuleMetadata? {
     let instance = b.rawWasmModule(bytes: [UInt8](wasmBytes), metadata: metadata)
 
     // Emit a getProperty for the exports object to make it easier to use
-    b.getProperty("exports", of: instance)
-
-    return metadata
+    let exports = b.getProperty("exports", of: instance)
+    return (metadata, exports)
 }
 
 public let BinaryenWasmGenerator = CodeGenerator(
@@ -135,4 +134,18 @@ public let BinaryenWasmGenerator = CodeGenerator(
     inContext: .single(.javascript)
 ) { b in
     _ = runBinaryenWasmGenerator(b: b)
+}
+
+public let BinaryenWasmFuzzer = ProgramTemplate("BinaryenWasmTemplate") { b in
+    b.buildPrefix()
+    b.build(n: 10)
+
+    let (metadata, exports) = runBinaryenWasmGenerator(b: b)
+    // Emit an "eager" call, so this template provides some quick coverage gains.
+    if let randomWasmFunction = metadata.functions.randomElement() {
+        let args = b.randomArguments(forCallingMethod: randomWasmFunction.name, on: exports)
+        b.callMethod(randomWasmFunction.name, on: exports, withArgs: args)
+    }
+    // Emit random JS code that might also interact with the Wasm exports object.
+    b.build(n: 30)
 }

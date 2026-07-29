@@ -558,6 +558,10 @@ func makeFuzzer(with configuration: Configuration) -> Fuzzer {
         programTemplates.append(template, withWeight: weight)
     }
 
+    if wasmOptPath != nil {
+        programTemplates.append(BinaryenWasmFuzzer, withWeight: 2)
+    }
+
     // Filter out ProgramTemplates that will use Wasm if we have not enabled it.
     if !enableWasm {
         programTemplates = programTemplates.filter {

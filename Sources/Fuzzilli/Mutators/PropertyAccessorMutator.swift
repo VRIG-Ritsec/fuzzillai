@@ -55,6 +55,14 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
         }
     }
 
+    // 50% for getter & setter, 25% chance for only one of them each.
+    private func chooseDefineGetterSetter() -> (getter: Bool, setter: Bool) {
+        let defineBoth = probability(0.5)
+        let defineGetter = defineBoth || probability(0.5)
+        let defineSetter = defineBoth || !defineGetter
+        return (defineGetter, defineSetter)
+    }
+
     public override func mutate(_ instr: Instruction, _ b: ProgramBuilder) {
         switch instr.op.opcode {
         case .objectLiteralAddProperty(let op):
@@ -85,19 +93,32 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
             let object = adoptedInputs[0]
             let value = adoptedInputs[1]
 
+            let (defineGetter, defineSetter) = chooseDefineGetterSetter()
+
             // Build getter function which performs side-effects and returns the original input value.
-            let getter = b.buildPlainFunction(with: .parameters(n: 0)) { _ in
-                b.build(n: Self.budgetPerAccessor, by: .generating)
-                b.doReturn(value)
-            }
+            let getter =
+                defineGetter
+                ? b.buildPlainFunction(with: .parameters(n: 0)) { _ in
+                    b.build(n: Self.budgetPerAccessor, by: .generating)
+                    b.doReturn(value)
+                } : nil
 
             // Build setter function which performs side-effects.
-            let setter = b.buildPlainFunction(with: .parameters(n: 1)) { _ in
-                b.build(n: Self.budgetPerAccessor, by: .generating)
-            }
+            let setter =
+                defineSetter
+                ? b.buildPlainFunction(with: .parameters(n: 1)) { _ in
+                    b.build(n: Self.budgetPerAccessor, by: .generating)
+                } : nil
 
             let flags = PropertyFlags.randomWithoutWritable()
-            let config = ProgramBuilder.PropertyConfiguration.getterSetter(getter, setter)
+            let config: ProgramBuilder.PropertyConfiguration =
+                if let getter, let setter {
+                    .getterSetter(getter, setter)
+                } else if let getter {
+                    .getter(getter)
+                } else {
+                    .setter(setter!)
+                }
 
             switch target {
             case .property(let name):
@@ -111,30 +132,34 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
     private func mutateObjectLiteralProperty(
         _ propertyName: String, to value: Variable, using b: ProgramBuilder
     ) {
-        // Build object literal getter block.
-        b.emit(BeginObjectLiteralGetter(propertyName: propertyName))
-        b.build(n: Self.budgetPerAccessor, by: .generating)
-        b.doReturn(value)
-        b.emit(EndObjectLiteralGetter())
-
-        // Build object literal setter block.
-        b.emit(BeginObjectLiteralSetter(propertyName: propertyName))
-        b.build(n: Self.budgetPerAccessor, by: .generating)
-        b.emit(EndObjectLiteralSetter())
+        let (defineGetter, defineSetter) = chooseDefineGetterSetter()
+        if defineGetter {
+            b.emit(BeginObjectLiteralGetter(propertyName: propertyName))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.doReturn(value)
+            b.emit(EndObjectLiteralGetter())
+        }
+        if defineSetter {
+            b.emit(BeginObjectLiteralSetter(propertyName: propertyName))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.emit(EndObjectLiteralSetter())
+        }
     }
 
     private func mutateClassProperty(
         _ propertyName: String, to value: Variable?, isStatic: Bool, using b: ProgramBuilder
     ) {
-        // Build class getter block.
-        b.emit(BeginClassGetter(propertyName: propertyName, isStatic: isStatic))
-        b.build(n: Self.budgetPerAccessor, by: .generating)
-        b.doReturn(value ?? b.loadUndefined())
-        b.emit(EndClassGetter())
-
-        // Build class setter block.
-        b.emit(BeginClassSetter(propertyName: propertyName, isStatic: isStatic))
-        b.build(n: Self.budgetPerAccessor, by: .generating)
-        b.emit(EndClassSetter())
+        let (defineGetter, defineSetter) = chooseDefineGetterSetter()
+        if defineGetter {
+            b.emit(BeginClassGetter(propertyName: propertyName, isStatic: isStatic))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.doReturn(value ?? b.loadUndefined())
+            b.emit(EndClassGetter())
+        }
+        if defineSetter {
+            b.emit(BeginClassSetter(propertyName: propertyName, isStatic: isStatic))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.emit(EndClassSetter())
+        }
     }
 }

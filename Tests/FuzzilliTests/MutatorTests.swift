@@ -603,10 +603,14 @@ struct MutatorTests {
                 #expect(
                     mutatedProg.code.contains { instr in
                         if case .configureProperty(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && op.type == .getterSetter
+                            return op.propertyName == "foo"
+                                && (op.type == .getter || op.type == .setter
+                                    || op.type == .getterSetter)
                         }
                         return false
-                    }, "Missing ConfigureProperty operation for 'foo' with getterSetter type")
+                    },
+                    "Missing ConfigureProperty operation for 'foo' with getter, setter, or getterSetter type"
+                )
             }
         ),
         PropertyAccessorTestCase(
@@ -620,10 +624,14 @@ struct MutatorTests {
                 #expect(
                     mutatedProg.code.contains { instr in
                         if case .configureElement(let op) = instr.op.opcode {
-                            return op.index == 5 && op.type == .getterSetter
+                            return op.index == 5
+                                && (op.type == .getter || op.type == .setter
+                                    || op.type == .getterSetter)
                         }
                         return false
-                    }, "Missing ConfigureElement operation for index 5 with getterSetter type")
+                    },
+                    "Missing ConfigureElement operation for index 5 with getter, setter, or getterSetter type"
+                )
             }
         ),
         PropertyAccessorTestCase(
@@ -635,21 +643,22 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo"
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo"
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo"
-                        }
-                        return false
-                    }, "Missing BeginObjectLiteralGetter operation for 'foo'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo"
-                        }
-                        return false
-                    }, "Missing BeginObjectLiteralSetter operation for 'foo'")
+                    hasGetter || hasSetter,
+                    "Missing BeginObjectLiteralGetter or BeginObjectLiteralSetter operation for 'foo'"
+                )
             }
         ),
         PropertyAccessorTestCase(
@@ -661,21 +670,22 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "9"
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "9"
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "9"
-                        }
-                        return false
-                    }, "Missing BeginObjectLiteralGetter operation for '9'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginObjectLiteralSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "9"
-                        }
-                        return false
-                    }, "Missing BeginObjectLiteralSetter operation for '9'")
+                    hasGetter || hasSetter,
+                    "Missing BeginObjectLiteralGetter or BeginObjectLiteralSetter operation for '9'"
+                )
             }
         ),
         PropertyAccessorTestCase(
@@ -687,21 +697,21 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && !op.isStatic
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginClassSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && !op.isStatic
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassGetter operation for 'foo'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassSetter operation for 'foo'")
+                    hasGetter || hasSetter,
+                    "Missing BeginClassGetter or BeginClassSetter operation for 'foo'")
             }
         ),
         PropertyAccessorTestCase(
@@ -713,21 +723,21 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "9" && !op.isStatic
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginClassSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "9" && !op.isStatic
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "9" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassGetter operation for '9'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "9" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassSetter operation for '9'")
+                    hasGetter || hasSetter,
+                    "Missing BeginClassGetter or BeginClassSetter operation for '9'")
             }
         ),
         PropertyAccessorTestCase(
@@ -739,21 +749,21 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && op.isStatic
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginClassSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && op.isStatic
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && op.isStatic
-                        }
-                        return false
-                    }, "Missing static BeginClassGetter operation for 'foo'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && op.isStatic
-                        }
-                        return false
-                    }, "Missing static BeginClassSetter operation for 'foo'")
+                    hasGetter || hasSetter,
+                    "Missing static BeginClassGetter or BeginClassSetter operation for 'foo'")
             }
         ),
         PropertyAccessorTestCase(
@@ -764,21 +774,21 @@ struct MutatorTests {
                 }
             },
             verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && !op.isStatic
+                    }
+                    return false
+                }
+                let hasSetter = mutatedProg.code.contains { instr in
+                    if case .beginClassSetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && !op.isStatic
+                    }
+                    return false
+                }
                 #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassGetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassGetter operation for 'foo'")
-
-                #expect(
-                    mutatedProg.code.contains { instr in
-                        if case .beginClassSetter(let op) = instr.op.opcode {
-                            return op.propertyName == "foo" && !op.isStatic
-                        }
-                        return false
-                    }, "Missing BeginClassSetter operation for 'foo'")
+                    hasGetter || hasSetter,
+                    "Missing BeginClassGetter or BeginClassSetter operation for 'foo'")
             }
         ),
     ]

@@ -5028,9 +5028,8 @@ public class ProgramBuilder {
 
         @discardableResult
         public func wasmLoadGlobal(globalVariable: Variable) -> Variable {
-            let type = b.type(of: globalVariable).wasmGlobalType!.valueType
             return b.emit(
-                WasmLoadGlobal(globalType: type), withInputs: [globalVariable],
+                WasmLoadGlobal(), withInputs: [globalVariable],
                 types: [ILType.object(ofGroup: "WasmGlobal")]
             ).output
         }
@@ -5043,7 +5042,7 @@ public class ProgramBuilder {
                     withWasmType: WasmGlobalType(valueType: type, isMutable: true)), type,
             ]
             b.emit(
-                WasmStoreGlobal(globalType: type), withInputs: [globalVariable, value],
+                WasmStoreGlobal(), withInputs: [globalVariable, value],
                 types: inputTypes)
         }
 

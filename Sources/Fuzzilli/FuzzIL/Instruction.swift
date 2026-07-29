@@ -1517,14 +1517,10 @@ extension Instruction: ProtobufConvertible {
                 $0.wasmDefineDataSegment = Fuzzilli_Protobuf_WasmDefineDataSegment.with {
                     $0.segment = Data(op.segment)
                 }
-            case .wasmLoadGlobal(let op):
-                $0.wasmLoadGlobal = Fuzzilli_Protobuf_WasmLoadGlobal.with {
-                    $0.globalType = ILTypeToWasmTypeEnum(op.globalType)
-                }
-            case .wasmStoreGlobal(let op):
-                $0.wasmStoreGlobal = Fuzzilli_Protobuf_WasmStoreGlobal.with {
-                    $0.globalType = ILTypeToWasmTypeEnum(op.globalType)
-                }
+            case .wasmLoadGlobal(_):
+                $0.wasmLoadGlobal = Fuzzilli_Protobuf_WasmLoadGlobal()
+            case .wasmStoreGlobal(_):
+                $0.wasmStoreGlobal = Fuzzilli_Protobuf_WasmStoreGlobal()
             case .wasmTableGet(let op):
                 $0.wasmTableGet = Fuzzilli_Protobuf_WasmTableGet.with {
                     $0.elementType = ILTypeToWasmTypeEnum(op.elementType)
@@ -2863,10 +2859,10 @@ extension Instruction: ProtobufConvertible {
                 isShared: p.wasmMemory.isShared, isMemory64: p.wasmMemory.isMemory64)
         case .wasmDefineDataSegment(let p):
             op = WasmDefineDataSegment(segment: [UInt8](p.segment))
-        case .wasmLoadGlobal(let p):
-            op = WasmLoadGlobal(globalType: WasmTypeEnumToILType(p.globalType))
-        case .wasmStoreGlobal(let p):
-            op = WasmStoreGlobal(globalType: WasmTypeEnumToILType(p.globalType))
+        case .wasmLoadGlobal(_):
+            op = WasmLoadGlobal()
+        case .wasmStoreGlobal(_):
+            op = WasmStoreGlobal()
         case .wasmTableGet(let p):
             op = WasmTableGet(elementType: WasmTypeEnumToILType(p.elementType))
         case .wasmTableSet(_):

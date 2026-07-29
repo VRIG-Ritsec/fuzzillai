@@ -5105,20 +5105,9 @@ public struct Fuzzilli_Protobuf_WasmLoadGlobal: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var globalType: Fuzzilli_Protobuf_WasmILType {
-    get {_globalType ?? Fuzzilli_Protobuf_WasmILType()}
-    set {_globalType = newValue}
-  }
-  /// Returns true if `globalType` has been explicitly set.
-  public var hasGlobalType: Bool {self._globalType != nil}
-  /// Clears the value of `globalType`. Subsequent reads from it will return its default value.
-  public mutating func clearGlobalType() {self._globalType = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _globalType: Fuzzilli_Protobuf_WasmILType? = nil
 }
 
 public struct Fuzzilli_Protobuf_WasmStoreGlobal: Sendable {
@@ -5126,20 +5115,9 @@ public struct Fuzzilli_Protobuf_WasmStoreGlobal: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var globalType: Fuzzilli_Protobuf_WasmILType {
-    get {_globalType ?? Fuzzilli_Protobuf_WasmILType()}
-    set {_globalType = newValue}
-  }
-  /// Returns true if `globalType` has been explicitly set.
-  public var hasGlobalType: Bool {self._globalType != nil}
-  /// Clears the value of `globalType`. Subsequent reads from it will return its default value.
-  public mutating func clearGlobalType() {self._globalType = nil}
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
-
-  fileprivate var _globalType: Fuzzilli_Protobuf_WasmILType? = nil
 }
 
 public struct Fuzzilli_Protobuf_WasmTableGet: Sendable {
@@ -14141,33 +14119,18 @@ extension Fuzzilli_Protobuf_WasmDefineMemory: SwiftProtobuf.Message, SwiftProtob
 
 extension Fuzzilli_Protobuf_WasmLoadGlobal: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmLoadGlobal"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}globalType\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._globalType) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._globalType {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmLoadGlobal, rhs: Fuzzilli_Protobuf_WasmLoadGlobal) -> Bool {
-    if lhs._globalType != rhs._globalType {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -14175,33 +14138,18 @@ extension Fuzzilli_Protobuf_WasmLoadGlobal: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_WasmStoreGlobal: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmStoreGlobal"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}globalType\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._globalType) }()
-      default: break
-      }
-    }
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._globalType {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_WasmStoreGlobal, rhs: Fuzzilli_Protobuf_WasmStoreGlobal) -> Bool {
-    if lhs._globalType != rhs._globalType {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

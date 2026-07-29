@@ -20,14 +20,6 @@ struct GenericInstructionReducer: Reducer {
                 continue
             }
 
-            // TODO(bettscheider): Don't skip once we fix this properly.
-            // Do not remove index-typed global definitions as they are implicitly
-            // exported and possibly used outside the Wasm module.
-            // Removing them could lead to dangling unowned references.
-            if let op = instr.op as? WasmDefineGlobal, case .indexRef = op.wasmGlobal {
-                continue
-            }
-
             helper.tryNopping(instructionAt: instr.index)
         }
     }

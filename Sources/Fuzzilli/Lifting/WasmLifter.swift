@@ -1711,6 +1711,13 @@ public class WasmLifter {
         }
 
         for instr in self.instructionBuffer {
+            // If a variable is error typed, we cannot safely lift the module, and stop instead.
+            // This can happen, for example, because data flow is not tracked for Wasm globals
+            // across the Wasm <-> JS boundary.
+            if instr.inouts.contains(where: { typer.type(of: $0) == .error }) {
+                throw CompileError.missingTypeInformation
+            }
+
             if let loadStringOp = instr.op as? WasmStringConstant {
                 if !importedStringConstants.contains(loadStringOp.value) {
                     importedStringConstants.append(loadStringOp.value)

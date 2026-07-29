@@ -814,526 +814,12 @@ public struct JSTyper: Analyzer {
         // the instructions here such that we can set the type of the module at
         // the end. Figure out how we can set the correct type at the end?
         if instr.op is WasmOperation {
-            switch instr.op.opcode {
-            case .consti64(_):
-                setType(of: instr.output, to: .wasmi64)
-            case .consti32(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .constf64(_):
-                setType(of: instr.output, to: .wasmf64)
-            case .constf32(_):
-                setType(of: instr.output, to: .wasmf32)
-            case .wasmi32CompareOp(_),
-                .wasmi64CompareOp(_),
-                .wasmf32CompareOp(_),
-                .wasmf64CompareOp(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmi32EqualZero(_),
-                .wasmi64EqualZero(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmJSStringFromCharCodeArray(_),
-                .wasmJSStringFromCharCode(_),
-                .wasmJSStringFromCodePoint(_),
-                .wasmJSStringCast(_),
-                .wasmJSStringConcat(_),
-                .wasmJSStringSubstring(_),
-                .wasmStringConstant(_):
-                setType(of: instr.output, to: .wasmRefJSString())
-            case .wasmi32BinOp(_),
-                .wasmi32UnOp(_),
-                .wasmWrapi64Toi32(_),
-                .wasmJSStringLength(_),
-                .wasmJSStringCharCodeAt(_),
-                .wasmJSStringCodePointAt(_),
-                .wasmJSStringIntoCharCodeArray(_),
-                .wasmJSStringTest(_),
-                .wasmJSStringEquals(_),
-                .wasmJSStringCompare(_),
-                .wasmTruncatef32Toi32(_),
-                .wasmTruncatef64Toi32(_),
-                .wasmReinterpretf32Asi32(_),
-                .wasmSignExtend8Intoi32(_),
-                .wasmSignExtend16Intoi32(_),
-                .wasmTruncateSatf32Toi32(_),
-                .wasmTruncateSatf64Toi32(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmi64BinOp(_),
-                .wasmi64UnOp(_),
-                .wasmExtendi32Toi64(_),
-                .wasmTruncatef32Toi64(_),
-                .wasmTruncatef64Toi64(_),
-                .wasmReinterpretf64Asi64(_),
-                .wasmSignExtend8Intoi64(_),
-                .wasmSignExtend16Intoi64(_),
-                .wasmSignExtend32Intoi64(_),
-                .wasmTruncateSatf32Toi64(_),
-                .wasmTruncateSatf64Toi64(_):
-                setType(of: instr.output, to: .wasmi64)
-            case .wasmi64WideBinOp(_),
-                .wasmi64WideMulOp(_):
-                assert(instr.numOutputs == 2)
-                for output in instr.outputs {
-                    setType(of: output, to: .wasmi64)
+            if instr.inputs.contains(where: { type(of: $0) == .error }) {
+                for output in instr.allOutputs {
+                    setType(of: output, to: .error)
                 }
-            case .wasmf32BinOp(_),
-                .wasmf32UnOp(_),
-                .wasmConverti32Tof32(_),
-                .wasmConverti64Tof32(_),
-                .wasmDemotef64Tof32(_),
-                .wasmReinterpreti32Asf32(_):
-                setType(of: instr.output, to: .wasmf32)
-            case .wasmf64BinOp(_),
-                .wasmf64UnOp(_),
-                .wasmConverti32Tof64(_),
-                .wasmConverti64Tof64(_),
-                .wasmPromotef32Tof64(_),
-                .wasmReinterpreti64Asf64(_):
-                setType(of: instr.output, to: .wasmf64)
-            case .constSimd128(_),
-                .wasmSimd128Compare(_),
-                .wasmSimd128IntegerBinOp(_),
-                .wasmSimd128IntegerTernaryOp(_),
-                .wasmSimd128FloatUnOp(_),
-                .wasmSimd128FloatBinOp(_),
-                .wasmSimd128FloatTernaryOp(_),
-                .wasmSimdSplat(_),
-                .wasmSimdLoad(_),
-                .wasmSimdLoadLane(_),
-                .wasmSimdReplaceLane(_):
-                setType(of: instr.output, to: .wasmSimd128)
-            case .wasmSimd128IntegerUnOp(let op):
-                var outputType: ILType = .wasmSimd128
-                switch op.unOpKind {
-                case .all_true, .bitmask:
-                    // Tests and bitmasks produce a boolean i32 result
-                    outputType = .wasmi32
-                default:
-                    break
-                }
-                setType(of: instr.output, to: outputType)
-            case .wasmSimdExtractLane(let op):
-                setType(of: instr.output, to: op.kind.laneType())
-            case .wasmDefineGlobal(let op):
-                let valueType: ILType
-                if case .indexRef = op.wasmGlobal {
-                    valueType = type(of: instr.input(0)).wasmTypeDefinition!.getReferenceTypeTo(
-                        nullability: true)
-                } else {
-                    valueType = op.wasmGlobal.toType()
-                }
-                let type = ILType.object(
-                    ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"],
-                    withWasmType: WasmGlobalType(
-                        valueType: valueType, isMutable: op.isMutable))
-                dynamicObjectGroupManager.addWasmGlobal(
-                    withType: type, forDefinition: instr, forVariable: instr.output)
-                setType(of: instr.output, to: type)
-            case .wasmDefineTable(let op):
-                let knownSignatures = instr.inputs.enumerated().filter { $0.offset % 2 == 1 }.map {
-                    type(of: $0.element)
-                }
-                setType(
-                    of: instr.output,
-                    to: .wasmTable(
-                        wasmTableType: WasmTableType(
-                            elementType: op.elementType, limits: op.limits, isTable64: op.isTable64,
-                            knownEntrySignatures: knownSignatures)))
-                dynamicObjectGroupManager.addWasmTable(
-                    withType: type(of: instr.output), forDefinition: instr,
-                    forVariable: instr.output)
-                // Also re-export all functions that we now import through the activeElementSection
-                var i = 0
-                while i < instr.inputs.count {
-                    let fct = instr.input(i)
-                    let definingInstruction = defUseAnalyzer.definition(of: fct)
-                    let signature = type(of: instr.input(i + 1)).wasmFunctionSignatureDefSignature
-                    // TODO(cffsmith): Once we change the way we track signatures, we should also store the JS Signature here if we have one. The table might contain JS functions but we lose that signature in the entries. Which is why we convert back into JS Signatures here.
-                    let jsSignature = ProgramBuilder.convertWasmSignatureToJsSignature(signature)
-                    dynamicObjectGroupManager.addWasmFunction(
-                        withSignature: jsSignature, forDefinition: definingInstruction,
-                        forVariable: fct)
-                    i += 2
-                }
-            case .wasmDefineElementSegment(let op):
-                setType(of: instr.output, to: .wasmElementSegment(segmentLength: Int(op.size)))
-            case .wasmDropElementSegment(_):
-                type(of: instr.input(0)).wasmElementSegmentType!.markAsDropped()
-            case .wasmTableInit(_),
-                .wasmTableCopy(_):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmTable(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-            // Ignore changed function signatures - it is too hard to reason about them statically.
-            case .wasmDefineMemory(let op):
-                setType(of: instr.output, to: op.wasmMemory)
-                registerWasmMemoryUse(for: instr.output)
-            case .wasmDefineDataSegment(let op):
-                setType(of: instr.output, to: .wasmDataSegment(segmentLength: op.segment.count))
-            case .wasmDropDataSegment(_):
-                type(of: instr.input(0)).wasmDataSegmentType!.markAsDropped()
-            case .wasmDefineTag(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                setType(
-                    of: instr.output,
-                    to: .object(
-                        ofGroup: "WasmTag", withWasmType: WasmTagType(signature.parameterTypes)))
-                dynamicObjectGroupManager.addWasmTag(
-                    withType: type(of: instr.output), forDefinition: instr,
-                    forVariable: instr.output)
-            case .wasmThrow(_):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmTag(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-            case .wasmLoadGlobal(let op):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                let globalVarType = type(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmGlobal(
-                    withType: globalVarType, forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-                if let wasmGlobalType = globalVarType.wasmGlobalType {
-                    setType(of: instr.output, to: wasmGlobalType.valueType)
-                } else {
-                    // TODO(bettscheider): Remove once we fix this properly.
-                    if case .Index = op.globalType.wasmReferenceType?.kind {
-                        fatalError(
-                            "We don't track usages of exported globals across Wasm modules. The definition was probably removed by a minimizer."
-                        )
-                    }
-                    setType(of: instr.output, to: op.globalType)
-                }
-            case .wasmStoreGlobal(_):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmGlobal(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-            case .wasmTableGet(let op):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                let tableType = type(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmTable(
-                    withType: tableType, forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-                setType(of: instr.output, to: op.elementType)
-            case .wasmTableSet(_):
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmTable(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-            case .wasmTableSize(_),
-                .wasmTableGrow(_):
-                let isTable64 = type(of: instr.input(0)).wasmTableType?.isTable64 ?? false
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
-                dynamicObjectGroupManager.addWasmTable(
-                    withType: type(of: instr.input(0)), forDefinition: definingInstruction,
-                    forVariable: instr.input(0))
-                setType(of: instr.output, to: isTable64 ? .wasmi64 : .wasmi32)
-            case .wasmMemoryStore(_):
-                registerWasmMemoryUse(for: instr.input(0))
-            case .wasmMemoryLoad(let op):
-                registerWasmMemoryUse(for: instr.input(0))
-                setType(of: instr.output, to: op.loadType.numberType())
-            case .wasmAtomicLoad(let op):
-                registerWasmMemoryUse(for: instr.input(0))
-                setType(of: instr.output, to: op.loadType.numberType())
-            case .wasmAtomicStore(_):
-                registerWasmMemoryUse(for: instr.input(0))
-            case .wasmAtomicRMW(let op):
-                registerWasmMemoryUse(for: instr.input(0))
-                setType(of: instr.output, to: op.op.type())
-            case .wasmAtomicCmpxchg(let op):
-                registerWasmMemoryUse(for: instr.input(0))
-                setType(of: instr.output, to: op.op.type())
-            case .wasmMemorySize(_),
-                .wasmMemoryGrow(_):
-                let isMemory64 = type(of: instr.input(0)).wasmMemoryType?.isMemory64 ?? false
-                registerWasmMemoryUse(for: instr.input(0))
-                setType(of: instr.output, to: isMemory64 ? .wasmi64 : .wasmi32)
-            case .wasmJsCall(_):
-                let wasmSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                let sigOutputTypes = wasmSignature.outputTypes
-                assert(sigOutputTypes.count < 2, "multi-return js calls are not supported")
-                if !sigOutputTypes.isEmpty {
-                    setType(of: instr.output, to: sigOutputTypes[0])
-                }
-                let definingInstruction = defUseAnalyzer.definition(of: instr.input(1))
-                // Here we query the typer for the signature of the instruction as that is the correct "JS" Signature instead of taking the call-site specific converted wasm signature.
-                dynamicObjectGroupManager.addWasmFunction(
-                    withSignature: type(of: instr.input(1)).signature
-                        ?? Signature.forUnknownFunction, forDefinition: definingInstruction,
-                    forVariable: instr.input(1))
-            case .beginWasmFunction(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, signature)
-            case .endWasmFunction(_):
-                let signatureType = type(of: instr.input(0))
-                let signature = signatureType.wasmFunctionSignatureDefSignature
-                setType(of: instr.output, to: .wasmFunctionDef(signatureType))
-                dynamicObjectGroupManager.addWasmFunction(
-                    withSignature: ProgramBuilder.convertWasmSignatureToJsSignature(signature),
-                    forDefinition: instr, forVariable: instr.output)
-            case .wasmSelect(_):
-                setType(of: instr.output, to: type(of: instr.input(0)))
-            case .wasmBeginBlock(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, signature)
-            case .wasmEndBlock(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, signature.outputTypes)
-            case .wasmBeginIf(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, signature)
-            case .wasmBeginElse(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                // The else block is both end and begin block.
-                wasmTypeEndBlock(instr, signature.outputTypes)
-                wasmTypeBeginBlock(instr, signature)
-            case .wasmEndIf(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, signature.outputTypes)
-            case .wasmBeginLoop(_):
-                // Note that different to all other blocks the loop's label parameters are the input types
-                // of the block, not the result types (because a branch to a loop label jumps to the
-                // beginning of the loop block instead of the end.)
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                setType(of: instr.innerOutputs.first!, to: .wasmLabel(signature.parameterTypes))
-                for (innerOutput, paramType) in zip(
-                    instr.innerOutputs.dropFirst(), signature.parameterTypes)
-                {
-                    setType(of: innerOutput, to: paramType)
-                }
-            case .wasmEndLoop(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, signature.outputTypes)
-            case .wasmBeginTryTable(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, signature)
-                instr.inputs.forEach { input in
-                    if type(of: input).isWasmTagType {
-                        let definingInstruction = defUseAnalyzer.definition(of: input)
-                        dynamicObjectGroupManager.addWasmTag(
-                            withType: type(of: input), forDefinition: definingInstruction,
-                            forVariable: input)
-                    }
-                }
-            case .wasmEndTryTable(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, signature.outputTypes)
-            case .wasmBeginTry(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, signature)
-            case .wasmBeginCatchAll(_):
-                let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                setType(of: instr.innerOutputs.first!, to: .wasmLabel(signature.outputTypes))
-            case .wasmBeginCatch(_):
-                let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                // Type the label (used for branch instructions).
-                setType(of: instr.innerOutput(0), to: .wasmLabel(blockSignature.outputTypes))
-                // Register the tag (Wasm exception) in the dynamicObjectGroupManager as being used
-                // by this Wasm module.
-                let tag = instr.input(1)
-                let definingInstruction = defUseAnalyzer.definition(of: tag)
-                dynamicObjectGroupManager.addWasmTag(
-                    withType: type(of: tag),
-                    forDefinition: definingInstruction, forVariable: tag)
-                // The second inner output is the exception label which is used for rethrowing the
-                // exception with the legacy exception handling proposal. (This is similar to the
-                // exnref in the standard exception handling spec.)
-                setType(of: instr.innerOutput(1), to: .wasmExceptionLabel)
-                // Type the tag parameters based on the tag's signature definition.
-                // This guarantees that the inner outputs are properly typed, even if a mutator
-                // changed the tag variable to something that's not typed as a Wasm tag anymore.
-                let tagSignature = type(of: instr.input(2)).wasmFunctionSignatureDefSignature
-                for (innerOutput, paramType) in zip(
-                    instr.innerOutputs.dropFirst(2), tagSignature.parameterTypes)
-                {
-                    setType(of: innerOutput, to: paramType)
-                }
-                for (output, outputType) in zip(instr.outputs, blockSignature.outputTypes) {
-                    setType(of: output, to: outputType)
-                }
-            case .wasmEndTry(_):
-                let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, blockSignature.outputTypes)
-            case .wasmBeginTryDelegate(_):
-                let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeBeginBlock(instr, blockSignature)
-            case .wasmEndTryDelegate(_):
-                let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
-                wasmTypeEndBlock(instr, blockSignature.outputTypes)
-            case .wasmCallDirect(_):
-                let signature = type(of: instr.input(0)).wasmFunctionDefSignature!
-                for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
-                    setType(of: output, to: outputType)
-                }
-            // We don't need to update the DynamicObjectGroupManager, as all functions that can be called here are .wasmFunctionDef types, this means we have already added them when we saw the EndWasmFunction instruction.
-            case .wasmCallIndirect(_):
-                let signature = type(of: instr.input(1)).wasmFunctionSignatureDefSignature
-                for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
-                    setType(of: output, to: outputType)
-                }
-            case .wasmCallRef(_):
-                let functionRef = instr.inputs.last!
-                let typeDesc = getTypeDescription(of: functionRef) as! WasmSignatureTypeDescription
-                let signature = typeDesc.signature
-                for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
-                    setType(of: output, to: outputType)
-                }
-            // Functions that can be called through a table are also already added by the wasmDefineTable instruction.
-            // No need to analyze this and add them to the DynamicObjectGroupManager.
-            case .wasmArrayNewFixed(_),
-                .wasmArrayNewDefault(_):
-                setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
-            case .wasmArrayLen(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmArrayGet(_):
-                let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmArrayTypeDescription
-                setType(of: instr.output, to: typeDesc.elementType.unpacked())
-            case .wasmArraySet(_):
-                break
-            case .wasmStructNew(_),
-                .wasmStructNewDefault(_):
-                setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
-            case .wasmStructGet(let op):
-                let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmStructTypeDescription
-                setType(of: instr.output, to: typeDesc.fields[op.fieldIndex].type.unpacked())
-            case .wasmStructSet(_):
-                break
-            case .wasmRefNull(let op):
-                if instr.hasInputs {
-                    setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: true)
-                } else {
-                    setType(of: instr.output, to: op.type!)
-                }
-            case .wasmRefIsNull(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmRefAsNonNull(_):
-                // The result type is the non-nullable variant of the input type. (If the input type
-                // is already non-nullable, the instruction doesn't do anything and the type does
-                // not change.)
-                let inputRefType = type(of: instr.input(0)).wasmReferenceType!
-                setType(of: instr.output, to: .wasmRef(inputRefType.kind, nullability: false))
-            case .wasmRefFunc(_):
-                if let signatureType = type(of: instr.input(0)).wasmFunctionDef?.signatureType,
-                    let refType = signatureType.wasmTypeDefinition?.getReferenceTypeTo(
-                        nullability: false)
-                {
-                    setType(of: instr.output, to: refType)
-                } else {
-                    fatalError("Function passed to ref.func lacks a concrete signature definition")
-                }
-            case .wasmRefEq(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmRefI31(let op):
-                setType(of: instr.output, to: .wasmRefI31(shared: op.isShared))
-            case .wasmI31Get(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmRefTest(_):
-                setType(of: instr.output, to: .wasmi32)
-            case .wasmRefCast(let op):
-                if op.type.requiredInputCount() == 1 {
-                    let nullable = op.type.wasmReferenceType!.nullability
-                    setReferenceType(
-                        of: instr.output, typeDef: instr.input(1), nullability: nullable)
-                } else {
-                    setType(of: instr.output, to: op.type)
-                }
-            case .wasmBranchIf(_):
-                let labelType = type(of: instr.input(0))
-                let parameterTypes = labelType.wasmLabelType!.parameters
-                assert(instr.outputs.count == parameterTypes.count)
-                for (output, parameterType) in zip(instr.outputs, parameterTypes) {
-                    setType(of: output, to: parameterType)
-                }
-
-            case .wasmBranchOnNull(_):
-                let labelType = type(of: instr.input(0))
-                let parameterTypes = labelType.wasmLabelType!.parameters
-                // There is one more output (the non-null "condition" for the br_on_null) which will be typed below.
-                assert(instr.outputs.count == parameterTypes.count + 1)
-                for (output, parameterType) in zip(instr.outputs, parameterTypes) {
-                    setType(of: output, to: parameterType)
-                }
-                let refType = type(of: instr.inputs.last!)
-                guard let wasmRefType = refType.wasmReferenceType
-                else {
-                    fatalError("BranchOnNull reference is not a valid wasm reference type.")
-                }
-                setType(
-                    of: instr.outputs.last!,
-                    to: .wasmRef(wasmRefType.kind, nullability: false))
-
-            case .wasmBranchOnCast(let op):
-                let labelType = type(of: instr.input(0))
-                let parameterTypes = labelType.wasmLabelType!.parameters
-                assert(instr.outputs.count == parameterTypes.count)
-                for (output, parameterType) in zip(
-                    instr.outputs.dropLast(), parameterTypes.dropLast())
-                {
-                    setType(of: output, to: parameterType)
-                }
-                let refInputIndex = 1 + op.parameterCount
-                let actualSourceType = type(of: instr.input(refInputIndex)).wasmReferenceType!
-                let sourceTopType = actualSourceType.kind.topType()
-                setType(of: instr.outputs.last!, to: sourceTopType)
-
-            case .wasmBranchOnCastFail(let op):
-                let labelType = type(of: instr.input(0))
-                let parameterTypes = labelType.wasmLabelType!.parameters
-                assert(instr.outputs.count == parameterTypes.count)
-                for (output, parameterType) in zip(
-                    instr.outputs.dropLast(), parameterTypes.dropLast())
-                {
-                    setType(of: output, to: parameterType)
-                }
-
-                let targetType = op.targetType.wasmReferenceType!
-                if targetType.isAbstract() {
-                    setType(of: instr.outputs.last!, to: op.targetType)
-                } else {
-                    let typeDefInputIndex = 1 + op.parameterCount + 1
-                    setReferenceType(
-                        of: instr.outputs.last!, typeDef: instr.input(typeDefInputIndex),
-                        nullability: targetType.nullability)
-                }
-
-            case .wasmBranchOnNonNull(_):
-                let labelType = type(of: instr.input(0))
-                let parameterTypes = labelType.wasmLabelType!.parameters
-                // The label expects the arguments including the non-null reference.
-                // The fallthrough path only has the arguments excluding the reference.
-                assert(instr.outputs.count == parameterTypes.count - 1)
-                for (output, parameterType) in zip(instr.outputs, parameterTypes) {
-                    setType(of: output, to: parameterType)
-                }
-
-            case .wasmAnyConvertExtern(_):
-                // TODO(pawkra): forward shared bit & update the comment
-                // any.convert_extern forwards the nullability bit from the input.
-                let null = type(of: instr.input(0)).wasmReferenceType!.nullability
-                setType(of: instr.output, to: .wasmRef(.WasmAny, shared: false, nullability: null))
-            case .wasmExternConvertAny(_):
-                // TODO(pawkra): forward shared bit & update the comment
-                // extern.convert_any forwards the nullability from the input.
-                let null = type(of: instr.input(0)).wasmReferenceType!.nullability
-                setType(
-                    of: instr.output, to: .wasmRef(.WasmExtern, shared: false, nullability: null))
-            case .wasmDefineAdHocSignatureType(let op):
-                startTypeGroup()
-                addSignatureType(
-                    def: instr.output, signature: op.signature, inputs: instr.inputs, isAdHoc: true)
-                finishTypeGroup()
-                registerWasmTypeDef(instr.output)
-            case .wasmDefineAdHocModuleSignatureType(let op):
-                startTypeGroup()
-                addSignatureType(
-                    def: instr.output, signature: op.signature, inputs: instr.inputs, isAdHoc: true)
-                finishTypeGroup()
-                registerWasmTypeDef(instr.output)
-            default:
-                if instr.numInnerOutputs + instr.numOutputs != 0 {
-                    fatalError("Missing typing of outputs for \(instr.op.opcode)")
-                }
+            } else {
+                analyzeWasmInstruction(instr)
             }
         }
 
@@ -1384,6 +870,526 @@ public struct JSTyper: Analyzer {
         // More sanity checking: the outputs of guarded operation should be typed as .jsAnything.
         if let op = instr.op as? GuardableOperation, op.isGuarded {
             assert(instr.allOutputs.allSatisfy({ type(of: $0).Is(.jsAnything) }))
+        }
+    }
+
+    private mutating func analyzeWasmInstruction(_ instr: Instruction) {
+        switch instr.op.opcode {
+        case .consti64(_):
+            setType(of: instr.output, to: .wasmi64)
+        case .consti32(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .constf64(_):
+            setType(of: instr.output, to: .wasmf64)
+        case .constf32(_):
+            setType(of: instr.output, to: .wasmf32)
+        case .wasmi32CompareOp(_),
+            .wasmi64CompareOp(_),
+            .wasmf32CompareOp(_),
+            .wasmf64CompareOp(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmi32EqualZero(_),
+            .wasmi64EqualZero(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmJSStringFromCharCodeArray(_),
+            .wasmJSStringFromCharCode(_),
+            .wasmJSStringFromCodePoint(_),
+            .wasmJSStringCast(_),
+            .wasmJSStringConcat(_),
+            .wasmJSStringSubstring(_),
+            .wasmStringConstant(_):
+            setType(of: instr.output, to: .wasmRefJSString())
+        case .wasmi32BinOp(_),
+            .wasmi32UnOp(_),
+            .wasmWrapi64Toi32(_),
+            .wasmJSStringLength(_),
+            .wasmJSStringCharCodeAt(_),
+            .wasmJSStringCodePointAt(_),
+            .wasmJSStringIntoCharCodeArray(_),
+            .wasmJSStringTest(_),
+            .wasmJSStringEquals(_),
+            .wasmJSStringCompare(_),
+            .wasmTruncatef32Toi32(_),
+            .wasmTruncatef64Toi32(_),
+            .wasmReinterpretf32Asi32(_),
+            .wasmSignExtend8Intoi32(_),
+            .wasmSignExtend16Intoi32(_),
+            .wasmTruncateSatf32Toi32(_),
+            .wasmTruncateSatf64Toi32(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmi64BinOp(_),
+            .wasmi64UnOp(_),
+            .wasmExtendi32Toi64(_),
+            .wasmTruncatef32Toi64(_),
+            .wasmTruncatef64Toi64(_),
+            .wasmReinterpretf64Asi64(_),
+            .wasmSignExtend8Intoi64(_),
+            .wasmSignExtend16Intoi64(_),
+            .wasmSignExtend32Intoi64(_),
+            .wasmTruncateSatf32Toi64(_),
+            .wasmTruncateSatf64Toi64(_):
+            setType(of: instr.output, to: .wasmi64)
+        case .wasmi64WideBinOp(_),
+            .wasmi64WideMulOp(_):
+            assert(instr.numOutputs == 2)
+            for output in instr.outputs {
+                setType(of: output, to: .wasmi64)
+            }
+        case .wasmf32BinOp(_),
+            .wasmf32UnOp(_),
+            .wasmConverti32Tof32(_),
+            .wasmConverti64Tof32(_),
+            .wasmDemotef64Tof32(_),
+            .wasmReinterpreti32Asf32(_):
+            setType(of: instr.output, to: .wasmf32)
+        case .wasmf64BinOp(_),
+            .wasmf64UnOp(_),
+            .wasmConverti32Tof64(_),
+            .wasmConverti64Tof64(_),
+            .wasmPromotef32Tof64(_),
+            .wasmReinterpreti64Asf64(_):
+            setType(of: instr.output, to: .wasmf64)
+        case .constSimd128(_),
+            .wasmSimd128Compare(_),
+            .wasmSimd128IntegerBinOp(_),
+            .wasmSimd128IntegerTernaryOp(_),
+            .wasmSimd128FloatUnOp(_),
+            .wasmSimd128FloatBinOp(_),
+            .wasmSimd128FloatTernaryOp(_),
+            .wasmSimdSplat(_),
+            .wasmSimdLoad(_),
+            .wasmSimdLoadLane(_),
+            .wasmSimdReplaceLane(_):
+            setType(of: instr.output, to: .wasmSimd128)
+        case .wasmSimd128IntegerUnOp(let op):
+            var outputType: ILType = .wasmSimd128
+            switch op.unOpKind {
+            case .all_true, .bitmask:
+                // Tests and bitmasks produce a boolean i32 result
+                outputType = .wasmi32
+            default:
+                break
+            }
+            setType(of: instr.output, to: outputType)
+        case .wasmSimdExtractLane(let op):
+            setType(of: instr.output, to: op.kind.laneType())
+        case .wasmDefineGlobal(let op):
+            let valueType: ILType
+            if case .indexRef = op.wasmGlobal {
+                valueType = type(of: instr.input(0)).wasmTypeDefinition!.getReferenceTypeTo(
+                    nullability: true)
+            } else {
+                valueType = op.wasmGlobal.toType()
+            }
+            let type = ILType.object(
+                ofGroup: "WasmGlobal", withProperties: ["value"], withMethods: ["valueOf"],
+                withWasmType: WasmGlobalType(
+                    valueType: valueType, isMutable: op.isMutable))
+            dynamicObjectGroupManager.addWasmGlobal(
+                withType: type, forDefinition: instr, forVariable: instr.output)
+            setType(of: instr.output, to: type)
+        case .wasmDefineTable(let op):
+            let knownSignatures = instr.inputs.enumerated().filter { $0.offset % 2 == 1 }.map {
+                type(of: $0.element)
+            }
+            setType(
+                of: instr.output,
+                to: .wasmTable(
+                    wasmTableType: WasmTableType(
+                        elementType: op.elementType, limits: op.limits, isTable64: op.isTable64,
+                        knownEntrySignatures: knownSignatures)))
+            dynamicObjectGroupManager.addWasmTable(
+                withType: type(of: instr.output), forDefinition: instr,
+                forVariable: instr.output)
+            // Also re-export all functions that we now import through the activeElementSection
+            var i = 0
+            while i < instr.inputs.count {
+                let fct = instr.input(i)
+                let definingInstruction = defUseAnalyzer.definition(of: fct)
+                let signature = type(of: instr.input(i + 1)).wasmFunctionSignatureDefSignature
+                // TODO(cffsmith): Once we change the way we track signatures, we should also store the JS Signature here if we have one. The table might contain JS functions but we lose that signature in the entries. Which is why we convert back into JS Signatures here.
+                let jsSignature = ProgramBuilder.convertWasmSignatureToJsSignature(signature)
+                dynamicObjectGroupManager.addWasmFunction(
+                    withSignature: jsSignature, forDefinition: definingInstruction,
+                    forVariable: fct)
+                i += 2
+            }
+        case .wasmDefineElementSegment(let op):
+            setType(of: instr.output, to: .wasmElementSegment(segmentLength: Int(op.size)))
+        case .wasmDropElementSegment(_):
+            type(of: instr.input(0)).wasmElementSegmentType!.markAsDropped()
+        case .wasmTableInit(_),
+            .wasmTableCopy(_):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmTable(
+                withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+        // Ignore changed function signatures - it is too hard to reason about them statically.
+        case .wasmDefineMemory(let op):
+            setType(of: instr.output, to: op.wasmMemory)
+            registerWasmMemoryUse(for: instr.output)
+        case .wasmDefineDataSegment(let op):
+            setType(of: instr.output, to: .wasmDataSegment(segmentLength: op.segment.count))
+        case .wasmDropDataSegment(_):
+            type(of: instr.input(0)).wasmDataSegmentType!.markAsDropped()
+        case .wasmDefineTag(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            setType(
+                of: instr.output,
+                to: .object(
+                    ofGroup: "WasmTag", withWasmType: WasmTagType(signature.parameterTypes)))
+            dynamicObjectGroupManager.addWasmTag(
+                withType: type(of: instr.output), forDefinition: instr,
+                forVariable: instr.output)
+        case .wasmThrow(_):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmTag(
+                withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+        case .wasmLoadGlobal(_):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            let globalVarType = type(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmGlobal(
+                withType: globalVarType, forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+            if let wasmGlobalType = globalVarType.wasmGlobalType {
+                setType(of: instr.output, to: wasmGlobalType.valueType)
+            } else {
+                // The definition of the global might have been removed by a minimizer.
+                // We use the error type to avoid crashing on these invalid programs.
+                setType(of: instr.output, to: .error)
+            }
+        case .wasmStoreGlobal(_):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmGlobal(
+                withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+        case .wasmTableGet(let op):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            let tableType = type(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmTable(
+                withType: tableType, forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+            setType(of: instr.output, to: op.elementType)
+        case .wasmTableSet(_):
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmTable(
+                withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+        case .wasmTableSize(_),
+            .wasmTableGrow(_):
+            let isTable64 = type(of: instr.input(0)).wasmTableType?.isTable64 ?? false
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(0))
+            dynamicObjectGroupManager.addWasmTable(
+                withType: type(of: instr.input(0)), forDefinition: definingInstruction,
+                forVariable: instr.input(0))
+            setType(of: instr.output, to: isTable64 ? .wasmi64 : .wasmi32)
+        case .wasmMemoryStore(_):
+            registerWasmMemoryUse(for: instr.input(0))
+        case .wasmMemoryLoad(let op):
+            registerWasmMemoryUse(for: instr.input(0))
+            setType(of: instr.output, to: op.loadType.numberType())
+        case .wasmAtomicLoad(let op):
+            registerWasmMemoryUse(for: instr.input(0))
+            setType(of: instr.output, to: op.loadType.numberType())
+        case .wasmAtomicStore(_):
+            registerWasmMemoryUse(for: instr.input(0))
+        case .wasmAtomicRMW(let op):
+            registerWasmMemoryUse(for: instr.input(0))
+            setType(of: instr.output, to: op.op.type())
+        case .wasmAtomicCmpxchg(let op):
+            registerWasmMemoryUse(for: instr.input(0))
+            setType(of: instr.output, to: op.op.type())
+        case .wasmMemorySize(_),
+            .wasmMemoryGrow(_):
+            let isMemory64 = type(of: instr.input(0)).wasmMemoryType?.isMemory64 ?? false
+            registerWasmMemoryUse(for: instr.input(0))
+            setType(of: instr.output, to: isMemory64 ? .wasmi64 : .wasmi32)
+        case .wasmJsCall(_):
+            let wasmSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            let sigOutputTypes = wasmSignature.outputTypes
+            assert(sigOutputTypes.count < 2, "multi-return js calls are not supported")
+            if !sigOutputTypes.isEmpty {
+                setType(of: instr.output, to: sigOutputTypes[0])
+            }
+            let definingInstruction = defUseAnalyzer.definition(of: instr.input(1))
+            // Here we query the typer for the signature of the instruction as that is the correct "JS" Signature instead of taking the call-site specific converted wasm signature.
+            dynamicObjectGroupManager.addWasmFunction(
+                withSignature: type(of: instr.input(1)).signature
+                    ?? Signature.forUnknownFunction, forDefinition: definingInstruction,
+                forVariable: instr.input(1))
+        case .beginWasmFunction(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, signature)
+        case .endWasmFunction(_):
+            let signatureType = type(of: instr.input(0))
+            let signature = signatureType.wasmFunctionSignatureDefSignature
+            setType(of: instr.output, to: .wasmFunctionDef(signatureType))
+            dynamicObjectGroupManager.addWasmFunction(
+                withSignature: ProgramBuilder.convertWasmSignatureToJsSignature(signature),
+                forDefinition: instr, forVariable: instr.output)
+        case .wasmSelect(_):
+            setType(of: instr.output, to: type(of: instr.input(0)))
+        case .wasmBeginBlock(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, signature)
+        case .wasmEndBlock(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, signature.outputTypes)
+        case .wasmBeginIf(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, signature)
+        case .wasmBeginElse(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            // The else block is both end and begin block.
+            wasmTypeEndBlock(instr, signature.outputTypes)
+            wasmTypeBeginBlock(instr, signature)
+        case .wasmEndIf(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, signature.outputTypes)
+        case .wasmBeginLoop(_):
+            // Note that different to all other blocks the loop's label parameters are the input types
+            // of the block, not the result types (because a branch to a loop label jumps to the
+            // beginning of the loop block instead of the end.)
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            setType(of: instr.innerOutputs.first!, to: .wasmLabel(signature.parameterTypes))
+            for (innerOutput, paramType) in zip(
+                instr.innerOutputs.dropFirst(), signature.parameterTypes)
+            {
+                setType(of: innerOutput, to: paramType)
+            }
+        case .wasmEndLoop(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, signature.outputTypes)
+        case .wasmBeginTryTable(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, signature)
+            instr.inputs.forEach { input in
+                if type(of: input).isWasmTagType {
+                    let definingInstruction = defUseAnalyzer.definition(of: input)
+                    dynamicObjectGroupManager.addWasmTag(
+                        withType: type(of: input), forDefinition: definingInstruction,
+                        forVariable: input)
+                }
+            }
+        case .wasmEndTryTable(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, signature.outputTypes)
+        case .wasmBeginTry(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, signature)
+        case .wasmBeginCatchAll(_):
+            let signature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            setType(of: instr.innerOutputs.first!, to: .wasmLabel(signature.outputTypes))
+        case .wasmBeginCatch(_):
+            let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            // Type the label (used for branch instructions).
+            setType(of: instr.innerOutput(0), to: .wasmLabel(blockSignature.outputTypes))
+            // Register the tag (Wasm exception) in the dynamicObjectGroupManager as being used
+            // by this Wasm module.
+            let tag = instr.input(1)
+            let definingInstruction = defUseAnalyzer.definition(of: tag)
+            dynamicObjectGroupManager.addWasmTag(
+                withType: type(of: tag),
+                forDefinition: definingInstruction, forVariable: tag)
+            // The second inner output is the exception label which is used for rethrowing the
+            // exception with the legacy exception handling proposal. (This is similar to the
+            // exnref in the standard exception handling spec.)
+            setType(of: instr.innerOutput(1), to: .wasmExceptionLabel)
+            // Type the tag parameters based on the tag's signature definition.
+            // This guarantees that the inner outputs are properly typed, even if a mutator
+            // changed the tag variable to something that's not typed as a Wasm tag anymore.
+            let tagSignature = type(of: instr.input(2)).wasmFunctionSignatureDefSignature
+            for (innerOutput, paramType) in zip(
+                instr.innerOutputs.dropFirst(2), tagSignature.parameterTypes)
+            {
+                setType(of: innerOutput, to: paramType)
+            }
+            for (output, outputType) in zip(instr.outputs, blockSignature.outputTypes) {
+                setType(of: output, to: outputType)
+            }
+        case .wasmEndTry(_):
+            let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, blockSignature.outputTypes)
+        case .wasmBeginTryDelegate(_):
+            let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeBeginBlock(instr, blockSignature)
+        case .wasmEndTryDelegate(_):
+            let blockSignature = type(of: instr.input(0)).wasmFunctionSignatureDefSignature
+            wasmTypeEndBlock(instr, blockSignature.outputTypes)
+        case .wasmCallDirect(_):
+            let signature = type(of: instr.input(0)).wasmFunctionDefSignature!
+            for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
+                setType(of: output, to: outputType)
+            }
+        // We don't need to update the DynamicObjectGroupManager, as all functions that can be called here are .wasmFunctionDef types, this means we have already added them when we saw the EndWasmFunction instruction.
+        case .wasmCallIndirect(_):
+            let signature = type(of: instr.input(1)).wasmFunctionSignatureDefSignature
+            for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
+                setType(of: output, to: outputType)
+            }
+        case .wasmCallRef(_):
+            let functionRef = instr.inputs.last!
+            let typeDesc = getTypeDescription(of: functionRef) as! WasmSignatureTypeDescription
+            let signature = typeDesc.signature
+            for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
+                setType(of: output, to: outputType)
+            }
+        // Functions that can be called through a table are also already added by the wasmDefineTable instruction.
+        // No need to analyze this and add them to the DynamicObjectGroupManager.
+        case .wasmArrayNewFixed(_),
+            .wasmArrayNewDefault(_):
+            setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
+        case .wasmArrayLen(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmArrayGet(_):
+            let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmArrayTypeDescription
+            setType(of: instr.output, to: typeDesc.elementType.unpacked())
+        case .wasmArraySet(_):
+            break
+        case .wasmStructNew(_),
+            .wasmStructNewDefault(_):
+            setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
+        case .wasmStructGet(let op):
+            let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmStructTypeDescription
+            setType(of: instr.output, to: typeDesc.fields[op.fieldIndex].type.unpacked())
+        case .wasmStructSet(_):
+            break
+        case .wasmRefNull(let op):
+            if instr.hasInputs {
+                setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: true)
+            } else {
+                setType(of: instr.output, to: op.type!)
+            }
+        case .wasmRefIsNull(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmRefAsNonNull(_):
+            // The result type is the non-nullable variant of the input type. (If the input type
+            // is already non-nullable, the instruction doesn't do anything and the type does
+            // not change.)
+            let inputRefType = type(of: instr.input(0)).wasmReferenceType!
+            setType(of: instr.output, to: .wasmRef(inputRefType.kind, nullability: false))
+        case .wasmRefFunc(_):
+            if let signatureType = type(of: instr.input(0)).wasmFunctionDef?.signatureType,
+                let refType = signatureType.wasmTypeDefinition?.getReferenceTypeTo(
+                    nullability: false)
+            {
+                setType(of: instr.output, to: refType)
+            } else {
+                fatalError("Function passed to ref.func lacks a concrete signature definition")
+            }
+        case .wasmRefEq(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmRefI31(let op):
+            setType(of: instr.output, to: .wasmRefI31(shared: op.isShared))
+        case .wasmI31Get(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmRefTest(_):
+            setType(of: instr.output, to: .wasmi32)
+        case .wasmRefCast(let op):
+            if op.type.requiredInputCount() == 1 {
+                let nullable = op.type.wasmReferenceType!.nullability
+                setReferenceType(
+                    of: instr.output, typeDef: instr.input(1), nullability: nullable)
+            } else {
+                setType(of: instr.output, to: op.type)
+            }
+        case .wasmBranchIf(_):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            assert(instr.outputs.count == parameterTypes.count)
+            for (output, parameterType) in zip(instr.outputs, parameterTypes) {
+                setType(of: output, to: parameterType)
+            }
+
+        case .wasmBranchOnNull(_):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            // There is one more output (the non-null "condition" for the br_on_null) which will be typed below.
+            assert(instr.outputs.count == parameterTypes.count + 1)
+            for (output, parameterType) in zip(instr.outputs, parameterTypes) {
+                setType(of: output, to: parameterType)
+            }
+            let refType = type(of: instr.inputs.last!)
+            guard let wasmRefType = refType.wasmReferenceType
+            else {
+                fatalError("BranchOnNull reference is not a valid wasm reference type.")
+            }
+            setType(
+                of: instr.outputs.last!,
+                to: .wasmRef(wasmRefType.kind, nullability: false))
+
+        case .wasmBranchOnCast(let op):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            assert(instr.outputs.count == parameterTypes.count)
+            for (output, parameterType) in zip(
+                instr.outputs.dropLast(), parameterTypes.dropLast())
+            {
+                setType(of: output, to: parameterType)
+            }
+            let refInputIndex = 1 + op.parameterCount
+            let actualSourceType = type(of: instr.input(refInputIndex)).wasmReferenceType!
+            let sourceTopType = actualSourceType.kind.topType()
+            setType(of: instr.outputs.last!, to: sourceTopType)
+
+        case .wasmBranchOnCastFail(let op):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            assert(instr.outputs.count == parameterTypes.count)
+            for (output, parameterType) in zip(
+                instr.outputs.dropLast(), parameterTypes.dropLast())
+            {
+                setType(of: output, to: parameterType)
+            }
+
+            let targetType = op.targetType.wasmReferenceType!
+            if targetType.isAbstract() {
+                setType(of: instr.outputs.last!, to: op.targetType)
+            } else {
+                let typeDefInputIndex = 1 + op.parameterCount + 1
+                setReferenceType(
+                    of: instr.outputs.last!, typeDef: instr.input(typeDefInputIndex),
+                    nullability: targetType.nullability)
+            }
+
+        case .wasmBranchOnNonNull(_):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            // The label expects the arguments including the non-null reference.
+            // The fallthrough path only has the arguments excluding the reference.
+            assert(instr.outputs.count == parameterTypes.count - 1)
+            for (output, parameterType) in zip(instr.outputs, parameterTypes) {
+                setType(of: output, to: parameterType)
+            }
+
+        case .wasmAnyConvertExtern(_):
+            // TODO(pawkra): forward shared bit & update the comment
+            // any.convert_extern forwards the nullability bit from the input.
+            let null = type(of: instr.input(0)).wasmReferenceType!.nullability
+            setType(of: instr.output, to: .wasmRef(.WasmAny, shared: false, nullability: null))
+        case .wasmExternConvertAny(_):
+            // TODO(pawkra): forward shared bit & update the comment
+            // extern.convert_any forwards the nullability from the input.
+            let null = type(of: instr.input(0)).wasmReferenceType!.nullability
+            setType(
+                of: instr.output, to: .wasmRef(.WasmExtern, shared: false, nullability: null))
+        case .wasmDefineAdHocSignatureType(let op):
+            startTypeGroup()
+            addSignatureType(
+                def: instr.output, signature: op.signature, inputs: instr.inputs, isAdHoc: true)
+            finishTypeGroup()
+            registerWasmTypeDef(instr.output)
+        case .wasmDefineAdHocModuleSignatureType(let op):
+            startTypeGroup()
+            addSignatureType(
+                def: instr.output, signature: op.signature, inputs: instr.inputs, isAdHoc: true)
+            finishTypeGroup()
+            registerWasmTypeDef(instr.output)
+        default:
+            if instr.numInnerOutputs + instr.numOutputs != 0 {
+                fatalError("Missing typing of outputs for \(instr.op.opcode)")
+            }
         }
     }
 

@@ -1054,11 +1054,7 @@ final class WasmDefineTag: WasmOperation {
 final class WasmLoadGlobal: WasmOperation {
     override var opcode: Opcode { .wasmLoadGlobal(self) }
 
-    let globalType: ILType
-
-    init(globalType: ILType) {
-        assert(globalType.Is(.wasmPrimitive))
-        self.globalType = globalType
+    init() {
         super.init(
             numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable],
             requiredContext: [.wasmFunction])
@@ -1068,11 +1064,7 @@ final class WasmLoadGlobal: WasmOperation {
 final class WasmStoreGlobal: WasmOperation {
     override var opcode: Opcode { .wasmStoreGlobal(self) }
 
-    let globalType: ILType
-
-    init(globalType: ILType) {
-        self.globalType = globalType
-        assert(globalType.Is(.wasmPrimitive))
+    init() {
         // Takes two inputs, one is the global reference the other is the value that is being stored in the global
         super.init(numInputs: 2, attributes: [.isNotInputMutable], requiredContext: [.wasmFunction])
     }

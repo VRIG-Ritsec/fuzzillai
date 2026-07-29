@@ -168,6 +168,9 @@ public struct ILType: Hashable {
     /// The type that is subsumed by all others.
     public static let nothing = ILType(definiteType: .nothing, possibleType: .nothing)
 
+    /// A type representing a typing error (e.g. dangling reference), avoiding crashes on invalid programs.
+    public static let error = ILType(definiteType: .error)
+
     /// A number: either an integer or a float.
     public static let number: ILType = .integer | .float
 
@@ -1597,6 +1600,9 @@ struct BaseType: OptionSet, Hashable {
 
     static let jsModule = BaseType(rawValue: 1 << 29)
 
+    /// A type representing an error, such as an invalid or unowned reference, used to avoid crashing on invalid programs (e.g., during minimization).
+    static let error = BaseType(rawValue: 1 << 30)
+
     static let jsAnything = BaseType([
         .undefined, .integer, .float, .string, .boolean, .object, .function, .constructor,
         .unboundFunction, .bigint, .regexp, .iterable, .asyncIterable,
@@ -1612,7 +1618,7 @@ struct BaseType: OptionSet, Hashable {
         .unboundFunction, .bigint, .regexp, .iterable, .asyncIterable, .wasmf32, .wasmi32, .wasmf64,
         .wasmi64,
         .wasmRef, .wasmSimd128, .wasmTypeDef, .wasmFunctionDef, .jsLoopLabel, .jsBlockLabel,
-        .jsModule,
+        .jsModule, .error,
     ]
 }
 

@@ -1145,11 +1145,9 @@ message WasmDefineMemory {
 }
 
 message WasmLoadGlobal {
-  WasmILType globalType = 2;
 }
 
 message WasmStoreGlobal {
-  WasmILType globalType = 2;
 }
 
 message WasmTableGet {

@@ -17,6 +17,19 @@ import Testing
 @testable import Fuzzilli
 
 struct ProgramBuilderTests {
+    @Test func testConstructorTypeGenerationForAllGroups() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            for groupName in b.fuzzer.environment.allObjectGroupNames {
+                let requiredType = ILType.constructor() + .object(ofGroup: groupName)
+                if let variable = b.maybeGenerateConstructorAsPath(requiredType) {
+                    #expect(b.type(of: variable).Is(requiredType))
+                }
+            }
+        }
+    }
+
     // Verify that program building doesn't crash and always produce valid programs.
     @Test func testBuilding() {
         let fuzzer = makeMockFuzzer()

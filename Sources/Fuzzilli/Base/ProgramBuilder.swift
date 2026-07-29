@@ -778,7 +778,7 @@ public class ProgramBuilder {
 
     // If the type is a builtin constructor like Promise or Temporal.Instant, generate
     // a path to it from field accesses.
-    private func maybeGenerateConstructorAsPath(_ type: ILType) -> Variable? {
+    public func maybeGenerateConstructorAsPath(_ type: ILType) -> Variable? {
         guard let group = type.group else {
             return nil
         }

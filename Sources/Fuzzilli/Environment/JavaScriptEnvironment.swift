@@ -835,6 +835,10 @@ public class JavaScriptEnvironment: ComponentBase {
         return self.groups.keys.contains(name)
     }
 
+    public var allObjectGroupNames: [String] {
+        Array(groups.keys)
+    }
+
     // Add a generator that produces an object of the provided `type`.
     //
     // The probability is how often this generator should be called when this type is required.
@@ -2946,7 +2950,6 @@ extension ObjectGroup {
     /// Object group modelling the JavaScript Symbol constructor builtin
     public static let jsSymbolConstructor = ObjectGroup(
         name: "SymbolConstructor",
-        constructorPath: "Symbol",
         instanceType: .jsSymbolConstructor,
         properties: [
             "iterator": .jsSymbol,
@@ -2974,7 +2977,6 @@ extension ObjectGroup {
     /// Object group modelling the JavaScript BigInt constructor builtin
     public static let jsBigIntConstructor = ObjectGroup(
         name: "BigIntConstructor",
-        constructorPath: "BigInt",
         instanceType: .jsBigIntConstructor,
         properties: [
             "prototype": .object()

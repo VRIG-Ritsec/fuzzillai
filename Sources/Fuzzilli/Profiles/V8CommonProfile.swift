@@ -1308,6 +1308,9 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
                 args.append("--max-inlined-bytecode-size-small=0")
             }
         }
+        if probability(0.1) {
+            args.append("--maglev-disable-builtin-reducers")
+        }
     }
 
     if probability(0.1) {

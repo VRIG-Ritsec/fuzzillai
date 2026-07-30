@@ -93,6 +93,8 @@ message ObjectLiteralSetPrototype {
 message BeginObjectLiteralMethod {
     string methodName = 1;
     Parameters parameters = 2;
+    bool is_generator = 3;
+    bool is_async = 4;
 }
 
 message EndObjectLiteralMethod {
@@ -100,6 +102,8 @@ message EndObjectLiteralMethod {
 
 message BeginObjectLiteralComputedMethod {
     Parameters parameters = 1;
+    bool is_generator = 2;
+    bool is_async = 3;
 }
 
 message EndObjectLiteralComputedMethod {
@@ -167,6 +171,8 @@ message BeginClassMethod {
     string methodName = 1;
     Parameters parameters = 2;
     bool is_static = 3;
+    bool is_generator = 4;
+    bool is_async = 5;
 }
 
 message EndClassMethod {
@@ -175,6 +181,8 @@ message EndClassMethod {
 message BeginClassComputedMethod {
     Parameters parameters = 1;
     bool is_static = 2;
+    bool is_generator = 3;
+    bool is_async = 4;
 }
 
 message EndClassComputedMethod {
@@ -226,6 +234,8 @@ message BeginClassPrivateMethod {
     string methodName = 1;
     Parameters parameters = 2;
     bool is_static = 3;
+    bool is_generator = 4;
+    bool is_async = 5;
 }
 
 message EndClassPrivateMethod {

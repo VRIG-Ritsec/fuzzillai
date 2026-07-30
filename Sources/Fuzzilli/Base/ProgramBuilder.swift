@@ -2973,12 +2973,15 @@ public class ProgramBuilder {
 
         public func addMethod(
             _ name: String, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
-                BeginObjectLiteralMethod(methodName: name, parameters: descriptor.parameters),
+                BeginObjectLiteralMethod(
+                    methodName: name, parameters: descriptor.parameters, isGenerator: isGenerator,
+                    isAsync: isAsync),
                 withInputs: defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndObjectLiteralMethod())
@@ -2986,12 +2989,14 @@ public class ProgramBuilder {
 
         public func addComputedMethod(
             _ name: Variable, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
-                BeginObjectLiteralComputedMethod(parameters: descriptor.parameters),
+                BeginObjectLiteralComputedMethod(
+                    parameters: descriptor.parameters, isGenerator: isGenerator, isAsync: isAsync),
                 withInputs: [name] + defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndObjectLiteralComputedMethod())
@@ -3137,13 +3142,15 @@ public class ProgramBuilder {
 
         public func addInstanceMethod(
             _ name: String, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
                 BeginClassMethod(
-                    methodName: name, parameters: descriptor.parameters, isStatic: false),
+                    methodName: name, parameters: descriptor.parameters, isStatic: false,
+                    isGenerator: isGenerator, isAsync: isAsync),
                 withInputs: defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassMethod())
@@ -3151,12 +3158,15 @@ public class ProgramBuilder {
 
         public func addInstanceComputedMethod(
             _ name: Variable, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
-                BeginClassComputedMethod(parameters: descriptor.parameters, isStatic: false),
+                BeginClassComputedMethod(
+                    parameters: descriptor.parameters, isStatic: false, isGenerator: isGenerator,
+                    isAsync: isAsync),
                 withInputs: [name] + defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassComputedMethod())
@@ -3221,13 +3231,15 @@ public class ProgramBuilder {
 
         public func addStaticMethod(
             _ name: String, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
                 BeginClassMethod(
-                    methodName: name, parameters: descriptor.parameters, isStatic: true),
+                    methodName: name, parameters: descriptor.parameters, isStatic: true,
+                    isGenerator: isGenerator, isAsync: isAsync),
                 withInputs: defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassMethod())
@@ -3235,12 +3247,15 @@ public class ProgramBuilder {
 
         public func addStaticComputedMethod(
             _ name: Variable, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
-                BeginClassComputedMethod(parameters: descriptor.parameters, isStatic: true),
+                BeginClassComputedMethod(
+                    parameters: descriptor.parameters, isStatic: true, isGenerator: isGenerator,
+                    isAsync: isAsync),
                 withInputs: [name] + defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassComputedMethod())
@@ -3285,13 +3300,15 @@ public class ProgramBuilder {
 
         public func addPrivateInstanceMethod(
             _ name: String, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
                 BeginClassPrivateMethod(
-                    methodName: name, parameters: descriptor.parameters, isStatic: false),
+                    methodName: name, parameters: descriptor.parameters, isStatic: false,
+                    isGenerator: isGenerator, isAsync: isAsync),
                 withInputs: defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassPrivateMethod())
@@ -3306,13 +3323,15 @@ public class ProgramBuilder {
 
         public func addPrivateStaticMethod(
             _ name: String, with descriptor: SubroutineDescriptor, defaultValues: [Variable] = [],
+            isGenerator: Bool = false, isAsync: Bool = false,
             _ body: ([Variable]) -> Void
         ) {
             assert(descriptor.parameters.numDefaultParameters == defaultValues.count)
             b.setParameterTypesForNextSubroutine(descriptor.parameterTypes)
             let instr = b.emit(
                 BeginClassPrivateMethod(
-                    methodName: name, parameters: descriptor.parameters, isStatic: true),
+                    methodName: name, parameters: descriptor.parameters, isStatic: true,
+                    isGenerator: isGenerator, isAsync: isAsync),
                 withInputs: defaultValues)
             body(Array(instr.innerOutputs))
             b.emit(EndClassPrivateMethod())

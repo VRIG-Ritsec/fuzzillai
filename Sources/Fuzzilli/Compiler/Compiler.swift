@@ -180,6 +180,8 @@ public class JavaScriptCompiler {
             case .method(let method):
                 let defaultValues = defaultValuesPerSubroutine.removeLast()
                 let parameters = try convertParameters(method.parameters)
+                let isGenerator = method.type == .generator || method.type == .asyncGenerator
+                let isAsync = method.type == .async || method.type == .asyncGenerator
                 let head: Instruction
 
                 guard let key = method.key.body else {
@@ -189,22 +191,26 @@ public class JavaScriptCompiler {
                 case .name(let name):
                     head = emit(
                         BeginClassMethod(
-                            methodName: name, parameters: parameters, isStatic: method.isStatic),
+                            methodName: name, parameters: parameters, isStatic: method.isStatic,
+                            isGenerator: isGenerator, isAsync: isAsync),
                         withInputs: defaultValues)
                 case .privateName(let name):
                     head = emit(
                         BeginClassPrivateMethod(
-                            methodName: name, parameters: parameters, isStatic: method.isStatic),
+                            methodName: name, parameters: parameters, isStatic: method.isStatic,
+                            isGenerator: isGenerator, isAsync: isAsync),
                         withInputs: defaultValues)
                 case .index(let index):
                     head = emit(
                         BeginClassMethod(
                             methodName: String(index), parameters: parameters,
-                            isStatic: method.isStatic),
+                            isStatic: method.isStatic, isGenerator: isGenerator, isAsync: isAsync),
                         withInputs: defaultValues)
                 case .expression:
                     head = emit(
-                        BeginClassComputedMethod(parameters: parameters, isStatic: method.isStatic),
+                        BeginClassComputedMethod(
+                            parameters: parameters, isStatic: method.isStatic,
+                            isGenerator: isGenerator, isAsync: isAsync),
                         withInputs: [computedKeys.removeLast()] + defaultValues)
                 }
 
@@ -1262,6 +1268,8 @@ public class JavaScriptCompiler {
                 case .method(let method):
                     let defaultValues = methodDefaultValues.removeLast()
                     let parameters = try convertParameters(method.parameters)
+                    let isGenerator = method.type == .generator || method.type == .asyncGenerator
+                    let isAsync = method.type == .async || method.type == .asyncGenerator
                     let head: Instruction
 
                     guard let key = method.key.body else {
@@ -1271,16 +1279,20 @@ public class JavaScriptCompiler {
                     switch key {
                     case .name(let name):
                         head = emit(
-                            BeginObjectLiteralMethod(methodName: name, parameters: parameters),
+                            BeginObjectLiteralMethod(
+                                methodName: name, parameters: parameters, isGenerator: isGenerator,
+                                isAsync: isAsync),
                             withInputs: defaultValues)
                     case .index(let index):
                         head = emit(
                             BeginObjectLiteralMethod(
-                                methodName: String(index), parameters: parameters),
+                                methodName: String(index), parameters: parameters,
+                                isGenerator: isGenerator, isAsync: isAsync),
                             withInputs: defaultValues)
                     case .expression:
                         head = emit(
-                            BeginObjectLiteralComputedMethod(parameters: parameters),
+                            BeginObjectLiteralComputedMethod(
+                                parameters: parameters, isGenerator: isGenerator, isAsync: isAsync),
                             withInputs: [computedKeys.removeLast()] + defaultValues)
                     case .privateName:
                         throw CompilerError.invalidNodeError(

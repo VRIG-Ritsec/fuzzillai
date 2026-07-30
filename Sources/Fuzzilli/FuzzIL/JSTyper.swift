@@ -1817,22 +1817,35 @@ public struct JSTyper: Analyzer {
                 }
             }
 
+            let inferredMethodReturnType = { (isAsync: Bool, isGenerator: Bool) -> ILType in
+                if isGenerator {
+                    let elementType =
+                        resultType.yieldType == .nothing ? .jsAnything : resultType.yieldType
+                    return isAsync
+                        ? ILType.createJsAsyncGeneratorType(ofYieldType: elementType)
+                        : ILType.createJsGeneratorType(ofYieldType: elementType)
+                } else {
+                    return isAsync ? .jsPromise : resultType.returnType
+                }
+            }
+
             // TODO(cffsmith): this is probably the wrong place to do this.
             // Update the dynamic object group to correctly reflect the signature of objects of this type.
             switch instr.op.opcode {
             case .endClassMethod(_):
                 assert(begin.op is BeginClassMethod)
                 let beginOp = begin.op as! BeginClassMethod
+                let returnType = inferredMethodReturnType(beginOp.isAsync, beginOp.isGenerator)
                 if beginOp.isStatic {
                     dynamicObjectGroupManager.updateClassStaticMethodSignature(
                         methodName: beginOp.methodName,
                         signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                            => resultType.returnType)
+                            => returnType)
                 } else {
                     dynamicObjectGroupManager.updateMethodSignature(
                         methodName: beginOp.methodName,
                         signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                            => resultType.returnType)
+                            => returnType)
                 }
             case .endClassGetter(_):
                 assert(begin.op is BeginClassGetter)
@@ -1857,10 +1870,11 @@ public struct JSTyper: Analyzer {
             case .endObjectLiteralMethod(_):
                 assert(begin.op is BeginObjectLiteralMethod)
                 let beginOp = begin.op as! BeginObjectLiteralMethod
+                let returnType = inferredMethodReturnType(beginOp.isAsync, beginOp.isGenerator)
                 dynamicObjectGroupManager.updateMethodSignature(
                     methodName: beginOp.methodName,
                     signature: inferSubroutineParameterList(of: beginOp, at: begin.index)
-                        => resultType.returnType)
+                        => returnType)
             case .endObjectLiteralGetter(_):
                 assert(begin.op is BeginObjectLiteralGetter)
                 let beginOp = begin.op as! BeginObjectLiteralGetter
@@ -2548,7 +2562,9 @@ public struct JSTyper: Analyzer {
             set(instr.output, .jsAnything)
 
         case .callPrivateMethod, .callPrivateMethodWithSpread:
-            // We currently don't track the signatures of private methods
+            // We currently don't track the signatures of private methods because private names are lexically
+            // bound to their class structure and can be invoked on arbitrary receiver objects (e.g. via .call()
+            // or mutation), which may dynamically fail brand checks.
             set(instr.output, .jsAnything)
 
         case .getSuperProperty(let op):

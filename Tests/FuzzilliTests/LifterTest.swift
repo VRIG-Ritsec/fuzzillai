@@ -5231,6 +5231,121 @@ struct LifterTests {
         }
     }
 
+    @Test func testObjectLiteralAsyncAndGeneratorMethodLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let comp = b.loadString("comp")
+
+            b.buildObjectLiteral { obj in
+                obj.addMethod("gen", with: .parameters(n: 0), isGenerator: true) { args in }
+                obj.addMethod("asyncMeth", with: .parameters(n: 0), isAsync: true) { args in }
+                obj.addMethod("asyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true)
+                { args in }
+                obj.addComputedMethod(comp, with: .parameters(n: 0), isGenerator: true) { args in }
+                obj.addComputedMethod(comp, with: .parameters(n: 0), isAsync: true) { args in }
+                obj.addComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+            }
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+
+            let expected = """
+                const v7 = {
+                    *gen() {
+                    },
+                    async asyncMeth() {
+                    },
+                    async *asyncGen() {
+                    },
+                    *["comp"]() {
+                    },
+                    async ["comp"]() {
+                    },
+                    async *["comp"]() {
+                    },
+                };
+
+                """
+
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func testClassDefinitionAsyncAndGeneratorMethodLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let comp = b.loadString("comp")
+
+            b.buildClassDefinition { cls in
+                cls.addInstanceMethod("gen", with: .parameters(n: 0), isGenerator: true) { args in }
+                cls.addInstanceMethod("asyncMeth", with: .parameters(n: 0), isAsync: true) { args in
+                }
+                cls.addInstanceMethod(
+                    "asyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addStaticMethod("staticGen", with: .parameters(n: 0), isGenerator: true) {
+                    args in
+                }
+                cls.addStaticMethod("staticAsync", with: .parameters(n: 0), isAsync: true) { args in
+                }
+                cls.addStaticMethod(
+                    "staticAsyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addPrivateInstanceMethod("privGen", with: .parameters(n: 0), isGenerator: true)
+                { args in }
+                cls.addPrivateInstanceMethod("privAsync", with: .parameters(n: 0), isAsync: true) {
+                    args in
+                }
+                cls.addPrivateInstanceMethod(
+                    "privAsyncGen", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addInstanceComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+                cls.addStaticComputedMethod(
+                    comp, with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { args in }
+            }
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+
+            let expected = """
+                class C1 {
+                    *gen() {
+                    }
+                    async asyncMeth() {
+                    }
+                    async *asyncGen() {
+                    }
+                    static *staticGen() {
+                    }
+                    static async staticAsync() {
+                    }
+                    static async *staticAsyncGen() {
+                    }
+                    *#privGen() {
+                    }
+                    async #privAsync() {
+                    }
+                    async *#privAsyncGen() {
+                    }
+                    async *["comp"]() {
+                    }
+                    static async *["comp"]() {
+                    }
+                }
+
+                """
+
+            #expect(actual == expected)
+        }
+    }
+
     @Test func testClassConstructorDefaultParameterLifting() {
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {

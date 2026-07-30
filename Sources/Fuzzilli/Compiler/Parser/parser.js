@@ -288,8 +288,6 @@ function parse(script, proto) {
                 cls.fields.push(make('ClassField', { property: make('ClassProperty', property) }));
             } else if (field.type === 'ClassMethod' || field.type === 'ClassPrivateMethod') {
                 assert(!field.shorthand, 'Expected field.shorthand to be false');
-                assert(!field.generator, 'Expected field.generator to be false');
-                assert(!field.async, 'Expected field.async to be false');
 
                 let method = field;
                 field = {};
@@ -305,10 +303,19 @@ function parse(script, proto) {
                 } else if (method.kind === 'method') {
                     assert(method.body.type === 'BlockStatement', "Expected method.body.type to be exactly 'BlockStatement'");
 
+                    let type = 0; //"PLAIN";
+                    if (method.generator && method.async) {
+                        type = 3; //"ASYNC_GENERATOR";
+                    } else if (method.generator) {
+                        type = 1; //"GENERATOR";
+                    } else if (method.async) {
+                        type = 2; //"ASYNC";
+                    }
+
                     let parameters = visitParameters(method.params);
                     let body = visitBody(method.body);
                     let key = visitMemberKey(method);
-                    field.method = make('ClassMethod', { key, isStatic, parameters, body });
+                    field.method = make('ClassMethod', { key, isStatic, parameters, body, type });
                 } else if (method.kind === 'get') {
                     assert(method.params.length === 0, "Expected method.params.length to be exactly 0");
                     assert(!method.generator && !method.async, "Expected both conditions to hold: !method.generator and !method.async");

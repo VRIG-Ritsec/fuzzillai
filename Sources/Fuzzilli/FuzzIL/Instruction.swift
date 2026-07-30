@@ -629,6 +629,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginObjectLiteralMethod = Fuzzilli_Protobuf_BeginObjectLiteralMethod.with {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endObjectLiteralMethod:
                 $0.endObjectLiteralMethod = Fuzzilli_Protobuf_EndObjectLiteralMethod()
@@ -636,6 +638,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginObjectLiteralComputedMethod =
                     Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod.with {
                         $0.parameters = convertParameters(op.parameters)
+                        $0.isGenerator = op.isGenerator
+                        $0.isAsync = op.isAsync
                     }
             case .endObjectLiteralComputedMethod:
                 $0.endObjectLiteralComputedMethod =
@@ -700,6 +704,8 @@ extension Instruction: ProtobufConvertible {
                 $0.beginClassComputedMethod = Fuzzilli_Protobuf_BeginClassComputedMethod.with {
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassComputedMethod:
                 $0.endClassComputedMethod = Fuzzilli_Protobuf_EndClassComputedMethod()
@@ -713,6 +719,8 @@ extension Instruction: ProtobufConvertible {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassPrivateMethod:
                 $0.endClassPrivateMethod = Fuzzilli_Protobuf_EndClassPrivateMethod()
@@ -735,6 +743,8 @@ extension Instruction: ProtobufConvertible {
                     $0.methodName = op.methodName
                     $0.parameters = convertParameters(op.parameters)
                     $0.isStatic = op.isStatic
+                    $0.isGenerator = op.isGenerator
+                    $0.isAsync = op.isAsync
                 }
             case .endClassGetter:
                 $0.endClassGetter = Fuzzilli_Protobuf_EndClassGetter()
@@ -2201,11 +2211,14 @@ extension Instruction: ProtobufConvertible {
             op = ObjectLiteralSetPrototype()
         case .beginObjectLiteralMethod(let p):
             op = BeginObjectLiteralMethod(
-                methodName: p.methodName, parameters: try convertParameters(p.parameters))
+                methodName: p.methodName, parameters: try convertParameters(p.parameters),
+                isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endObjectLiteralMethod:
             op = EndObjectLiteralMethod()
         case .beginObjectLiteralComputedMethod(let p):
-            op = BeginObjectLiteralComputedMethod(parameters: try convertParameters(p.parameters))
+            op = BeginObjectLiteralComputedMethod(
+                parameters: try convertParameters(p.parameters), isGenerator: p.isGenerator,
+                isAsync: p.isAsync)
         case .endObjectLiteralComputedMethod:
             op = EndObjectLiteralComputedMethod()
         case .beginObjectLiteralGetter(let p):
@@ -2243,12 +2256,13 @@ extension Instruction: ProtobufConvertible {
         case .beginClassMethod(let p):
             op = BeginClassMethod(
                 methodName: p.methodName, parameters: try convertParameters(p.parameters),
-                isStatic: p.isStatic)
+                isStatic: p.isStatic, isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassMethod:
             op = EndClassMethod()
         case .beginClassComputedMethod(let p):
             op = BeginClassComputedMethod(
-                parameters: try convertParameters(p.parameters), isStatic: p.isStatic)
+                parameters: try convertParameters(p.parameters), isStatic: p.isStatic,
+                isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassComputedMethod:
             op = EndClassComputedMethod()
         case .beginClassGetter(let p):
@@ -2277,7 +2291,7 @@ extension Instruction: ProtobufConvertible {
         case .beginClassPrivateMethod(let p):
             op = BeginClassPrivateMethod(
                 methodName: p.methodName, parameters: try convertParameters(p.parameters),
-                isStatic: p.isStatic)
+                isStatic: p.isStatic, isGenerator: p.isGenerator, isAsync: p.isAsync)
         case .endClassPrivateMethod:
             op = EndClassPrivateMethod()
         case .beginClassPrivateGetter(let p):

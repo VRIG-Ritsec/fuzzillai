@@ -540,6 +540,8 @@ public struct Compiler_Protobuf_ClassMethod: Sendable {
 
   public var body: [Compiler_Protobuf_Statement] = []
 
+  public var type: Compiler_Protobuf_FunctionType = .plain
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -3667,7 +3669,7 @@ extension Compiler_Protobuf_ClassConstructor: SwiftProtobuf.Message, SwiftProtob
 
 extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ClassMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}parameters\0\u{1}body\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}key\0\u{1}isStatic\0\u{1}parameters\0\u{1}body\0\u{1}type\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3679,6 +3681,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.body) }()
+      case 5: try { try decoder.decodeSingularEnumField(value: &self.type) }()
       default: break
       }
     }
@@ -3701,6 +3704,9 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.body.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.body, fieldNumber: 4)
     }
+    if self.type != .plain {
+      try visitor.visitSingularEnumField(value: self.type, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3709,6 +3715,7 @@ extension Compiler_Protobuf_ClassMethod: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs.isStatic != rhs.isStatic {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.body != rhs.body {return false}
+    if lhs.type != rhs.type {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

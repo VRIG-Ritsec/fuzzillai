@@ -472,7 +472,10 @@ public class JavaScriptLifter: Lifter {
                 }
                 let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
                 let METHOD = quoteIdentifierIfNeeded(op.methodName)
-                currentObjectLiteral.beginMethod("\(METHOD)(\(PARAMS)) {", &w)
+                let generator = op.isGenerator ? "*" : ""
+                let asyncStr = op.isAsync ? "async " : ""
+                currentObjectLiteral.beginMethod(
+                    "\(asyncStr)\(generator)\(METHOD)(\(PARAMS)) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
             case .endObjectLiteralMethod:
@@ -486,7 +489,10 @@ public class JavaScriptLifter: Lifter {
                 }
                 let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
                 let METHOD = input(0)
-                currentObjectLiteral.beginMethod("[\(METHOD)](\(PARAMS)) {", &w)
+                let generator = op.isGenerator ? "*" : ""
+                let asyncStr = op.isAsync ? "async " : ""
+                currentObjectLiteral.beginMethod(
+                    "\(asyncStr)\(generator)[\(METHOD)](\(PARAMS)) {", &w)
                 bindVariableToThis(instr.innerOutput(0))
 
             case .endObjectLiteralComputedMethod:
@@ -630,7 +636,9 @@ public class JavaScriptLifter: Lifter {
                 let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
                 let METHOD = quoteIdentifierIfNeeded(op.methodName)
                 let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)\(METHOD)(\(PARAMS)) {")
+                let generator = op.isGenerator ? "*" : ""
+                let asyncStr = op.isAsync ? "async " : ""
+                w.emit("\(staticStr)\(asyncStr)\(generator)\(METHOD)(\(PARAMS)) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
@@ -643,7 +651,9 @@ public class JavaScriptLifter: Lifter {
                 let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
                 let METHOD = input(0)
                 let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)[\(METHOD)](\(PARAMS)) {")
+                let generator = op.isGenerator ? "*" : ""
+                let asyncStr = op.isAsync ? "async " : ""
+                w.emit("\(staticStr)\(asyncStr)\(generator)[\(METHOD)](\(PARAMS)) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 
@@ -708,7 +718,9 @@ public class JavaScriptLifter: Lifter {
                 let PARAMS = liftParameters(op.parameters, as: vars, defaultValues: defaultValues)
                 let METHOD = op.methodName
                 let staticStr = op.isStatic ? "static " : ""
-                w.emit("\(staticStr)#\(METHOD)(\(PARAMS)) {")
+                let generator = op.isGenerator ? "*" : ""
+                let asyncStr = op.isAsync ? "async " : ""
+                w.emit("\(staticStr)\(asyncStr)\(generator)#\(METHOD)(\(PARAMS)) {")
                 w.enterNewBlock()
                 bindVariableToThis(instr.innerOutput(0))
 

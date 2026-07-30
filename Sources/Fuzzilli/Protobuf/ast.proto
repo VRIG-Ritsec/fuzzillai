@@ -123,6 +123,7 @@ message ClassMethod {
     bool isStatic = 2;
     Parameters parameters = 3;
     repeated Statement body = 4;
+    FunctionType type = 5;
 }
 
 message ClassGetter {

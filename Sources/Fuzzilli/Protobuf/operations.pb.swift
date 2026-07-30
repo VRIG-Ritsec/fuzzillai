@@ -2013,6 +2013,10 @@ public struct Fuzzilli_Protobuf_BeginObjectLiteralMethod: Sendable {
   /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
   public mutating func clearParameters() {self._parameters = nil}
 
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2043,6 +2047,10 @@ public struct Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: Sendable {
   public var hasParameters: Bool {self._parameters != nil}
   /// Clears the value of `parameters`. Subsequent reads from it will return its default value.
   public mutating func clearParameters() {self._parameters = nil}
+
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2264,6 +2272,10 @@ public struct Fuzzilli_Protobuf_BeginClassMethod: Sendable {
 
   public var isStatic: Bool = false
 
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2296,6 +2308,10 @@ public struct Fuzzilli_Protobuf_BeginClassComputedMethod: Sendable {
   public mutating func clearParameters() {self._parameters = nil}
 
   public var isStatic: Bool = false
+
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2459,6 +2475,10 @@ public struct Fuzzilli_Protobuf_BeginClassPrivateMethod: Sendable {
   public mutating func clearParameters() {self._parameters = nil}
 
   public var isStatic: Bool = false
+
+  public var isGenerator: Bool = false
+
+  public var isAsync: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -7791,7 +7811,7 @@ extension Fuzzilli_Protobuf_ObjectLiteralSetPrototype: SwiftProtobuf.Message, Sw
 
 extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginObjectLiteralMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7801,6 +7821,8 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, Swi
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -7817,12 +7839,20 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralMethod: SwiftProtobuf.Message, Swi
     try { if let v = self._parameters {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
     } }()
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 3)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginObjectLiteralMethod, rhs: Fuzzilli_Protobuf_BeginObjectLiteralMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7849,7 +7879,7 @@ extension Fuzzilli_Protobuf_EndObjectLiteralMethod: SwiftProtobuf.Message, Swift
 
 extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginObjectLiteralComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7858,6 +7888,8 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Mess
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -7871,11 +7903,19 @@ extension Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod: SwiftProtobuf.Mess
     try { if let v = self._parameters {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     } }()
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 2)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod, rhs: Fuzzilli_Protobuf_BeginObjectLiteralComputedMethod) -> Bool {
     if lhs._parameters != rhs._parameters {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8298,7 +8338,7 @@ extension Fuzzilli_Protobuf_ClassAddComputedProperty: SwiftProtobuf.Message, Swi
 
 extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8309,6 +8349,8 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8328,6 +8370,12 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 3)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 4)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8335,6 +8383,8 @@ extension Fuzzilli_Protobuf_BeginClassMethod: SwiftProtobuf.Message, SwiftProtob
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8361,7 +8411,7 @@ extension Fuzzilli_Protobuf_EndClassMethod: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8371,6 +8421,8 @@ extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, Swi
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8387,12 +8439,20 @@ extension Fuzzilli_Protobuf_BeginClassComputedMethod: SwiftProtobuf.Message, Swi
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 2)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 3)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_BeginClassComputedMethod, rhs: Fuzzilli_Protobuf_BeginClassComputedMethod) -> Bool {
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8703,7 +8763,7 @@ extension Fuzzilli_Protobuf_ClassAddPrivateProperty: SwiftProtobuf.Message, Swif
 
 extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BeginClassPrivateMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}parameters\0\u{3}is_static\0\u{3}is_generator\0\u{3}is_async\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -8714,6 +8774,8 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._parameters) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isStatic) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isGenerator) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isAsync) }()
       default: break
       }
     }
@@ -8733,6 +8795,12 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
     if self.isStatic != false {
       try visitor.visitSingularBoolField(value: self.isStatic, fieldNumber: 3)
     }
+    if self.isGenerator != false {
+      try visitor.visitSingularBoolField(value: self.isGenerator, fieldNumber: 4)
+    }
+    if self.isAsync != false {
+      try visitor.visitSingularBoolField(value: self.isAsync, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8740,6 +8808,8 @@ extension Fuzzilli_Protobuf_BeginClassPrivateMethod: SwiftProtobuf.Message, Swif
     if lhs.methodName != rhs.methodName {return false}
     if lhs._parameters != rhs._parameters {return false}
     if lhs.isStatic != rhs.isStatic {return false}
+    if lhs.isGenerator != rhs.isGenerator {return false}
+    if lhs.isAsync != rhs.isAsync {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

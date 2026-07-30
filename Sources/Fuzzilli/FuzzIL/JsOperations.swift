@@ -469,14 +469,23 @@ final class BeginObjectLiteralMethod: BeginAnySubroutine {
     override var opcode: Opcode { .beginObjectLiteralMethod(self) }
 
     let methodName: String
+    let isGenerator: Bool
+    let isAsync: Bool
 
-    init(methodName: String, parameters: Parameters) {
+    init(
+        methodName: String, parameters: Parameters, isGenerator: Bool = false, isAsync: Bool = false
+    ) {
         self.methodName = methodName
+        self.isGenerator = isGenerator
+        self.isAsync = isAsync
         // First inner output is the explicit |this| parameter
+        var ctx: Context = [.javascript, .subroutine, .method]
+        if isGenerator { ctx.insert(.generatorFunction) }
+        if isAsync { ctx.insert(.async) }
         super.init(
             parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isBlockStart, .isMutable], requiredContext: .objectLiteral,
-            contextOpened: [.javascript, .subroutine, .method])
+            contextOpened: ctx)
     }
 }
 
@@ -488,13 +497,21 @@ final class EndObjectLiteralMethod: EndAnySubroutine {
 final class BeginObjectLiteralComputedMethod: BeginAnySubroutine {
     override var opcode: Opcode { .beginObjectLiteralComputedMethod(self) }
 
-    init(parameters: Parameters) {
+    let isGenerator: Bool
+    let isAsync: Bool
+
+    init(parameters: Parameters, isGenerator: Bool = false, isAsync: Bool = false) {
+        self.isGenerator = isGenerator
+        self.isAsync = isAsync
         // First inner output is the explicit |this| parameter
+        var ctx: Context = [.javascript, .subroutine, .method]
+        if isGenerator { ctx.insert(.generatorFunction) }
+        if isAsync { ctx.insert(.async) }
         super.init(
             parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
             numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: .isBlockStart, requiredContext: .objectLiteral,
-            contextOpened: [.javascript, .subroutine, .method])
+            contextOpened: ctx)
     }
 }
 
@@ -717,15 +734,25 @@ final class BeginClassMethod: BeginAnySubroutine {
 
     let methodName: String
     let isStatic: Bool
+    let isGenerator: Bool
+    let isAsync: Bool
 
-    init(methodName: String, parameters: Parameters, isStatic: Bool) {
+    init(
+        methodName: String, parameters: Parameters, isStatic: Bool, isGenerator: Bool = false,
+        isAsync: Bool = false
+    ) {
         self.methodName = methodName
         self.isStatic = isStatic
+        self.isGenerator = isGenerator
+        self.isAsync = isAsync
         // First inner output is the explicit |this| parameter
+        var ctx: Context = [.javascript, .subroutine, .method, .classMethod]
+        if isGenerator { ctx.insert(.generatorFunction) }
+        if isAsync { ctx.insert(.async) }
         super.init(
             parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isMutable, .isBlockStart], requiredContext: .classDefinition,
-            contextOpened: [.javascript, .subroutine, .method, .classMethod])
+            contextOpened: ctx)
     }
 }
 
@@ -736,15 +763,22 @@ final class EndClassMethod: EndAnySubroutine {
 final class BeginClassComputedMethod: BeginAnySubroutine {
     override var opcode: Opcode { .beginClassComputedMethod(self) }
     let isStatic: Bool
+    let isGenerator: Bool
+    let isAsync: Bool
 
-    init(parameters: Parameters, isStatic: Bool) {
+    init(parameters: Parameters, isStatic: Bool, isGenerator: Bool = false, isAsync: Bool = false) {
         self.isStatic = isStatic
+        self.isGenerator = isGenerator
+        self.isAsync = isAsync
         // First inner output is the explicit |this| parameter
+        var ctx: Context = [.javascript, .subroutine, .method, .classMethod]
+        if isGenerator { ctx.insert(.generatorFunction) }
+        if isAsync { ctx.insert(.async) }
         super.init(
             parameters: parameters, numInputs: 1 + parameters.numDefaultParameters,
             numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: [.isBlockStart], requiredContext: .classDefinition,
-            contextOpened: [.javascript, .subroutine, .method, .classMethod])
+            contextOpened: ctx)
     }
 }
 
@@ -875,16 +909,26 @@ final class BeginClassPrivateMethod: BeginAnySubroutine {
 
     let methodName: String
     let isStatic: Bool
+    let isGenerator: Bool
+    let isAsync: Bool
 
-    init(methodName: String, parameters: Parameters, isStatic: Bool) {
+    init(
+        methodName: String, parameters: Parameters, isStatic: Bool, isGenerator: Bool = false,
+        isAsync: Bool = false
+    ) {
         self.methodName = methodName
         self.isStatic = isStatic
+        self.isGenerator = isGenerator
+        self.isAsync = isAsync
         // First inner output is the explicit |this| parameter.
         // See comment in ClassAddPrivateProperty for why this operation isn't mutable.
+        var ctx: Context = [.javascript, .subroutine, .method, .classMethod]
+        if isGenerator { ctx.insert(.generatorFunction) }
+        if isAsync { ctx.insert(.async) }
         super.init(
             parameters: parameters, numInnerOutputs: parameters.numInnerOutputs + 1,
             attributes: .isBlockStart, requiredContext: .classDefinition,
-            contextOpened: [.javascript, .subroutine, .method, .classMethod])
+            contextOpened: ctx)
     }
 }
 

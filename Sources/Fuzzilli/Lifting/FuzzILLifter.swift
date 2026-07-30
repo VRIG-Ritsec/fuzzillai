@@ -154,7 +154,11 @@ public class FuzzILLifter: Lifter {
         case .beginObjectLiteralMethod(let op):
             let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginObjectLiteralMethod `\(op.methodName)`\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginObjectLiteralMethod \(async)\(generator)`\(op.methodName)`\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endObjectLiteralMethod:
@@ -164,7 +168,11 @@ public class FuzzILLifter: Lifter {
         case .beginObjectLiteralComputedMethod(let op):
             let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
-            w.emit("BeginObjectLiteralComputedMethod \(input(0))\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginObjectLiteralComputedMethod \(async)\(generator)\(input(0))\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endObjectLiteralComputedMethod:
@@ -261,7 +269,11 @@ public class FuzzILLifter: Lifter {
             let maybeStatic = op.isStatic ? "static " : ""
             let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginClassMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassMethod \(async)\(generator)'\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassMethod:
@@ -272,7 +284,11 @@ public class FuzzILLifter: Lifter {
             let maybeStatic = op.isStatic ? "static " : ""
             let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs.dropFirst())
-            w.emit("BeginClassComputedMethod \(maybeStatic)\(input(0))\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassComputedMethod \(async)\(generator)\(maybeStatic)\(input(0))\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassComputedMethod:
@@ -339,7 +355,11 @@ public class FuzzILLifter: Lifter {
             let maybeStatic = op.isStatic ? "static " : ""
             let params = liftParametersWithThis(op.parameters, as: instr.innerOutputs.map(lift))
             let inputs = liftDefaultParameters(op.parameters, instr.inputs)
-            w.emit("BeginClassPrivateMethod '\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)")
+            let generator = op.isGenerator ? "generator " : ""
+            let async = op.isAsync ? "async " : ""
+            w.emit(
+                "BeginClassPrivateMethod \(async)\(generator)'\(maybeStatic)\(op.methodName)'\(inputs) -> \(params)"
+            )
             w.increaseIndentionLevel()
 
         case .endClassPrivateMethod:

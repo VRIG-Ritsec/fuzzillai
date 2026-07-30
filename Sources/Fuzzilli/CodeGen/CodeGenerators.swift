@@ -249,6 +249,15 @@ func makeObjectDestructForOfLoopGenerator(
     }
 }
 
+private func randomAsyncAndGeneratorFlags() -> (isAsync: Bool, isGenerator: Bool) {
+    switch Int.random(in: 0..<20) {
+    case 0: return (true, false)  // 5% async
+    case 1: return (false, true)  // 5% generator
+    case 2: return (true, true)  // 5% async generator
+    default: return (false, false)  // 85% default
+    }
+}
+
 // Code generators.
 //
 // These insert one or more instructions into a program.
@@ -932,10 +941,13 @@ public let CodeGenerators: [CodeGenerator] = [
                         randomVariable: { b.randomJsVariable() })
                 b.setParameterTypesForNextSubroutine(
                     randomParameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginObjectLiteralMethod(
                         methodName: methodName,
-                        parameters: randomParameters.parameters),
+                        parameters: randomParameters.parameters,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: defaultValues)
             },
             GeneratorStub(
@@ -962,9 +974,12 @@ public let CodeGenerators: [CodeGenerator] = [
                         probability: 0.1,
                         randomVariable: { b.randomJsVariable() })
                 b.setParameterTypesForNextSubroutine(parameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginObjectLiteralComputedMethod(
-                        parameters: parameters.parameters),
+                        parameters: parameters.parameters,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: [methodName] + defaultValues)
             },
             GeneratorStub(
@@ -1172,11 +1187,14 @@ public let CodeGenerators: [CodeGenerator] = [
                         probability: 0.1,
                         randomVariable: { b.randomJsVariable() })
                 b.setParameterTypesForNextSubroutine(parameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassMethod(
                         methodName: methodName,
                         parameters: parameters.parameters,
-                        isStatic: false),
+                        isStatic: false,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: defaultValues)
             },
             GeneratorStub(
@@ -1204,10 +1222,13 @@ public let CodeGenerators: [CodeGenerator] = [
                         probability: 0.1,
                         randomVariable: { b.randomJsVariable() })
                 b.setParameterTypesForNextSubroutine(parameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassComputedMethod(
                         parameters: parameters.parameters,
-                        isStatic: false),
+                        isStatic: false,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: [methodName] + defaultValues)
             },
             GeneratorStub(
@@ -1338,11 +1359,14 @@ public let CodeGenerators: [CodeGenerator] = [
                         randomVariable: { b.randomJsVariable() })
 
                 b.setParameterTypesForNextSubroutine(parameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassMethod(
                         methodName: methodName,
                         parameters: parameters.parameters,
-                        isStatic: true),
+                        isStatic: true,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: defaultValues)
 
             },
@@ -1368,10 +1392,13 @@ public let CodeGenerators: [CodeGenerator] = [
                     notIn: b.currentClassDefinition.staticComputedMethods)
                 let parameters = b.randomParameters()
                 b.setParameterTypesForNextSubroutine(parameters.parameterTypes)
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassComputedMethod(
                         parameters: parameters.parameters,
-                        isStatic: true),
+                        isStatic: true,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync),
                     withInputs: [methodName])
             },
             GeneratorStub(
@@ -1505,11 +1532,14 @@ public let CodeGenerators: [CodeGenerator] = [
                     b.randomCustomPrivateMethodName,
                     notIn: b.currentClassDefinition.privateFields)
                 let parameters = b.randomParameters()
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassPrivateMethod(
                         methodName: methodName,
                         parameters: parameters.parameters,
-                        isStatic: false))
+                        isStatic: false,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync))
             },
             GeneratorStub(
                 "End",
@@ -1545,11 +1575,14 @@ public let CodeGenerators: [CodeGenerator] = [
                     b.randomCustomPrivateMethodName,
                     notIn: b.currentClassDefinition.privateFields)
                 let parameters = b.randomParameters()
+                let (isAsync, isGenerator) = randomAsyncAndGeneratorFlags()
                 b.emit(
                     BeginClassPrivateMethod(
                         methodName: methodName,
                         parameters: parameters.parameters,
-                        isStatic: true))
+                        isStatic: true,
+                        isGenerator: isGenerator,
+                        isAsync: isAsync))
             },
             GeneratorStub(
                 "End",

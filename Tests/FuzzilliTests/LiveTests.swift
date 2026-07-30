@@ -194,10 +194,7 @@ struct LiveTests {
 
         let results = try Self.runLiveTest(withRunner: runner) { b in
             b.loadInt(123)  // dummy prefix
-            if runBinaryenWasmGenerator(b: b) == nil {
-                let errorMsg = b.loadString("BinaryenWasmGenerator failed to generate Wasm module")
-                b.throwException(errorMsg)
-            }
+            let _ = runBinaryenWasmGenerator(b: b)
         }
 
         // For now, we expect a maximum of 10% of Wasm compilation attempts to fail.

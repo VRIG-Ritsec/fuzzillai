@@ -1022,20 +1022,14 @@ public struct ILType: Hashable {
         // object with properties ["foo", "bar"] is an object with properties
         // ["foo", "bar"], as that is the "smaller" type, subsumed by the first.
         // The same rules apply for methods.
+
+        // However, the properties and methods are "open bounds". `.object(withProperties: ["foo"])`
+        // means it has at least a property `foo`, it doesn't mean that it doesn't have any other
+        // properties, so the intersection of an object with properties ["foo"] and an object with
+        // properties ["bar"] is an object with properties ["foo", "bar"].
         let properties = self.properties.union(other.properties)
-        guard properties.count == max(self.numProperties, other.numProperties) else {
-            return .nothing
-        }
-
         let methods = self.methods.union(other.methods)
-        guard methods.count == max(self.numMethods, other.numMethods) else {
-            return .nothing
-        }
-
         let symbolMethods = self.symbolMethods.union(other.symbolMethods)
-        guard symbolMethods.count == max(self.numSymbolMethods, other.numSymbolMethods) else {
-            return .nothing
-        }
 
         // Groups must either be equal or one of them must be nil, in which case
         // the result will have the non-nil group as that is again the smaller type.
@@ -1107,18 +1101,18 @@ public struct ILType: Hashable {
             iterableElementType = self.iterableElementType ?? other.iterableElementType
         }
 
-        var commonExports: [String: ILType] = [:]
+        var exports: [String: ILType] = [:]
         let selfExports = self.ext?.exports ?? [:]
         let otherExports = other.ext?.exports ?? [:]
         for (name, type) in selfExports {
             if let otherType = otherExports[name] {
-                commonExports[name] = type.intersection(with: otherType)
+                exports[name] = type.intersection(with: otherType)
             } else {
-                commonExports[name] = type
+                exports[name] = type
             }
         }
-        for (name, type) in otherExports where commonExports[name] == nil {
-            commonExports[name] = type
+        for (name, type) in otherExports where exports[name] == nil {
+            exports[name] = type
         }
 
         return ILType(
@@ -1128,7 +1122,7 @@ public struct ILType: Hashable {
                 symbolMethods: symbolMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration,
-                iterableElementType: iterableElementType, exports: commonExports))
+                iterableElementType: iterableElementType, exports: exports))
     }
 
     public static func & (lhs: ILType, rhs: ILType) -> ILType {

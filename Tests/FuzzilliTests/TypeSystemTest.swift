@@ -207,6 +207,21 @@ struct TypeSystemTests {
         #expect(o1.MayBe(o2))
         #expect(o2.MayBe(o2))
 
+        #expect(
+            ILType.object(withProperties: ["foo"]).intersection(with: .object(withMethods: ["bar"]))
+                == .object(withProperties: ["foo"], withMethods: ["bar"]))
+        #expect(
+            ILType.object(withProperties: ["foo"]).intersection(
+                with: .object(withProperties: ["bar"]))
+                == .object(withProperties: ["foo", "bar"]))
+        // results in
+        #expect(
+            ILType.object(withProperties: ["foo"], withMethods: [])
+                .MayBe(.object(withProperties: [], withMethods: ["bar"])))
+        #expect(
+            ILType.object(withProperties: ["foo"], withMethods: [])
+                .MayBe(.object(withProperties: ["bar"], withMethods: [])))
+
         for t1 in typeSuite {
             for t2 in typeSuite {
                 // Below tests don't work for .nothing because that
@@ -429,13 +444,13 @@ struct TypeSystemTests {
             #expect(fooBazObj & fooObj == fooBazObj)
             #expect(fooBazObj & bazObj == fooBazObj)
 
-            // ... However, the other intersections are empty.
-            #expect(fooObj & barObj == .nothing)
-            #expect(fooObj & bazObj == .nothing)
-            #expect(barObj & bazObj == .nothing)
-            #expect(barObj & fooBazObj == .nothing)
-            #expect(bazObj & fooBarObj == .nothing)
-            #expect(fooBarObj & fooBazObj == .nothing)
+            // Under width subtyping, object intersection is the union of their properties and methods.
+            #expect(fooObj & barObj == fooBarObj)
+            #expect(fooObj & bazObj == fooBazObj)
+            #expect(barObj & bazObj == barObj + bazObj)
+            #expect(barObj & fooBazObj == fooBarObj + bazObj)
+            #expect(bazObj & fooBarObj == fooBarObj + bazObj)
+            #expect(fooBarObj & fooBazObj == fooBarObj + fooBazObj)
 
             // FooBar objects are Foo objects but not every Foo object is a FooBar object. Same for FooBar and Bar objects.
             #expect(fooObj >= fooBarObj)
@@ -505,7 +520,7 @@ struct TypeSystemTests {
         let fooBazObj = ILType.object(withProperties: ["foo", "baz"])
         #expect((fooBarObj | fooBazObj).properties == ["foo"])
         #expect((fooBarObj + fooBazObj).properties == ["foo", "bar", "baz"])
-        #expect((fooBarObj & fooBazObj).properties == [])
+        #expect((fooBarObj & fooBazObj).properties == ["foo", "bar", "baz"])
 
         // Unions of objects with non-objects do not have any definite properties or methods.
         #expect((aObj | .integer).properties == [])

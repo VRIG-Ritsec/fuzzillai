@@ -1825,11 +1825,17 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("asyncFunction", instr.output)
             },
             GeneratorStub(
-                "End",
+                "Await",
                 inContext: .single([.javascript, .subroutine, .async]),
-                inputs: .preferred(.thenable)
+                inputs: .preferred(.thenable),
+                provides: [.javascript, .subroutine, .async]
             ) { b, val in
                 b.await(val)
+            },
+            GeneratorStub(
+                "End",
+                inContext: .single([.javascript, .subroutine, .async]),
+            ) { b in
                 b.doReturn(b.randomJsVariable())
                 b.emit(EndAsyncFunction())
                 let f = b.runtimeData.pop("asyncFunction")
@@ -1901,11 +1907,18 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("asyncGeneratorFunction", instr.output)
             },
             GeneratorStub(
-                "End",
+                "Await",
                 inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
-                inputs: .preferred(.thenable)
+                inputs: .preferred(.thenable),
+                provides: [.javascript, .subroutine, .generatorFunction, .async]
             ) { b, val in
                 b.await(val)
+            },
+
+            GeneratorStub(
+                "End",
+                inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
+            ) { b in
                 if probability(0.5) {
                     b.yield(b.randomJsVariable())
                 } else {

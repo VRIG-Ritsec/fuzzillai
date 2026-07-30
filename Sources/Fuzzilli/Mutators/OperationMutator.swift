@@ -128,7 +128,8 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = ObjectLiteralAddElement(index: b.randomIndex())
         case .beginObjectLiteralMethod(let op):
             newOp = BeginObjectLiteralMethod(
-                methodName: b.randomMethodName(), parameters: op.parameters)
+                methodName: b.randomMethodName(), parameters: op.parameters,
+                isGenerator: op.isGenerator, isAsync: op.isAsync)
         case .beginObjectLiteralGetter:
             newOp = BeginObjectLiteralGetter(propertyName: b.randomPropertyName())
         case .beginObjectLiteralSetter:
@@ -141,7 +142,8 @@ public class OperationMutator: BaseInstructionMutator {
                 index: b.randomIndex(), hasValue: op.hasValue, isStatic: op.isStatic)
         case .beginClassMethod(let op):
             newOp = BeginClassMethod(
-                methodName: b.randomMethodName(), parameters: op.parameters, isStatic: op.isStatic)
+                methodName: b.randomMethodName(), parameters: op.parameters, isStatic: op.isStatic,
+                isGenerator: op.isGenerator, isAsync: op.isAsync)
         case .beginClassGetter(let op):
             newOp = BeginClassGetter(propertyName: b.randomPropertyName(), isStatic: op.isStatic)
         case .beginClassSetter(let op):

@@ -811,4 +811,52 @@ struct MutatorTests {
             try testCase.verify(mutatedProg)
         }
     }
+
+    @Test func testOperationMutatorPreservesGeneratorAndAsyncFlagsOnClassMethod() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            b.buildClassDefinition { cls in
+                cls.addInstanceMethod(
+                    "m", with: .parameters(n: 0), isGenerator: true, isAsync: true
+                ) { _ in }
+            }
+            b.buildObjectLiteral { obj in
+                obj.addMethod("m2", with: .parameters(n: 0), isGenerator: true, isAsync: true) {
+                    _ in
+                }
+            }
+
+            let prog = b.finalize()
+
+            let mutator = OperationMutator()
+            let newBuilder = fuzzer.makeBuilder()
+
+            newBuilder.adopting {
+                for instr in prog.code {
+                    if instr.op is BeginClassMethod || instr.op is BeginObjectLiteralMethod {
+                        mutator.mutate(instr, newBuilder)
+                    } else {
+                        newBuilder.adopt(instr)
+                    }
+                }
+            }
+
+            let mutatedProg = newBuilder.finalize()
+            let mutatedClassMethod =
+                mutatedProg.code.first(where: { $0.op is BeginClassMethod })!.op
+                as! BeginClassMethod
+            #expect(mutatedClassMethod.isAsync == true)
+            #expect(mutatedClassMethod.isGenerator == true)
+
+            let mutatedObjMethod =
+                mutatedProg.code.first(where: { $0.op is BeginObjectLiteralMethod })!.op
+                as! BeginObjectLiteralMethod
+            #expect(mutatedObjMethod.isAsync == true)
+            #expect(mutatedObjMethod.isGenerator == true)
+
+            mutatedProg.checkOrDie(onFailure: "Program must be statically valid")
+        }
+    }
 }

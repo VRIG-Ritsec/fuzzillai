@@ -3452,7 +3452,7 @@ extension ObjectGroup {
                 [
                     .object(), /*imports*/ .opt(.object()),
                     .opt(jsWebAssemblyCompileOptions.instanceType),
-                ] => .jsPromise(resolvingTo: .boolean)
+                ] => .jsPromise(resolvingTo: .object(withProperties: ["module", "instance"]))
             ],
             "validate": wasmBufferTypes.map {
                 [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)]

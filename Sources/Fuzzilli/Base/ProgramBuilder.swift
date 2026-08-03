@@ -1672,6 +1672,11 @@ public class ProgramBuilder {
         return varMaps.last![variable]!
     }
 
+    /// Sets a manual mapping for adoption from an input variable to an output variable.
+    public func setAdoptionMap(for variable: Variable, to mappedVariable: Variable) {
+        varMaps[varMaps.count - 1][variable] = mappedVariable
+    }
+
     /// Maps a list of variables from the program that is currently configured for adoption into the program being constructed.
     public func adopt<Variables: Collection>(_ variables: Variables) -> [Variable]
     where Variables.Element == Variable {

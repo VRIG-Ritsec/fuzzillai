@@ -689,6 +689,81 @@ struct MutatorTests {
             }
         ),
         PropertyAccessorTestCase(
+            name: "objectLiteralAddMethod",
+            build: { b in
+                let _ = b.buildObjectLiteral { obj in
+                    obj.addMethod("foo", with: .parameters(n: 1)) { params in
+                        let r = b.loadInt(42)
+                        b.doReturn(r)
+                    }
+                }
+            },
+            verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo"
+                    }
+                    return false
+                }
+                #expect(
+                    hasGetter,
+                    "Missing BeginObjectLiteralGetter operation for method 'foo'"
+                )
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "objectLiteralAddMethodWithDefaults",
+            build: { b in
+                let defaultVal = b.loadInt(100)
+                let _ = b.buildObjectLiteral { obj in
+                    obj.addMethod(
+                        "foo",
+                        with: .parameters(n: 1, defaultParameterIndices: [0]),
+                        defaultValues: [defaultVal]
+                    ) { params in
+                        let r = b.loadInt(42)
+                        b.doReturn(r)
+                    }
+                }
+            },
+            verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginObjectLiteralGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo"
+                    }
+                    return false
+                }
+                #expect(hasGetter)
+
+                var maybeLoadInt: Instruction? = nil
+                for instr in mutatedProg.code {
+                    if case .loadInteger(let op) = instr.op.opcode, op.value == 100 {
+                        maybeLoadInt = instr
+                        break
+                    }
+                }
+                let loadInt100Instr = try #require(maybeLoadInt)
+                let defaultValueVar = loadInt100Instr.output
+
+                var maybeFunctionStart: Instruction? = nil
+                for instr in mutatedProg.code {
+                    switch instr.op.opcode {
+                    case .beginPlainFunction, .beginAsyncFunction, .beginGeneratorFunction,
+                        .beginAsyncGeneratorFunction:
+                        if instr.inputs.contains(defaultValueVar) {
+                            maybeFunctionStart = instr
+                        }
+                        break
+                    default:
+                        break
+                    }
+                }
+                #expect(
+                    maybeFunctionStart != nil,
+                    "Missing function definition with parameter with matching default value")
+            }
+        ),
+        PropertyAccessorTestCase(
             name: "classAddProperty",
             build: { b in
                 let val = b.loadInt(42)
@@ -767,6 +842,52 @@ struct MutatorTests {
             }
         ),
         PropertyAccessorTestCase(
+            name: "classAddMethod",
+            build: { b in
+                let _ = b.buildClassDefinition { cls in
+                    cls.addInstanceMethod("foo", with: .parameters(n: 1)) { params in
+                        let r = b.loadInt(42)
+                        b.doReturn(r)
+                    }
+                }
+            },
+            verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && !op.isStatic
+                    }
+                    return false
+                }
+                #expect(
+                    hasGetter,
+                    "Missing BeginClassGetter operation for method 'foo'"
+                )
+            }
+        ),
+        PropertyAccessorTestCase(
+            name: "classAddStaticMethod",
+            build: { b in
+                let _ = b.buildClassDefinition { cls in
+                    cls.addStaticMethod("foo", with: .parameters(n: 1)) { params in
+                        let r = b.loadInt(42)
+                        b.doReturn(r)
+                    }
+                }
+            },
+            verify: { mutatedProg in
+                let hasGetter = mutatedProg.code.contains { instr in
+                    if case .beginClassGetter(let op) = instr.op.opcode {
+                        return op.propertyName == "foo" && op.isStatic
+                    }
+                    return false
+                }
+                #expect(
+                    hasGetter,
+                    "Missing static BeginClassGetter operation for static method 'foo'"
+                )
+            }
+        ),
+        PropertyAccessorTestCase(
             name: "classAddPropertyNoValue",
             build: { b in
                 let _ = b.buildClassDefinition { cls in
@@ -799,16 +920,36 @@ struct MutatorTests {
         let config = Configuration(logLevel: .error)
         let fuzzer = makeMockFuzzer(config: config, environment: env)
         try fuzzer.sync {
+            for _ in 0..<10 {
+                let b = fuzzer.makeBuilder()
+                testCase.build(b)
+                let program = b.finalize()
+
+                let mutator = PropertyAccessorMutator()
+                let mutatedProg = try #require(
+                    mutator.mutate(program, using: fuzzer.makeBuilder(), for: fuzzer))
+
+                mutatedProg.checkOrDie(onFailure: "Program must be statically valid")
+                try testCase.verify(mutatedProg)
+            }
+        }
+    }
+
+    @Test func testPropertyAccessorMutatorExcludesSuperMethods() throws {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
             let b = fuzzer.makeBuilder()
-            testCase.build(b)
+            let superClass = b.buildClassDefinition { cls in }
+            let _ = b.buildClassDefinition(withSuperclass: superClass) { cls in
+                cls.addInstanceMethod("foo", with: .parameters(n: 0)) { params in
+                    let _ = b.getSuperProperty("bar")
+                    b.doReturn(b.loadUndefined())
+                }
+            }
             let program = b.finalize()
-
-            let mutator = PropertyAccessorMutator()
-            let mutatedProg = try #require(
-                mutator.mutate(program, using: fuzzer.makeBuilder(), for: fuzzer))
-
-            mutatedProg.checkOrDie(onFailure: "Program must be statically valid")
-            try testCase.verify(mutatedProg)
+            let mutatedProg =
+                PropertyAccessorMutator().mutate(program, using: fuzzer.makeBuilder(), for: fuzzer)
+            #expect(mutatedProg == nil, "The mutator should not modify the program due to super")
         }
     }
 

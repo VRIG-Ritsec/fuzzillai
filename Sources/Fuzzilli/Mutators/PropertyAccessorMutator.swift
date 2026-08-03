@@ -31,9 +31,36 @@
 ///                 /* random code */
 ///             },
 ///         });
-public class PropertyAccessorMutator: BaseInstructionMutator {
+///
+/// Note that this changes the semantics slightly in the getter which then always returns the
+/// initial value, the setter does not update it. This could be changed, however it will change the
+/// observable behavior in some way or another (e.g. by introducing a non-enumerable property to
+/// store the underlying value).
+///
+/// Example for methods:
+///     Original:
+///         let obj = {
+///             myMethod(x) {
+///                 return x + 42;
+///             }
+///         };
+///     Mutated:
+///         let obj = {
+///             get myMethod() {
+///                 /* random code */
+///                 return function(x) {
+///                     return x + 42;
+///                 };
+///             },
+///             set myMethod(v) {
+///                 /* random code */
+///             }
+///         };
+
+public class PropertyAccessorMutator: Mutator {
 
     static let budgetPerAccessor = 3
+    static let maxSimultaneousMutations = defaultMaxSimultaneousCodeGenerations
 
     private enum PropertyTarget {
         case property(String)
@@ -41,21 +68,10 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
     }
 
     public init() {
-        // Use the lower generation budget as this mutator also performs arbitrary code generation.
-        super.init(maxSimultaneousMutations: defaultMaxSimultaneousCodeGenerations)
+        super.init()
     }
 
-    public override func canMutate(_ instr: Instruction) -> Bool {
-        switch instr.op.opcode {
-        case .setProperty, .setElement, .objectLiteralAddProperty, .objectLiteralAddElement,
-            .classAddProperty, .classAddElement:
-            true
-        default:
-            false
-        }
-    }
-
-    // 50% for getter & setter, 25% chance for only one of them each.
+    /// 50% for getter & setter, 25% chance for only one of them each.
     private func chooseDefineGetterSetter() -> (getter: Bool, setter: Bool) {
         let defineBoth = probability(0.5)
         let defineGetter = defineBoth || probability(0.5)
@@ -63,7 +79,79 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
         return (defineGetter, defineSetter)
     }
 
-    public override func mutate(_ instr: Instruction, _ b: ProgramBuilder) {
+    /// Returns whether the method body is valid for the subroutine context it will be run in.
+    private func methodBodyCanBeAdoptedInSubroutine(
+        _ program: Program, from startIndex: Int, to endIndex: Int
+    ) -> Bool {
+        for i in startIndex..<endIndex {
+            let required = program.code[i].op.requiredContext
+            if required.contains(.method) || required.contains(.classMethod) {
+                return false
+            }
+        }
+        return true
+    }
+
+    public override func mutate(_ program: Program, using b: ProgramBuilder, for fuzzer: Fuzzer)
+        -> Program?
+    {
+        var candidates = [Int]()
+        for instr in program.code {
+            switch instr.op.opcode {
+            case .setProperty, .setElement, .objectLiteralAddProperty, .objectLiteralAddElement,
+                .classAddProperty, .classAddElement:
+                candidates.append(instr.index)
+            case .beginObjectLiteralMethod, .beginClassMethod:
+                if methodBodyCanBeAdoptedInSubroutine(
+                    program, from: instr.index + 1,
+                    to: program.code.findBlockEnd(head: instr.index))
+                {
+                    candidates.append(instr.index)
+                }
+            default:
+                break
+            }
+        }
+
+        guard candidates.count > 0 else {
+            return nil
+        }
+
+        var toMutate = Set<Int>()
+        for _ in 0..<Int.random(in: 1...Self.maxSimultaneousMutations) {
+            toMutate.insert(chooseUniform(from: candidates))
+        }
+
+        var skipUntilIndex = -1
+
+        b.adopting {
+            for instr in program.code {
+                if instr.index <= skipUntilIndex {
+                    continue
+                }
+
+                if toMutate.contains(instr.index) {
+                    if case .beginObjectLiteralMethod(let op) = instr.op.opcode {
+                        skipUntilIndex = program.code.findBlockEnd(head: instr.index)
+                        mutateObjectLiteralMethod(
+                            op, originalBlockHead: instr, using: b, program: program)
+                    } else if case .beginClassMethod(let op) = instr.op.opcode {
+                        skipUntilIndex = program.code.findBlockEnd(head: instr.index)
+                        mutateClassMethod(
+                            op, originalBlockHead: instr, using: b, program: program)
+                    } else {
+                        mutateProperty(instr, b)
+                    }
+                } else {
+                    b.adopt(instr)
+                }
+            }
+        }
+
+        return b.finalize()
+    }
+
+    private func mutateProperty(_ instr: Instruction, _ b: ProgramBuilder) {
         switch instr.op.opcode {
         case .objectLiteralAddProperty(let op):
             let value = b.adopt(instr.input(0))
@@ -158,6 +246,113 @@ public class PropertyAccessorMutator: BaseInstructionMutator {
         }
         if defineSetter {
             b.emit(BeginClassSetter(propertyName: propertyName, isStatic: isStatic))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.emit(EndClassSetter())
+        }
+    }
+
+    /// Creates the inner function for the method replacement that contains the body of the
+    /// original method without changes.
+    private func buildInnerFunction(
+        parameters: Parameters,
+        isAsync: Bool,
+        isGenerator: Bool,
+        originalBlockHead instr: Instruction,
+        getterThis: Variable,
+        using b: ProgramBuilder,
+        program: Program
+    ) -> Variable {
+        assert(program.code[instr.index].isBlockStart)
+        b.build(n: Self.budgetPerAccessor, by: .generating)
+
+        // Create a function with the same parameters as the original one.
+        let descriptor = ProgramBuilder.SubroutineDescriptor.parameters(parameters)
+        let defaultValues = b.adopt(instr.inputs)
+
+        let buildBlock: ([Variable]) -> Void = { params in
+            // Map original method parameters (without `this`) to the new function parameters.
+            for (newParam, originalParam) in zip(params, instr.innerOutputs.dropFirst()) {
+                b.setAdoptionMap(for: originalParam, to: newParam)
+            }
+
+            // Adopt original method body instructions (excluding start and end).
+            let endIndex = program.code.findBlockEnd(head: instr.index)
+            for i in (instr.index + 1)..<endIndex {
+                b.adopt(program.code[i])
+            }
+        }
+
+        return
+            if isAsync && isGenerator
+        {
+            b.buildAsyncGeneratorFunction(
+                with: descriptor, defaultValues: defaultValues, buildBlock)
+        } else if isAsync {
+            b.buildAsyncFunction(with: descriptor, defaultValues: defaultValues, buildBlock)
+        } else if isGenerator {
+            b.buildGeneratorFunction(
+                with: descriptor, defaultValues: defaultValues, buildBlock)
+        } else {
+            b.buildPlainFunction(with: descriptor, defaultValues: defaultValues, buildBlock)
+        }
+    }
+
+    private func mutateObjectLiteralMethod(
+        _ op: BeginObjectLiteralMethod, originalBlockHead instr: Instruction,
+        using b: ProgramBuilder, program: Program
+    ) {
+        // We must always define a getter to preserve the original content.
+        let getterInstr = b.emit(BeginObjectLiteralGetter(propertyName: op.methodName))
+        let getterThis = getterInstr.innerOutput(0)
+        // Map the original method's `this` (first inner output) to the getter's `this`.
+        b.setAdoptionMap(for: instr.innerOutput(0), to: getterThis)
+
+        let innerFunction = buildInnerFunction(
+            parameters: op.parameters,
+            isAsync: op.isAsync,
+            isGenerator: op.isGenerator,
+            originalBlockHead: instr,
+            getterThis: getterThis,
+            using: b,
+            program: program
+        )
+        b.doReturn(innerFunction)
+        b.emit(EndObjectLiteralGetter())
+
+        if probability(0.5) {
+            b.emit(BeginObjectLiteralSetter(propertyName: op.methodName))
+            b.build(n: Self.budgetPerAccessor, by: .generating)
+            b.emit(EndObjectLiteralSetter())
+        }
+    }
+
+    private func mutateClassMethod(
+        _ op: BeginClassMethod, originalBlockHead instr: Instruction,
+        using b: ProgramBuilder, program: Program
+    ) {
+        // We must always define a getter to preserve the original content.
+        let getterInstr = b.emit(
+            BeginClassGetter(propertyName: op.methodName, isStatic: op.isStatic))
+        let getterThis = getterInstr.innerOutput(0)
+        // Map the original method's `this` (first inner output) to the getter's `this`.
+        // Note that the meaning of `this` changes depending on whether it's a static method or
+        // not, still as the getter has the same "staticness", the semantics is preserved.
+        b.setAdoptionMap(for: instr.innerOutput(0), to: getterThis)
+
+        let innerFunction = buildInnerFunction(
+            parameters: op.parameters,
+            isAsync: op.isAsync,
+            isGenerator: op.isGenerator,
+            originalBlockHead: instr,
+            getterThis: getterThis,
+            using: b,
+            program: program
+        )
+        b.doReturn(innerFunction)
+        b.emit(EndClassGetter())
+
+        if probability(0.5) {
+            b.emit(BeginClassSetter(propertyName: op.methodName, isStatic: op.isStatic))
             b.build(n: Self.budgetPerAccessor, by: .generating)
             b.emit(EndClassSetter())
         }

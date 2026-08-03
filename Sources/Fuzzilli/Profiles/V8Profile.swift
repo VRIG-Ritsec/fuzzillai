@@ -98,7 +98,7 @@ public let v8Profile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise())),
         "d8": .jsD8,
         "Worker": .jsWorkerConstructor,
         // via --expose-externalize-string:

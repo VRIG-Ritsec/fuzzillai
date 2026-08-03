@@ -145,7 +145,7 @@ let v8DumplingProfile = Profile(
     disabledMutators: [],
 
     additionalBuiltins: [
-        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise)),
+        "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise())),
         "d8": .jsD8,
         "Worker": .constructor(
             [.jsAnything, .object()] => .object(withMethods: ["postMessage", "getMessage"])),

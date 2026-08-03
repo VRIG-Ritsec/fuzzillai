@@ -1805,9 +1805,12 @@ public struct JSTyper: Analyzer {
                                 to: signature.parameters => inferredType))
                     case .beginAsyncFunction,
                         .beginAsyncArrowFunction:
+                        let resolvedType = resultType.returnType.promiseResolvingTo
                         setType(
                             of: begin.output,
-                            to: funcType.settingSignature(to: signature.parameters => .jsPromise))
+                            to: funcType.settingSignature(
+                                to: signature.parameters
+                                    => .jsPromise(resolvingTo: resolvedType)))
                     default:
                         setType(
                             of: begin.output,
@@ -1825,7 +1828,7 @@ public struct JSTyper: Analyzer {
                         ? ILType.createJsAsyncGeneratorType(ofYieldType: elementType)
                         : ILType.createJsGeneratorType(ofYieldType: elementType)
                 } else {
-                    return isAsync ? .jsPromise : resultType.returnType
+                    return isAsync ? .jsPromise() : resultType.returnType
                 }
             }
 
@@ -2406,7 +2409,14 @@ public struct JSTyper: Analyzer {
             set(instr.output, objectGroup.instanceType)
 
         case .dynamicImport(_):
-            set(instr.output, .jsPromise)
+            let moduleType = type(ofInput: 0)
+            let groupName = "_fuzz_Namespace\(instr.index)"
+            // TODO(marja): When we support "with" attributes, the type has to reflect them.
+            let objectGroup = ObjectGroup(
+                name: groupName, instanceType: nil, properties: moduleType.exports, overloads: [:]
+            )
+            dynamicObjectGroupManager.finalizedObjectGroups.append(objectGroup)
+            set(instr.output, .jsPromise(resolvingTo: objectGroup.instanceType))
 
         case .ternaryOperation:
             let outputType = type(ofInput: 1) | type(ofInput: 2)
@@ -2510,8 +2520,7 @@ public struct JSTyper: Analyzer {
             set(instr.output, .boolean)
 
         case .await:
-            // TODO if input type is known, set to input type and possibly unwrap the Promise
-            set(instr.output, .jsAnything)
+            set(instr.output, type(ofInput: 0).promiseResolvingTo)
 
         case .yield(let op):
             state.updateYieldValueType(to: op.hasArgument ? type(ofInput: 0) : .undefined)

@@ -184,11 +184,13 @@ public struct ILType: Hashable {
     public static func object(
         ofGroup group: String? = nil, withProperties properties: [String] = [],
         withMethods methods: [String] = [], withSymbolMethods symbolMethods: [String] = [],
-        withWasmType wasmExt: WasmTypeExtension? = nil
+        withWasmType wasmExt: WasmTypeExtension? = nil,
+        promiseResolvingTo: ILType? = nil
     ) -> ILType {
         let ext = TypeExtension(
             group: group, properties: Set(properties), methods: Set(methods),
-            symbolMethods: Set(symbolMethods), signature: nil, wasmExt: wasmExt)
+            symbolMethods: Set(symbolMethods), signature: nil, wasmExt: wasmExt,
+            promiseResolvingTo: promiseResolvingTo)
         return ILType(definiteType: .object, ext: ext)
     }
 
@@ -610,6 +612,15 @@ public struct ILType: Hashable {
             return false
         }
 
+        // Promise resolving type.
+        guard
+            self.ext?.promiseResolvingTo == nil
+                || (other.ext?.promiseResolvingTo != nil
+                    && self.ext!.promiseResolvingTo!.subsumes(other.ext!.promiseResolvingTo!))
+        else {
+            return false
+        }
+
         let selfExports = self.ext?.exports ?? [:]
         let otherExports = other.ext?.exports ?? [:]
         for (name, type) in selfExports {
@@ -697,6 +708,16 @@ public struct ILType: Hashable {
         return ext?.isEnumeration ?? false
     }
 
+    public var isThenable: Bool {
+        return methods.contains("then")
+    }
+
+    public var mayBeThenable: Bool {
+        // The value is a thenable if it definitely has a "then" method (isThenable).
+        // Otherwise, if it can be an .object, it might have a "then" method (even if it's not listed in `methods`).
+        return isThenable || possibleType.contains(.object)
+    }
+
     public var isNamedString: Bool {
         return (Is(.string) && ext != nil && group != nil)
     }
@@ -707,6 +728,15 @@ public struct ILType: Hashable {
 
     public var iterableElementType: ILType? {
         return ext?.iterableElementType
+    }
+
+    /// In JavaScript, any value can be `await`ed.
+    /// This getter conceptually returns the `promiseResolvingTo` of this ILType.
+    /// 1. If we have strict metadata (e.g., from `Promise<.integer>`), we return it.
+    /// 2. If it is (or might be) a Thenable without metadata, we don't know what it resolves to (`.jsAnything`).
+    /// 3. If it's strictly a primitive, `await` returns the value itself (`self`).
+    public var promiseResolvingTo: ILType {
+        return ext?.promiseResolvingTo ?? (self.mayBeThenable ? .jsAnything : self)
     }
 
     public var exports: [String: ILType] {
@@ -969,6 +999,18 @@ public struct ILType: Hashable {
             }
         }
 
+        let promiseResolvingTo: ILType?
+        // If both sides have strict resolving type metadata (e.g. `Promise<.integer> | Promise<.string>`),
+        // the union is `Promise<.integer | .string>`.
+        // We set promiseResolvingTo only for types which are surely Promises. If one side lacks it
+        // (e.g. `Promise<.integer> | .string`), the union is not a Promise, so we won't set the
+        // promiseResolvingTo field for it. Its `promiseResolvingTo` gracefully degrades to `.jsAnything`.
+        if let p1 = self.ext?.promiseResolvingTo, let p2 = other.ext?.promiseResolvingTo {
+            promiseResolvingTo = p1.union(with: p2)
+        } else {
+            promiseResolvingTo = nil
+        }
+
         return ILType(
             definiteType: definiteType, possibleType: possibleType,
             ext: TypeExtension(
@@ -976,7 +1018,7 @@ public struct ILType: Hashable {
                 symbolMethods: commonSymbolMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration, iterableElementType: iterableElementType,
-                exports: commonExports))
+                exports: commonExports, promiseResolvingTo: promiseResolvingTo))
     }
 
     public static func | (lhs: ILType, rhs: ILType) -> ILType {
@@ -1115,6 +1157,24 @@ public struct ILType: Hashable {
             exports[name] = type
         }
 
+        // Intersection means "a value that is simultaneously Type A and Type B".
+        // If we intersect `Promise<.integer>` with a generic `.object` supertype, the result
+        // must remain `Promise<.integer>`. Therefore, we must preserve `promiseResolvingTo`
+        // if one side has it. If both sides have it, we intersect them.
+
+        // We have already handled empty types like intersection(Promise<.integer>, .string)
+        // above, so we don't need to handle them here.
+        let promiseResolvingTo: ILType?
+        if let p1 = self.ext?.promiseResolvingTo, let p2 = other.ext?.promiseResolvingTo {
+            promiseResolvingTo = p1.intersection(with: p2)
+            if promiseResolvingTo == .nothing {
+                // The type is impossible, so return the empty type instead of Promise<.nothing>.
+                return .nothing
+            }
+        } else {
+            promiseResolvingTo = self.ext?.promiseResolvingTo ?? other.ext?.promiseResolvingTo
+        }
+
         return ILType(
             definiteType: definiteType, possibleType: possibleType,
             ext: TypeExtension(
@@ -1122,7 +1182,8 @@ public struct ILType: Hashable {
                 symbolMethods: symbolMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration,
-                iterableElementType: iterableElementType, exports: exports))
+                iterableElementType: iterableElementType, exports: exports,
+                promiseResolvingTo: promiseResolvingTo))
     }
 
     public static func & (lhs: ILType, rhs: ILType) -> ILType {
@@ -1178,6 +1239,14 @@ public struct ILType: Hashable {
             return false
         }
 
+        // Merging promises with different resolving types is not allowed.
+        guard
+            self.ext?.promiseResolvingTo == nil || other.ext?.promiseResolvingTo == nil
+                || self.ext?.promiseResolvingTo == other.ext?.promiseResolvingTo
+        else {
+            return false
+        }
+
         return true
     }
 
@@ -1207,6 +1276,8 @@ public struct ILType: Hashable {
 
         let iterableElementType = self.iterableElementType ?? other.iterableElementType
 
+        let promiseResolvingTo = self.ext?.promiseResolvingTo ?? other.ext?.promiseResolvingTo
+
         // We just take the self.wasmExt as they have to be the same, see `canMerge`.
         let ext = TypeExtension(
             group: group, properties: self.properties.union(other.properties),
@@ -1214,7 +1285,7 @@ public struct ILType: Hashable {
             symbolMethods: self.symbolMethods.union(other.symbolMethods),
             signature: signature, wasmExt: wasmExt, receiver: receiver,
             isEnumeration: isEnumeration,
-            iterableElementType: iterableElementType)
+            iterableElementType: iterableElementType, promiseResolvingTo: promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: ext)
     }
 
@@ -1423,6 +1494,9 @@ extension ILType: CustomStringConvertible {
                 } else {
                     params.append("withSymbolMethods: \(symbolMethods)")
                 }
+            }
+            if let target = ext?.promiseResolvingTo {
+                params.append("promiseResolvingTo: \(target.format(abbreviate: abbreviate))")
             }
             return ".object(\(params.joined(separator: ", ")))"
         case .function:
@@ -1646,16 +1720,21 @@ class TypeExtension: Hashable {
     // Exports (name -> type). Will only be populated if isJsModule is true.
     let exports: [String: ILType]
 
+    // Used to identify the type a promise resolves to. Only set if the type is surely a promise.
+    let promiseResolvingTo: ILType?
+
     init?(
         group: String? = nil, properties: Set<String>, methods: Set<String>,
         symbolMethods: Set<String> = [], signature: Signature?,
         wasmExt: WasmTypeExtension? = nil, receiver: ILType? = nil, isEnumeration: Bool = false,
-        iterableElementType: ILType? = nil, exports: [String: ILType] = [:]
+        iterableElementType: ILType? = nil, exports: [String: ILType] = [:],
+        promiseResolvingTo: ILType? = nil
     ) {
         if group == nil && properties.isEmpty && methods.isEmpty && symbolMethods.isEmpty
             && signature == nil
             && wasmExt == nil && receiver == nil && isEnumeration == false
             && iterableElementType == nil && exports.isEmpty
+            && promiseResolvingTo == nil
         {
             return nil
         }
@@ -1670,6 +1749,7 @@ class TypeExtension: Hashable {
         self.isEnumeration = isEnumeration
         self.iterableElementType = iterableElementType
         self.exports = exports
+        self.promiseResolvingTo = promiseResolvingTo
     }
 
     static func == (lhs: TypeExtension, rhs: TypeExtension) -> Bool {
@@ -1683,6 +1763,7 @@ class TypeExtension: Hashable {
             && lhs.isEnumeration == rhs.isEnumeration
             && lhs.iterableElementType == rhs.iterableElementType
             && lhs.exports == rhs.exports
+            && lhs.promiseResolvingTo == rhs.promiseResolvingTo
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -1696,6 +1777,7 @@ class TypeExtension: Hashable {
         hasher.combine(isEnumeration)
         hasher.combine(iterableElementType)
         hasher.combine(exports)
+        hasher.combine(promiseResolvingTo)
     }
 }
 

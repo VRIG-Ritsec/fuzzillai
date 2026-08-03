@@ -1365,8 +1365,16 @@ extension ILType {
     public static let jsAsyncGenerator = createJsAsyncGeneratorType()
 
     /// Type of a JavaScript Promise object.
-    public static let jsPromise = ILType.object(
-        ofGroup: "Promise", withMethods: ["catch", "finally", "then"])
+    public static func jsPromise(
+        resolvingTo: ILType = .jsAnything, withProperties properties: [String] = [],
+        withMethods methods: [String] = [], withSymbolMethods symbolMethods: [String] = []
+    ) -> ILType {
+        return ILType.object(
+            ofGroup: "Promise", withProperties: properties,
+            withMethods: methods + ["catch", "finally", "then"],
+            withSymbolMethods: symbolMethods,
+            promiseResolvingTo: resolvingTo)
+    }
 
     /// Type of a JavaScript Map object.
     public static let jsMap = createJsMapType()
@@ -1617,7 +1625,7 @@ extension ILType {
 
     /// Type of the JavaScript Promise constructor builtin.
     public static let jsPromiseConstructor =
-        ILType.constructor([.function()] => .jsPromise)
+        ILType.constructor([.function()] => .jsPromise())
         + .object(
             ofGroup: "PromiseConstructor", withProperties: ["prototype"],
             withMethods: [
@@ -2292,21 +2300,21 @@ extension ObjectGroup {
         instanceType: .jsAsyncGenerator,
         properties: [:],
         methods: [
-            "next": [.opt(.jsAnything)] => .jsPromise,
-            "return": [.opt(.jsAnything)] => .jsPromise,
-            "throw": [.opt(.jsAnything)] => .jsPromise,
+            "next": [.opt(.jsAnything)] => .jsPromise(),
+            "return": [.opt(.jsAnything)] => .jsPromise(),
+            "throw": [.opt(.jsAnything)] => .jsPromise(),
         ]
     )
 
     /// Object group modelling JavaScript promises.
     public static let jsPromises = ObjectGroup(
         name: "Promise",
-        instanceType: .jsPromise,
+        instanceType: .jsPromise(),
         properties: [:],
         methods: [
-            "catch": [.function()] => .jsPromise,
-            "then": [.function()] => .jsPromise,
-            "finally": [.function()] => .jsPromise,
+            "catch": [.function()] => .jsPromise(),
+            "then": [.function()] => .jsPromise(),
+            "finally": [.function()] => .jsPromise(),
         ]
     )
 
@@ -2540,7 +2548,7 @@ extension ObjectGroup {
             "disposed": .boolean
         ],
         methods: [
-            "disposeAsync": [] => .jsPromise,
+            "disposeAsync": [] => .jsPromise(),
             "use": [.jsAnything] => .jsAnything,
             "adopt": [.jsAnything, .function()] => .jsAnything,
             "defer": [.function()] => .undefined,
@@ -2747,13 +2755,13 @@ extension ObjectGroup {
             "prototype": jsPromisePrototype.instanceType
         ],
         methods: [
-            "resolve": [.jsAnything] => .jsPromise,
-            "reject": [.jsAnything] => .jsPromise,
-            "all": [.iterable] => .jsPromise,
-            "any": [.iterable] => .jsPromise,
-            "race": [.iterable] => .jsPromise,
-            "allSettled": [.iterable] => .jsPromise,
-            "try": [.function(), .jsAnything...] => .jsPromise,
+            "resolve": [.jsAnything] => .jsPromise(),
+            "reject": [.jsAnything] => .jsPromise(),
+            "all": [.iterable] => .jsPromise(),
+            "any": [.iterable] => .jsPromise(),
+            "race": [.iterable] => .jsPromise(),
+            "allSettled": [.iterable] => .jsPromise(),
+            "try": [.function(), .jsAnything...] => .jsPromise(),
             "withResolvers": [] => .object(withProperties: ["promise", "resolve", "reject"]),
         ]
     )
@@ -2894,7 +2902,8 @@ extension ObjectGroup {
         ],
         methods: [
             "from": [.jsAnything, .opt(.function()), .opt(.object())] => .jsArray,
-            "fromAsync": [.jsAnything, .opt(.function()), .opt(.object())] => .jsPromise,
+            "fromAsync": [.jsAnything, .opt(.function()), .opt(.object())]
+                => .jsPromise(resolvingTo: .jsArray),
             "isArray": [.jsAnything] => .boolean,
             "of": [.jsAnything...] => .jsArray,
         ]
@@ -3423,28 +3432,31 @@ extension ObjectGroup {
         ],
         overloads: [
             "compile": wasmBufferTypes.map {
-                [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)] => .jsPromise
+                [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)]
+                    => .jsPromise(resolvingTo: .jsWebAssemblyModule)
             },
             // TODO: The first parameter should be a Response which Fuzzilli doesn't know as it is
             // mostly used by WebAPIs like fetch().
             "compileStreaming": [
-                [.object(), .opt(jsWebAssemblyCompileOptions.instanceType)] => .jsPromise
+                [.object(), .opt(jsWebAssemblyCompileOptions.instanceType)]
+                    => .jsPromise(resolvingTo: .jsWebAssemblyModule)
             ],
             "instantiate": wasmBufferTypes.map {
                 [
                     .plain($0), /*imports*/ .opt(.object()),
                     .opt(jsWebAssemblyCompileOptions.instanceType),
-                ] => .jsPromise
+                ] => .jsPromise()
             },
             // TODO: Same as compileStreaming(), the first parameter has to be a Response.
             "instantiateStreaming": [
                 [
                     .object(), /*imports*/ .opt(.object()),
                     .opt(jsWebAssemblyCompileOptions.instanceType),
-                ] => .jsPromise
+                ] => .jsPromise(resolvingTo: .boolean)
             ],
             "validate": wasmBufferTypes.map {
-                [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)] => .jsPromise
+                [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)]
+                    => .jsPromise(resolvingTo: .boolean)
             },
             // The argument needs to be an exported Wasm function. Fuzzilli's type system does not
             // distinguish between Wasm and JS functions, so we can't express this precisely.

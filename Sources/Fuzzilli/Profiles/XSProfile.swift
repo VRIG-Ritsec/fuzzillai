@@ -276,7 +276,7 @@ let jsCompartments = ObjectGroup(
         "globalThis": .object()
     ],
     methods: [  //@@ import/importNow can accept more than strings
-        "import": [.string] => .jsPromise,
+        "import": [.string] => .jsPromise(),
         "importNow": [.string] => .jsAnything,
         // "module"    : [.opt(.string)] => .object(), (currently unavailable)
         "evaluate": [.string] => .jsAnything,

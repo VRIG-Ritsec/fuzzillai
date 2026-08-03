@@ -3214,7 +3214,7 @@ public let CodeGenerators: [CodeGenerator] = [
             },
             GeneratorStub(
                 "End", inContext: .single([.subroutine, .javascript]),
-                produces: [.jsPromise],
+                produces: [.jsPromise()],
             ) {
                 b in
                 b.emit(EndPlainFunction())
@@ -3749,7 +3749,9 @@ public let CodeGenerators: [CodeGenerator] = [
         }
     },
 
-    CodeGenerator("DynamicImportGenerator", inputs: .required(.jsModule())) { b, module in
+    CodeGenerator(
+        "DynamicImportGenerator", inputs: .required(.jsModule()), produces: [.jsPromise()]
+    ) { b, module in
         b.dynamicImport(module, isDeferred: probability(0.5))
     },
 

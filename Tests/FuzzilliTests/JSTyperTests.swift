@@ -484,7 +484,7 @@ struct JSTyperTests {
             }
             #expect(b.type(of: f) == .function(signature4))
 
-            let signature5 = [.string, .number] => .jsPromise
+            let signature5 = [.string, .number] => .jsPromise(resolvingTo: .undefined)
             f = b.buildAsyncFunction(with: .parameters(signature5.parameters)) { params in
                 #expect(b.type(of: params[0]) == .string)
                 #expect(b.type(of: params[1]) == .number)
@@ -682,10 +682,20 @@ struct JSTyperTests {
                     == ILType.createJsGeneratorType(ofYieldType: expectedYield))
 
             let a2 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in }
-            #expect(b.type(of: a2).signature?.outputType == .jsPromise)
+            #expect(b.type(of: a2).signature?.outputType == .jsPromise(resolvingTo: .undefined))
 
             let a3 = b.buildAsyncArrowFunction(with: .parameters(n: 0)) { _ in }
-            #expect(b.type(of: a3).signature?.outputType == .jsPromise)
+            #expect(b.type(of: a3).signature?.outputType == .jsPromise(resolvingTo: .undefined))
+
+            let a4 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a4).signature?.outputType == .jsPromise(resolvingTo: .integer))
+
+            let a5 = b.buildAsyncArrowFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a5).signature?.outputType == .jsPromise(resolvingTo: .integer))
         }
     }
 
@@ -2338,7 +2348,7 @@ struct JSTyperTests {
             let then = b.getProperty("then", of: promiseProto)
             #expect(
                 b.type(of: then)
-                    == .unboundFunction([.function()] => .jsPromise, receiver: .jsPromise))
+                    == .unboundFunction([.function()] => .jsPromise(), receiver: .jsPromise()))
 
             // ArrayBuffer.prototype
             let arrayBufferBuiltin = b.createNamedVariable(forBuiltin: "ArrayBuffer")
@@ -2792,8 +2802,88 @@ struct JSTyperTests {
 
             b.buildBundleModuleEntryPoint {
                 let dynImport = b.dynamicImport(module)
-                #expect(b.type(of: dynImport) == .jsPromise)
+                #expect(
+                    b.type(of: dynImport).promiseResolvingTo.properties == ["foo", "bar"])
             }
+        }
+    }
+
+    @Test
+    func testAwaitTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let dummy = b.loadInt(0)
+
+            // Await a promise with a known resolving type.
+            let a1 = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            let p1 = b.callFunction(a1)
+            #expect(b.type(of: p1) == .jsPromise(resolvingTo: .integer))
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r1 = b.await(p1)
+                #expect(b.type(of: r1) == .integer)
+            }
+
+            // Await a primitive.
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let primitive = b.loadInt(123)
+                let r3 = b.await(primitive)
+                #expect(b.type(of: r3) == .integer)
+            }
+
+            // Await a thenable.
+            let thenableType = ILType.object(withMethods: ["then"])
+            let sig4 = [Parameter.plain(thenableType)] => thenableType
+            let f4 = b.buildPlainFunction(with: .parameters(sig4.parameters)) { args in
+                b.doReturn(args[0])
+            }
+            let thenable = b.callFunction(f4, withArgs: [dummy])
+            #expect(b.type(of: thenable) == thenableType)
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r4 = b.await(thenable)
+                #expect(b.type(of: r4) == .jsAnything)
+            }
+
+            // Await a non-thenable object (but we don't know that it will surely
+            // not have the "then" method, so awaiting gives .jsAnything.)
+            let nonThenableType = ILType.object(ofGroup: "MyGroup", withMethods: ["foo"])
+            let sig5 = [Parameter.plain(nonThenableType)] => nonThenableType
+            let f5 = b.buildPlainFunction(with: .parameters(sig5.parameters)) { args in
+                b.doReturn(args[0])
+            }
+            let nonThenable = b.callFunction(f5, withArgs: [dummy])
+            #expect(b.type(of: nonThenable) == nonThenableType)
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r5 = b.await(nonThenable)
+                #expect(b.type(of: r5) == .jsAnything)
+            }
+        }
+    }
+
+    @Test
+    func testAsyncFunctionReturningPromise() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // async function a() { return 42; }
+            let a = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                b.doReturn(b.loadInt(42))
+            }
+            #expect(b.type(of: a).signature?.outputType == .jsPromise(resolvingTo: .integer))
+
+            // async function b() { return a(); }
+            let bVar = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let r = b.callFunction(a)
+                b.doReturn(r)
+            }
+            #expect(b.type(of: bVar).signature?.outputType == .jsPromise(resolvingTo: .integer))
         }
     }
 

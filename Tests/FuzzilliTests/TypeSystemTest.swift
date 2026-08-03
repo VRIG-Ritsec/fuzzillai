@@ -2132,6 +2132,98 @@ struct TypeSystemTests {
 
     @Test
     func testPromiseIsThenable() {
-        #expect(ILType.jsPromise.Is(ILType.thenable))
+        #expect(ILType.jsPromise().Is(ILType.thenable))
     }
+
+    @Test
+    func testPromiseTypeOperations() {
+        let pInt = ILType.jsPromise(resolvingTo: .integer)
+        let pString = ILType.jsPromise(resolvingTo: .string)
+        let obj = ILType.object()
+
+        // union(Promise<.integer>, .string) -> resolves to .jsAnything (because union drops Promise info and creates an .object | .string type, which might be anything when awaited)
+        let u1 = pInt.union(with: .string)
+        #expect(u1.promiseResolvingTo == .jsAnything)
+
+        // union(Promise<.integer>, Promise<.string>) == Promise<.integer | .string>
+        let u2 = pInt.union(with: pString)
+        #expect(u2 == .jsPromise(resolvingTo: .integer | .string))
+
+        // intersection(Promise<.integer>, .object) == Promise<.integer> because .object is a supertype
+        let i1 = pInt.intersection(with: obj)
+        #expect(i1 == pInt)
+
+        // intersection(Promise<.integer>, Promise<.string>) == .nothing (since .integer intersect .string is .nothing)
+        let i2 = pInt.intersection(with: pString)
+        #expect(i2 == .nothing)
+
+        // intersection(Promise<.integer>, .string | .object) -> resolving type preserved because .object is a supertype (Promise<.integer> cannot be a .string)
+        let i3 = pInt.intersection(with: .string | obj)
+        #expect(i3 == .jsPromise(resolvingTo: .integer))
+
+        // intersection(Promise<.integer>, {someRandomProperty: ...}) -> Promise<.integer> with someRandomProperty
+        let someObj = ILType.object(withProperties: ["someRandomProperty"])
+        let i4 = pInt.intersection(with: someObj)
+        #expect(
+            i4 == ILType.jsPromise(resolvingTo: .integer, withProperties: ["someRandomProperty"]))
+
+        // intersect(.thenable, Promise<.integer>) -> Promise<.integer>
+        let thenable = ILType.object(withMethods: ["then"])
+        let i5 = thenable.intersection(with: pInt)
+        #expect(i5 == pInt)
+
+        // Several tests for intersect(<something not thenable>, Promise<.integer>):
+
+        // primitive -> .nothing
+        let i6 = ILType.string.intersection(with: pInt)
+        #expect(i6 == .nothing)
+
+        // Object with other methods (might still be a Promise or a thenable)
+        let otherObj1 = ILType.object(withMethods: ["foo"])
+        let i7 = otherObj1.intersection(with: pInt)
+        #expect(i7.promiseResolvingTo == .integer)
+        #expect(i7.methods.contains("foo"))
+
+        // Object with other properties (might still be a Promise or a thenable)
+        let otherObj2 = ILType.object(withProperties: ["foo"])
+        let i8 = otherObj2.intersection(with: pInt)
+        #expect(i8 == .jsPromise(resolvingTo: .integer, withProperties: ["foo"]))
+
+        // Generic Object (not .thenable but has no methods, so it is supertype)
+        // Resolving type is preserved.
+        let i9 = obj.intersection(with: pInt)
+        #expect(i9 == pInt)
+    }
+
+    @Test
+    func testPromiseSubtyping() {
+        let pInt = ILType.jsPromise(resolvingTo: .integer)
+        let pString = ILType.jsPromise(resolvingTo: .string)
+        let pAnything = ILType.jsPromise(resolvingTo: .jsAnything)
+
+        // Promise<.integer> should NOT subsume Promise<.string>
+        #expect(!pInt.subsumes(pString))
+        #expect(!pInt.Is(pString))
+        #expect(!pString.subsumes(pInt))
+        #expect(!pString.Is(pInt))
+
+        // Promise<.jsAnything> SHOULD subsume Promise<.integer>
+        #expect(pAnything.subsumes(pInt))
+        #expect(pInt.Is(pAnything))
+
+        // Promise<.integer> should NOT subsume Promise<.jsAnything>
+        #expect(!pInt.subsumes(pAnything))
+        #expect(!pAnything.Is(pInt))
+
+        // Promise<.integer> SHOULD subsume Promise<.integer>
+        #expect(pInt.subsumes(pInt))
+        #expect(pInt.Is(pInt))
+
+        let pIntOrString = ILType.jsPromise(resolvingTo: .integer | .string)
+        #expect(pIntOrString.subsumes(pInt))
+        #expect(pIntOrString.subsumes(pString))
+        #expect(!pInt.subsumes(pIntOrString))
+        #expect(!pString.subsumes(pIntOrString))
+    }
+
 }

@@ -236,6 +236,19 @@ public class Fuzzer {
                 assert(
                     duplicateNames.isEmpty,
                     "Contributor names must be unique, found duplicates: \(duplicateNames)")
+
+                // Similarly check that all code generator stubs are unique. As the stub stores the
+                // contributor statistics, if a stub is reused across multiple code generators, it
+                // should be recreated each time.
+                let allStubs = self.codeGenerators.flatMap { $0.parts }
+                var seenStubs = Set<ObjectIdentifier>()
+                let duplicateStubs = allStubs.filter {
+                    !seenStubs.insert(ObjectIdentifier($0)).inserted
+                }
+                assert(
+                    duplicateStubs.isEmpty,
+                    "CodeGenerator stubs must be unique, found duplicate: \(duplicateStubs)")
+
             }
         #endif
     }

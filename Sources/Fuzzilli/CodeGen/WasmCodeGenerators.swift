@@ -130,9 +130,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             ) { b in
                 b.emit(WasmBeginTypeGroup())
             },
-            wasmArrayTypeGenerator,
-            wasmStructTypeGenerator,
-            wasmSignatureTypeGenerator,
+            wasmArrayTypeGenerator(),
+            wasmStructTypeGenerator(),
+            wasmSignatureTypeGenerator(),
             GeneratorStub(
                 "WasmTypeGroupEndGenerator",
                 inContext: .single(.wasmTypeGroup),
@@ -146,9 +146,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             },
         ]),
 
-    CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator]),
-    CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator]),
-    CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator]),
+    CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator()]),
+    CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator()]),
+    CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator()]),
 
     CodeGenerator(
         "WasmSelfReferenceGenerator", inContext: .single(.wasmTypeGroup),
@@ -2599,131 +2599,137 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     },
 ]
 
-private let wasmArrayTypeGenerator = GeneratorStub(
-    "WasmArrayTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmArray)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define array type with super type (currently: super type and sub type have the same element type)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        // To support this in the future, we need to replace the self-reference in the
-        // sub type with a reference to the super type.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmArrayTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
+private let wasmArrayTypeGenerator = {
+    GeneratorStub(
+        "WasmArrayTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmArray)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define array type with super type (currently: super type and sub type have the same element type)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            // To support this in the future, we need to replace the self-reference in the
+            // sub type with a reference to the super type.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmArrayTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
 
-    // Define array type without super type
-    let mutability = probability(0.75)
-    if let elementType = b.randomWasmTypeDef(),
-        probability(0.25)
-    {
-        // Excluding non-nullable references from referring to a self-reference ensures we do not end up with cycles of non-nullable references.
-        let nullability =
-            b.type(of: elementType).wasmTypeDefinition!.description
-            == .selfReference || probability(0.5)
-        b.wasmDefineArrayType(
-            elementType: .wasmRef(.Index(), nullability: nullability),
-            mutability: mutability, indexType: elementType, isFinal: isFinal)
-    } else {
-        b.wasmDefineArrayType(
-            elementType: chooseUniform(
-                from: [
-                    .wasmPackedI8, .wasmPackedI16, .wasmi32, .wasmi64, .wasmf32, .wasmf64,
-                    .wasmSimd128,
-                ]
-                    + WasmAbstractHeapType.allCases.map {
-                        ILType.wasmRef($0, nullability: Bool.random())
-                    }),
-            mutability: mutability, isFinal: isFinal)
-    }
-}
-
-private let wasmStructTypeGenerator = GeneratorStub(
-    "WasmStructTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmStruct)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define struct type with super type (currently: super type and sub type have the same fields)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        // To support this in the future, we need to replace the self-reference in the
-        // sub type with a reference to the super type.
-        // In the case of forward references, this requires more thought.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmStructTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
-
-    // Define struct type without super type
-    let (fields, indexTypes) = b.generateRandomWasmStructFields()
-
-    b.wasmDefineStructType(fields: fields, indexTypes: indexTypes, isFinal: isFinal)
-}
-
-private let wasmSignatureTypeGenerator = GeneratorStub(
-    "WasmSignatureTypeGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [.init(.wasmTypeDef(), .IsWasmFunction)]
-) { b in
-    let isFinal = probability(0.25)
-    // Define signature type with super type (currently: super type and sub type have the same signature)
-    if probability(0.25),
-        // We avoid using super types with self-references to ensure programs are valid.
-        let superType = b.findVariable(satisfying: {
-            if let desc = b.type(of: $0).wasmTypeDefinition?.description
-                as? WasmSignatureTypeDescription
-            {
-                return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
-            }
-            return false
-        })
-    {
-        b.generateSubtype(for: superType, isFinal: isFinal)
-        return
-    }
-
-    // Define signature type without super type
-    let typeCount = Int.random(in: 0...10)
-    let returnCount = Int.random(in: 0...typeCount)
-    let parameterCount = typeCount - returnCount
-
-    var indexTypes: [Variable] = []
-    let chooseType = {
+        // Define array type without super type
+        let mutability = probability(0.75)
         if let elementType = b.randomWasmTypeDef(),
             probability(0.25)
         {
+            // Excluding non-nullable references from referring to a self-reference ensures we do not end up with cycles of non-nullable references.
             let nullability =
                 b.type(of: elementType).wasmTypeDefinition!.description
                 == .selfReference || probability(0.5)
-            indexTypes.append(elementType)
-            return ILType.wasmRef(.Index(), nullability: nullability)
+            b.wasmDefineArrayType(
+                elementType: .wasmRef(.Index(), nullability: nullability),
+                mutability: mutability, indexType: elementType, isFinal: isFinal)
         } else {
-            // TODO(mliedtke): Extend list with abstract heap types.
-            return chooseUniform(from: ILType.wasmNonRefValueTypes)
+            b.wasmDefineArrayType(
+                elementType: chooseUniform(
+                    from: [
+                        .wasmPackedI8, .wasmPackedI16, .wasmi32, .wasmi64, .wasmf32, .wasmf64,
+                        .wasmSimd128,
+                    ]
+                        + WasmAbstractHeapType.allCases.map {
+                            ILType.wasmRef($0, nullability: Bool.random())
+                        }),
+                mutability: mutability, isFinal: isFinal)
         }
     }
-    let signature =
-        (0..<parameterCount).map { _ in chooseType() }
-        => (0..<returnCount).map { _ in chooseType() }
-    b.wasmDefineSignatureType(signature: signature, indexTypes: indexTypes, isFinal: isFinal)
+}
+
+private let wasmStructTypeGenerator = {
+    GeneratorStub(
+        "WasmStructTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmStruct)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define struct type with super type (currently: super type and sub type have the same fields)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            // To support this in the future, we need to replace the self-reference in the
+            // sub type with a reference to the super type.
+            // In the case of forward references, this requires more thought.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmStructTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
+
+        // Define struct type without super type
+        let (fields, indexTypes) = b.generateRandomWasmStructFields()
+
+        b.wasmDefineStructType(fields: fields, indexTypes: indexTypes, isFinal: isFinal)
+    }
+}
+
+private let wasmSignatureTypeGenerator = {
+    GeneratorStub(
+        "WasmSignatureTypeGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [.init(.wasmTypeDef(), .IsWasmFunction)]
+    ) { b in
+        let isFinal = probability(0.25)
+        // Define signature type with super type (currently: super type and sub type have the same signature)
+        if probability(0.25),
+            // We avoid using super types with self-references to ensure programs are valid.
+            let superType = b.findVariable(satisfying: {
+                if let desc = b.type(of: $0).wasmTypeDefinition?.description
+                    as? WasmSignatureTypeDescription
+                {
+                    return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                }
+                return false
+            })
+        {
+            b.generateSubtype(for: superType, isFinal: isFinal)
+            return
+        }
+
+        // Define signature type without super type
+        let typeCount = Int.random(in: 0...10)
+        let returnCount = Int.random(in: 0...typeCount)
+        let parameterCount = typeCount - returnCount
+
+        var indexTypes: [Variable] = []
+        let chooseType = {
+            if let elementType = b.randomWasmTypeDef(),
+                probability(0.25)
+            {
+                let nullability =
+                    b.type(of: elementType).wasmTypeDefinition!.description
+                    == .selfReference || probability(0.5)
+                indexTypes.append(elementType)
+                return ILType.wasmRef(.Index(), nullability: nullability)
+            } else {
+                // TODO(mliedtke): Extend list with abstract heap types.
+                return chooseUniform(from: ILType.wasmNonRefValueTypes)
+            }
+        }
+        let signature =
+            (0..<parameterCount).map { _ in chooseType() }
+            => (0..<returnCount).map { _ in chooseType() }
+        b.wasmDefineSignatureType(signature: signature, indexTypes: indexTypes, isFinal: isFinal)
+    }
 }

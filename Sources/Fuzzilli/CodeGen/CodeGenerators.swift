@@ -23,7 +23,7 @@ func disposableObjVariableGeneratorStubs(
 ) -> [GeneratorStub] {
     return [
         GeneratorStub(
-            "Begin",
+            "DisposableObjectLiteralBeginGenerator",
             inContext: .single(contextRequirement),
             provides: [.objectLiteral]
         ) { b in
@@ -34,7 +34,7 @@ func disposableObjVariableGeneratorStubs(
             b.emit(BeginObjectLiteral())
         },
         GeneratorStub(
-            "ComputedMethodBegin",
+            "DisposableObjectLiteralComputedMethodBeginGenerator",
             inContext: .single(.objectLiteral),
             provides: [.javascript, .subroutine, .method]
         ) { b in
@@ -47,7 +47,7 @@ func disposableObjVariableGeneratorStubs(
                 withInputs: [symbol])
         },
         GeneratorStub(
-            "ComputedMethodEnd",
+            "DisposableObjectLiteralComputedMethodEndGenerator",
             inContext: .single([.javascript, .subroutine, .method]),
             provides: [.objectLiteral]
         ) { b in
@@ -55,7 +55,7 @@ func disposableObjVariableGeneratorStubs(
             b.emit(EndObjectLiteralComputedMethod())
         },
         GeneratorStub(
-            "End",
+            "DisposableObjectLiteralEndGenerator",
             inContext: .single(.objectLiteral)
         ) { b in
             let disposableVariable = b.emit(EndObjectLiteral()).output
@@ -72,7 +72,7 @@ func disposableClassVariableGeneratorStubs(
 ) -> [GeneratorStub] {
     return [
         GeneratorStub(
-            "Begin",
+            "DisposableClassDefinitionBeginGenerator",
             inContext: .single(contextRequirement),
             provides: [.classDefinition]
         ) { b in
@@ -97,7 +97,7 @@ func disposableClassVariableGeneratorStubs(
             b.runtimeData.push("class", cls)
         },
         GeneratorStub(
-            "ComputedMethodBegin",
+            "DisposableClassInstanceComputedMethodBeginGenerator",
             inContext: .single(.classDefinition),
             provides: [.javascript, .subroutine, .method, .classMethod]
         ) { b in
@@ -111,7 +111,7 @@ func disposableClassVariableGeneratorStubs(
                 withInputs: [symbol])
         },
         GeneratorStub(
-            "ComputedMethodEnd",
+            "DisposableClassInstanceComputedMethodEndGenerator",
             inContext: .single([.javascript, .subroutine, .method, .classMethod]),
             provides: [.classDefinition]
         ) { b in
@@ -119,7 +119,7 @@ func disposableClassVariableGeneratorStubs(
             b.emit(EndClassComputedMethod())
         },
         GeneratorStub(
-            "End",
+            "DisposableClassDefinitionEndGenerator",
             inContext: .single(.classDefinition)
         ) { b in
             b.emit(EndClassDefinition())
@@ -139,6 +139,10 @@ func makeForInOfLoopGenerator(
     usingType: UsingType = .none,
     body: @escaping (ProgramBuilder, Variable) -> Void
 ) -> CodeGenerator {
+    let generatorName = "\(prefix)Generator"
+    let beginStubName = "\(prefix)BeginGenerator"
+    let endStubName = "\(prefix)EndGenerator"
+
     // 'await using' requires an async function context, even inside a standard (non-async) for-of loop.
     let context: GeneratorStub.ContextRequirement =
         (isAsyncIteration || requiresAsyncContext) ? .single(.async) : .single(.javascript)
@@ -167,10 +171,10 @@ func makeForInOfLoopGenerator(
     }
 
     return CodeGenerator(
-        "\(prefix)Generator",
+        generatorName,
         [
             GeneratorStub(
-                "Begin",
+                beginStubName,
                 inContext: context,
                 inputs: .preferred(requiredType),
                 provides: [.loop, .javascript]
@@ -178,7 +182,7 @@ func makeForInOfLoopGenerator(
                 body(b, obj)
             },
             GeneratorStub(
-                "End",
+                endStubName,
                 inContext: .single([.loop, .javascript])
             ) { b in
                 b.emit(EndForLoop())
@@ -707,7 +711,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassDefinitionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassDefinitionBeginGenerator",
                 produces: [.constructor()],
                 provides: [.classDefinition]
             ) { b in
@@ -732,7 +736,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("class", cls)
             },
             GeneratorStub(
-                "End",
+                "ClassDefinitionEndGenerator",
                 inContext: .single(.classDefinition)
             ) { b in
                 b.emit(EndClassDefinition())
@@ -798,7 +802,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "FunctionWithArgumentsAccessGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "FunctionWithArgumentsAccessBeginGenerator",
                 provides: [.subroutine, .javascript]
             ) { b in
                 let randomParameters = probability(0.5) ? .parameters(n: 0) : b.randomParameters()
@@ -811,7 +815,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.loadArguments()
             },
             GeneratorStub(
-                "End",
+                "FunctionWithArgumentsAccessEndGenerator",
                 inContext: .single([.javascript, .subroutine])
             ) { b in
                 // Ideally we would like to return the arguments Variable from above here.
@@ -863,12 +867,12 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralGenerator",
         [
             GeneratorStub(
-                "Begin", provides: [.objectLiteral]
+                "ObjectLiteralBeginGenerator", provides: [.objectLiteral]
             ) { b in
                 b.emit(BeginObjectLiteral())
             },
             GeneratorStub(
-                "End", inContext: .single(.objectLiteral)
+                "ObjectLiteralEndGenerator", inContext: .single(.objectLiteral)
             ) { b in
                 b.emit(EndObjectLiteral())
             },
@@ -927,7 +931,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralMethodGenerator",
         [
             GeneratorStub(
-                "Begin", inContext: .single(.objectLiteral),
+                "ObjectLiteralMethodBeginGenerator", inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
                 // Try to find a method that hasn't already been added to this literal.
@@ -951,7 +955,7 @@ public let CodeGenerators: [CodeGenerator] = [
                     withInputs: defaultValues)
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method])
             ) { b in
                 b.emit(EndObjectLiteralMethod())
@@ -962,7 +966,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralComputedMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ObjectLiteralComputedMethodBeginGenerator",
                 inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
@@ -983,7 +987,7 @@ public let CodeGenerators: [CodeGenerator] = [
                     withInputs: [methodName] + defaultValues)
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralComputedMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method]),
                 inputs: .one
             ) { b, inp in
@@ -996,7 +1000,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralGetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ObjectLiteralGetterBeginGenerator",
                 inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
@@ -1007,7 +1011,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginObjectLiteralGetter(propertyName: propertyName))
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralGetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method]),
                 inputs: .one
             ) { b, inp in
@@ -1020,7 +1024,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralSetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ObjectLiteralSetterBeginGenerator",
                 inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
@@ -1031,7 +1035,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginObjectLiteralSetter(propertyName: propertyName))
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralSetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method])
             ) { b in
                 b.emit(EndObjectLiteralSetter())
@@ -1042,7 +1046,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralComputedGetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ObjectLiteralComputedGetterBeginGenerator",
                 inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
@@ -1050,7 +1054,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginObjectLiteralComputedGetter(), withInputs: [propertyName])
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralComputedGetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method]),
                 inputs: .one
             ) { b, inp in
@@ -1063,7 +1067,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ObjectLiteralComputedSetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ObjectLiteralComputedSetterBeginGenerator",
                 inContext: .single(.objectLiteral),
                 provides: [.javascript, .subroutine, .method]
             ) { b in
@@ -1071,7 +1075,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginObjectLiteralComputedSetter(), withInputs: [propertyName])
             },
             GeneratorStub(
-                "End",
+                "ObjectLiteralComputedSetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method])
             ) { b in
                 b.emit(EndObjectLiteralComputedSetter())
@@ -1082,7 +1086,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassConstructorGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassConstructorBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: []
             ) { b in
@@ -1125,7 +1129,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 }
             },
             GeneratorStub(
-                "End",
+                "ClassConstructorEndGenerator",
                 // This can run in either context and will do different things
                 // depending on if the previous generator succeeded.
                 inContext: .either([.javascript, .classDefinition])
@@ -1173,7 +1177,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassInstanceMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassInstanceMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1198,7 +1202,7 @@ public let CodeGenerators: [CodeGenerator] = [
                     withInputs: defaultValues)
             },
             GeneratorStub(
-                "End",
+                "ClassInstanceMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1210,7 +1214,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassInstanceComputedMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassInstanceComputedMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1232,7 +1236,7 @@ public let CodeGenerators: [CodeGenerator] = [
                     withInputs: [methodName] + defaultValues)
             },
             GeneratorStub(
-                "End",
+                "ClassInstanceComputedMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1244,7 +1248,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassInstanceGetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassInstanceGetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1256,7 +1260,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassGetter(propertyName: propertyName, isStatic: false))
             },
             GeneratorStub(
-                "End",
+                "ClassInstanceGetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.doReturn(b.randomJsVariable())
@@ -1268,7 +1272,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassInstanceSetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassInstanceSetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1280,7 +1284,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassSetter(propertyName: propertyName, isStatic: false))
             },
             GeneratorStub(
-                "End",
+                "ClassInstanceSetterEndGenerator",
                 inContext: .single([.javascript, .method, .subroutine, .classMethod])
             ) { b in
                 b.emit(EndClassSetter())
@@ -1327,14 +1331,14 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassStaticInitializerGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassStaticInitializerBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .method, .classMethod]
             ) { b in
                 b.emit(BeginClassStaticInitializer())
             },
             GeneratorStub(
-                "End",
+                "ClassStaticInitializerEndGenerator",
                 inContext: .single([.javascript, .method, .classMethod])
             ) { b in
                 b.emit(EndClassStaticInitializer())
@@ -1345,7 +1349,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassStaticMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassStaticMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .method, .subroutine, .classMethod]
             ) { b in
@@ -1371,7 +1375,7 @@ public let CodeGenerators: [CodeGenerator] = [
 
             },
             GeneratorStub(
-                "End",
+                "ClassStaticMethodEndGenerator",
                 inContext: .single([.javascript, .classMethod, .subroutine, .method])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1383,7 +1387,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassStaticComputedMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassStaticComputedMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1402,7 +1406,7 @@ public let CodeGenerators: [CodeGenerator] = [
                     withInputs: [methodName])
             },
             GeneratorStub(
-                "End",
+                "ClassStaticComputedMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1414,7 +1418,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassStaticGetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassStaticGetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1426,7 +1430,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassGetter(propertyName: propertyName, isStatic: true))
             },
             GeneratorStub(
-                "End",
+                "ClassStaticGetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.doReturn(b.randomJsVariable())
@@ -1438,7 +1442,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassStaticSetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassStaticSetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1450,7 +1454,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassSetter(propertyName: propertyName, isStatic: true))
             },
             GeneratorStub(
-                "End",
+                "ClassStaticSetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.emit(EndClassSetter())
@@ -1461,7 +1465,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassComputedGetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassComputedGetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1474,7 +1478,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassComputedGetter(isStatic: isStatic), withInputs: [propertyName])
             },
             GeneratorStub(
-                "End",
+                "ClassComputedGetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.doReturn(b.randomJsVariable())
@@ -1486,7 +1490,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassComputedSetterGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassComputedSetterBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1499,7 +1503,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginClassComputedSetter(isStatic: isStatic), withInputs: [propertyName])
             },
             GeneratorStub(
-                "End",
+                "ClassComputedSetterEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.emit(EndClassComputedSetter())
@@ -1523,7 +1527,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassPrivateInstanceMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassPrivateInstanceMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1542,7 +1546,7 @@ public let CodeGenerators: [CodeGenerator] = [
                         isAsync: isAsync))
             },
             GeneratorStub(
-                "End",
+                "ClassPrivateInstanceMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1566,7 +1570,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ClassPrivateStaticMethodGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ClassPrivateStaticMethodBeginGenerator",
                 inContext: .single(.classDefinition),
                 provides: [.javascript, .subroutine, .method, .classMethod]
             ) { b in
@@ -1585,7 +1589,7 @@ public let CodeGenerators: [CodeGenerator] = [
                         isAsync: isAsync))
             },
             GeneratorStub(
-                "End",
+                "ClassPrivateStaticMethodEndGenerator",
                 inContext: .single([.javascript, .subroutine, .method, .classMethod])
             ) { b in
                 b.maybeReturnRandomJsVariable(0.9)
@@ -1674,7 +1678,7 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "PlainFunctionGenerator",
         [
-            GeneratorStub("Begin", provides: [.javascript, .subroutine]) {
+            GeneratorStub("PlainFunctionBeginGenerator", provides: [.javascript, .subroutine]) {
                 b in
                 let (randomParameters, defaultValues) = b.randomParameters()
                     .withRandomDefaultParameters(
@@ -1691,7 +1695,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("plainFunction", instr.output)
             },
             GeneratorStub(
-                "End", inContext: .single([.javascript, .subroutine])
+                "PlainFunctionEndGenerator", inContext: .single([.javascript, .subroutine])
             ) { b in
                 b.doReturn(b.randomJsVariable())
                 b.emit(EndPlainFunction())
@@ -1704,7 +1708,8 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "StrictModeFunctionGenerator",
         [
-            GeneratorStub("Begin", provides: [.subroutine, .javascript]) { b in
+            GeneratorStub("StrictModeFunctionBeginGenerator", provides: [.subroutine, .javascript])
+            { b in
                 // We could consider having a standalone DirectiveGenerator, but probably most of the time it won't do anything meaningful.
                 // We could also consider keeping a list of known directives in the JavaScriptEnvironment, but currently we only use 'use strict'.
                 let (randomParameters, defaultValues) = b.randomParameters()
@@ -1723,7 +1728,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.directive("use strict")
             },
             GeneratorStub(
-                "End", inContext: .single([.javascript, .subroutine])
+                "StrictModeFunctionEndGenerator", inContext: .single([.javascript, .subroutine])
             ) { b in
                 b.doReturn(b.randomJsVariable())
                 b.emit(EndPlainFunction())
@@ -1737,7 +1742,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "ArrowFunctionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "ArrowFunctionBeginGenerator",
                 provides: [.subroutine, .javascript]
             ) { b in
                 let (randomParameters, defaultValues) = b.randomParameters()
@@ -1754,7 +1759,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 }
             },
             GeneratorStub(
-                "End",
+                "ArrowFunctionEndGenerator",
                 inContext: .single([.javascript, .subroutine])
             ) { b in
                 b.emit(EndArrowFunction())
@@ -1766,7 +1771,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "GeneratorFunctionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "GeneratorFunctionBeginGenerator",
                 provides: [.generatorFunction, .subroutine, .javascript]
             ) { b in
                 let (randomParameters, defaultValues) = b.randomParameters()
@@ -1785,7 +1790,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("generatorFunction", instr.output)
             },
             GeneratorStub(
-                "End",
+                "GeneratorFunctionEndGenerator",
                 inContext: .single([.generatorFunction, .subroutine, .javascript])
             ) { b in
                 if probability(0.5) {
@@ -1808,7 +1813,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "AsyncFunctionGenerator",
         [
             GeneratorStub(
-                "Begin", provides: [.javascript, .subroutine, .async]
+                "AsyncFunctionBeginGenerator", provides: [.javascript, .subroutine, .async]
             ) { b in
                 let (randomParameters, defaultValues) = b.randomParameters()
                     .withRandomDefaultParameters(
@@ -1825,7 +1830,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("asyncFunction", instr.output)
             },
             GeneratorStub(
-                "Await",
+                "AsyncFunctionAwaitGenerator",
                 inContext: .single([.javascript, .subroutine, .async]),
                 inputs: .preferred(.thenable),
                 provides: [.javascript, .subroutine, .async]
@@ -1833,7 +1838,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.await(val)
             },
             GeneratorStub(
-                "End",
+                "AsyncFunctionEndGenerator",
                 inContext: .single([.javascript, .subroutine, .async]),
             ) { b in
                 b.doReturn(b.randomJsVariable())
@@ -1848,7 +1853,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "AsyncArrowFunctionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "AsyncArrowFunctionBeginGenerator",
                 provides: [.javascript, .async]
             ) { b in
                 let (randomParameters, defaultValues) = b.randomParameters()
@@ -1865,7 +1870,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 }
             },
             GeneratorStub(
-                "Await",
+                "AsyncArrowFunctionAwaitGenerator",
                 inContext: .single([.javascript, .async]),
                 inputs: .preferred(.thenable),
                 provides: [.javascript, .async]
@@ -1873,7 +1878,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.await(val)
             },
             GeneratorStub(
-                "End",
+                "AsyncArrowFunctionEndGenerator",
                 inContext: .single([.javascript, .async])
             ) { b in
                 // These are "typically" used as arguments, so we don't directly generate a call operation here.
@@ -1888,7 +1893,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "AsyncGeneratorFunctionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "AsyncGeneratorBeginGenerator",
                 provides: [.javascript, .subroutine, .async, .generatorFunction]
             ) { b in
                 let (randomParameters, defaultValues) = b.randomParameters()
@@ -1907,7 +1912,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("asyncGeneratorFunction", instr.output)
             },
             GeneratorStub(
-                "Await",
+                "AsyncGeneratorAwaitGenerator",
                 inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
                 inputs: .preferred(.thenable),
                 provides: [.javascript, .subroutine, .generatorFunction, .async]
@@ -1916,7 +1921,7 @@ public let CodeGenerators: [CodeGenerator] = [
             },
 
             GeneratorStub(
-                "End",
+                "AsyncGeneratorEndGenerator",
                 inContext: .single([.javascript, .subroutine, .generatorFunction, .async]),
             ) { b in
                 if probability(0.5) {
@@ -2698,14 +2703,14 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "IfElseGenerator",
         [
-            GeneratorStub("If", inputs: .preferred(.boolean)) {
+            GeneratorStub("BeginIfGenerator", inputs: .preferred(.boolean)) {
                 b, cond in
                 b.emit(BeginIf(inverted: false), withInputs: [cond])
             },
-            GeneratorStub("Else") { b in
+            GeneratorStub("BeginElseGenerator") { b in
                 b.emit(BeginElse())
             },
-            GeneratorStub("End") { b in
+            GeneratorStub("EndIfGenerator") { b in
                 b.emit(EndIf())
             },
         ]),
@@ -2713,17 +2718,17 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "CompareWithIfElseGenerator",
         [
-            GeneratorStub("If", inputs: .two) {
+            GeneratorStub("CompareWithIfElseBeginGenerator", inputs: .two) {
                 b, lhs, rhs in
                 let cond = b.compare(
                     lhs, with: rhs,
                     using: chooseUniform(from: Comparator.allCases))
                 b.emit(BeginIf(inverted: false), withInputs: [cond])
             },
-            GeneratorStub("Else") { b in
+            GeneratorStub("BeginElseGenerator") { b in
                 b.emit(BeginElse())
             },
-            GeneratorStub("End") { b in
+            GeneratorStub("EndIfGenerator") { b in
                 b.emit(EndIf())
             },
         ]),
@@ -2732,14 +2737,14 @@ public let CodeGenerators: [CodeGenerator] = [
         "SwitchBlockGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "SwitchBlockBeginGenerator",
                 inputs: .one,
                 provides: [.switchBlock]
             ) { b, cond in
                 b.emit(BeginSwitch(), withInputs: [cond])
             },
             GeneratorStub(
-                "End",
+                "SwitchBlockEndGenerator",
                 inContext: .single(.switchBlock)
             ) { b in
                 b.emit(EndSwitch())
@@ -2750,14 +2755,14 @@ public let CodeGenerators: [CodeGenerator] = [
         "SwitchCaseGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "SwitchCaseBeginGenerator",
                 inContext: .single(.switchBlock),
                 inputs: .one, provides: [.switchCase, .javascript]
             ) { b, v in
                 b.emit(BeginSwitchCase(), withInputs: [v])
             },
             GeneratorStub(
-                "End",
+                "SwitchCaseEndGenerator",
                 inContext: .single([.switchCase, .javascript])
             ) { b in
                 b.emit(EndSwitchCase(fallsThrough: probability(0.1)))
@@ -2770,14 +2775,14 @@ public let CodeGenerators: [CodeGenerator] = [
         "SwitchDefaultCaseGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "SwitchDefaultCaseBeginGenerator",
                 inContext: .single(.switchBlock)
             ) { b in
                 guard !b.currentSwitchBlock.hasDefaultCase else { return }
                 b.emit(BeginSwitchDefaultCase())
             },
             GeneratorStub(
-                "End",
+                "SwitchDefaultCaseEndGenerator",
                 inContext: .either([[.switchBlock], [.switchCase, .javascript]])
             ) { b in
                 // Since we can be in either context, we only close this default case if we need to.
@@ -2795,7 +2800,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "WhileLoopGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WhileLoopBeginGenerator",
                 provides: [.loop, .javascript]
             ) { b in
                 let loopVar = b.loadInt(0)
@@ -2807,7 +2812,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.unary(.PostInc, loopVar)
             },
             GeneratorStub(
-                "End",
+                "WhileLoopEndGenerator",
                 inContext: .single([.loop, .javascript])
             ) { b in
                 b.emit(EndWhileLoop())
@@ -2832,7 +2837,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "SimpleForLoopGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "SimpleForLoopBeginInitializerGenerator",
                 provides: [.loop, .javascript]
             ) { b in
                 b.emit(BeginForLoopInitializer())
@@ -2853,7 +2858,7 @@ public let CodeGenerators: [CodeGenerator] = [
             },
             // TODO(cffsmith): Clean up idea: wrap this in some static method on the GeneratorGenerator such that we can just do `.withEndGenerator(EndForLoopGenerator)` or something like that! :)
             GeneratorStub(
-                "End",
+                "SimpleForLoopEndGenerator",
                 inContext: .single([.javascript, .loop])
             ) { b in
                 b.emit(EndForLoop())
@@ -2969,7 +2974,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "RepeatLoopGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "RepeatLoopBeginGenerator",
                 produces: [.number], provides: [.loop, .javascript]
             ) { b in
                 let numIterations = Int.random(in: 2...100)
@@ -2977,7 +2982,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.emit(BeginRepeatLoop(iterations: numIterations))
             },
             GeneratorStub(
-                "End",
+                "RepeatLoopEndGenerator",
                 inContext: .single([.loop, .javascript])
             ) { b in
                 b.emit(EndRepeatLoop())
@@ -2998,28 +3003,28 @@ public let CodeGenerators: [CodeGenerator] = [
         "TryCatchFinallyGenerator",
         [
             GeneratorStub(
-                "Try",
+                "BeginTryGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginTry())
             },
             GeneratorStub(
-                "Catch",
+                "BeginCatchGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginCatch())
             },
             GeneratorStub(
-                "Finally",
+                "BeginFinallyGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginFinally())
             },
             GeneratorStub(
-                "End",
+                "EndTryCatchFinallyGenerator",
                 inContext: .single(.javascript)
             ) { b in
                 b.emit(EndTryCatchFinally())
@@ -3030,21 +3035,21 @@ public let CodeGenerators: [CodeGenerator] = [
         "TryCatchGenerator",
         [
             GeneratorStub(
-                "Try",
+                "BeginTryGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginTry())
             },
             GeneratorStub(
-                "Catch",
+                "BeginCatchGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginCatch())
             },
             GeneratorStub(
-                "End",
+                "EndTryCatchFinallyGenerator",
                 inContext: .single(.javascript)
             ) { b in
                 b.emit(EndTryCatchFinally())
@@ -3055,21 +3060,21 @@ public let CodeGenerators: [CodeGenerator] = [
         "TryFinallyGenerator",
         [
             GeneratorStub(
-                "Try",
+                "BeginTryGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginTry())
             },
             GeneratorStub(
-                "Finally",
+                "BeginFinallyGenerator",
                 inContext: .single(.javascript),
                 provides: [.javascript]
             ) { b in
                 b.emit(BeginFinally())
             },
             GeneratorStub(
-                "End",
+                "EndTryCatchFinallyGenerator",
                 inContext: .single(.javascript)
             ) { b in
                 b.emit(EndTryCatchFinally())
@@ -3203,7 +3208,7 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "PromiseGenerator",
         [
-            GeneratorStub("Begin", provides: [.subroutine, .javascript]) { b in
+            GeneratorStub("PromiseBeginGenerator", provides: [.subroutine, .javascript]) { b in
                 let randomParameters = b.randomParameters()
                 b.setParameterTypesForNextSubroutine(
                     randomParameters.parameterTypes)
@@ -3213,7 +3218,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("promiseHandler", handler)
             },
             GeneratorStub(
-                "End", inContext: .single([.subroutine, .javascript]),
+                "PromiseEndGenerator", inContext: .single([.subroutine, .javascript]),
                 produces: [.jsPromise()],
             ) {
                 b in
@@ -3252,7 +3257,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "WithStatementGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WithStatementBeginGenerator",
                 inputs: .preferred(.object())
             ) { b, obj in
                 b.emit(BeginWith(), withInputs: [obj])
@@ -3269,7 +3274,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 }
             },
             GeneratorStub(
-                "End"
+                "WithStatementEndGenerator"
             ) { b in
                 b.emit(EndWith())
             },
@@ -3278,11 +3283,11 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "EvalGenerator",
         [
-            GeneratorStub("Begin", provides: [.javascript]) { b in
+            GeneratorStub("EvalBeginGenerator", provides: [.javascript]) { b in
                 let code = b.emit(BeginCodeString()).output
                 b.runtimeData.push("codeToEval", code)
             },
-            GeneratorStub("End") { b in
+            GeneratorStub("EvalEndGenerator") { b in
                 b.emit(EndCodeString())
                 let code = b.runtimeData.pop("codeToEval")
                 let eval = b.createNamedVariable(forBuiltin: "eval")
@@ -3293,11 +3298,11 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator(
         "BlockStatementGenerator",
         [
-            GeneratorStub("Begin", provides: [.javascript]) { b in
+            GeneratorStub("BlockStatementBeginGenerator", provides: [.javascript]) { b in
                 b.emit(BeginBlockStatement())
             },
             GeneratorStub(
-                "End", inContext: .single([.javascript])
+                "BlockStatementEndGenerator", inContext: .single([.javascript])
             ) { b in
                 b.emit(EndBlockStatement())
             },
@@ -3645,7 +3650,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "BundleScriptGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "BundleScriptBeginGenerator",
                 inContext: .single(.bundle),
                 provides: [.javascript]
             ) { b in
@@ -3654,7 +3659,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.buildPrefix()
             },
             GeneratorStub(
-                "End",
+                "BundleScriptEndGenerator",
                 inContext: .single([.javascript]),
             ) { b in
                 b.emit(EndBundleScript())
@@ -3665,7 +3670,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "BundleModuleEntryPointGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "BundleModuleEntryPointBeginGenerator",
                 inContext: .single(.bundle),
                 provides: [.moduleTopLevel, .javascript]
             ) { b in
@@ -3675,7 +3680,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.generateImport()
             },
             GeneratorStub(
-                "End",
+                "BundleModuleEntryPointEndGenerator",
                 inContext: .single([.moduleTopLevel, .javascript]),
             ) { b in
                 b.endBundleModuleEntryPoint()
@@ -3686,7 +3691,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "BundleModuleGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "BundleModuleBeginGenerator",
                 inContext: .single(.bundle),
                 provides: [.moduleTopLevel, .javascript]
             ) { b in
@@ -3695,7 +3700,7 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.buildPrefix()
             },
             GeneratorStub(
-                "End",
+                "BundleModuleEndGenerator",
                 inContext: .single([.moduleTopLevel, .javascript]),
                 produces: [.jsModule()]
             ) { b in
@@ -3709,7 +3714,7 @@ public let CodeGenerators: [CodeGenerator] = [
         "PendingBundleModuleGenerator",
         [
             GeneratorStub(
-                "Declare",
+                "DeclarePendingModule",
                 inContext: .single(.bundle),
                 provides: [.bundle]
             ) { b in
@@ -3721,7 +3726,7 @@ public let CodeGenerators: [CodeGenerator] = [
             },
             // Any arbitrary other modules can be generated here and can use the pending module.
             GeneratorStub(
-                "Define",
+                "DefinePendingModule",
                 inContext: .single(.bundle)
             ) { b in
                 let moduleVariable = b.runtimeData.pop("pendingModule")

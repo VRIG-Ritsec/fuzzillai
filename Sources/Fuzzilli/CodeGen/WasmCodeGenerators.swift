@@ -81,14 +81,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmModuleGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmModuleBeginGenerator",
                 inContext: .single(.javascript),
                 provides: [.wasm]
             ) { b in
                 b.emit(BeginWasmModule())
             },
             GeneratorStub(
-                "End",
+                "WasmModuleEndGenerator",
                 inContext: .single(.wasm)
             ) { b in
                 let module = b.currentWasmModule
@@ -108,13 +108,13 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmTypeGroupGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmTypeGroupBeginGenerator",
                 provides: [.wasmTypeGroup]
             ) { b in
                 b.emit(WasmBeginTypeGroup())
             },
             GeneratorStub(
-                "End",
+                "WasmTypeGroupEndGenerator",
                 inContext: .single(.wasmTypeGroup)
             ) { b in
                 b.wasmEndTypeGroup()
@@ -125,7 +125,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmTypeGroupWithAllTypesGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmTypeGroupBeginGenerator",
                 provides: [.wasmTypeGroup]
             ) { b in
                 b.emit(WasmBeginTypeGroup())
@@ -134,7 +134,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             wasmStructTypeGenerator,
             wasmSignatureTypeGenerator,
             GeneratorStub(
-                "End",
+                "WasmTypeGroupEndGenerator",
                 inContext: .single(.wasmTypeGroup),
                 producesComplex: [
                     .init(.wasmTypeDef(), .IsWasmArray),
@@ -1537,7 +1537,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmFunctionGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmFunctionBeginGenerator",
                 inContext: .single(.wasm),
                 provides: [.wasmFunction]
             ) { b in
@@ -1552,7 +1552,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withInputs: [signatureDef])
             },
             GeneratorStub(
-                "End",
+                "WasmFunctionEndGenerator",
                 inContext: .single(.wasmFunction),
                 produces: [.wasmFunctionDef()]
             ) { b in
@@ -1719,7 +1719,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmBlockGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmBeginBlockGenerator",
                 inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
@@ -1728,7 +1728,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 b.emit(WasmBeginBlock(parameterCount: 0), withInputs: [signature])
             },
             GeneratorStub(
-                "End",
+                "WasmEndBlockGenerator",
                 inContext: .single(.wasmFunction)
             ) { b in
                 b.emit(
@@ -1740,7 +1740,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmBlockWithSignatureGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmBeginBlockGenerator",
                 inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
@@ -1756,7 +1756,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withInputs: [signatureDef] + args
                 )
             },
-            GeneratorStub("End", inContext: .single(.wasmFunction)) { b in
+            GeneratorStub("WasmEndBlockGenerator", inContext: .single(.wasmFunction)) { b in
                 let signature = b.runtimeData.pop("blockSignature")
                 let wasmSignature = b.type(of: signature).wasmFunctionSignatureDefSignature
                 let function = b.currentWasmFunction
@@ -1771,7 +1771,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmLoopGenerator",
         [
             GeneratorStub(
-                "Begin",
+                "WasmBeginLoopGenerator",
                 inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
@@ -1787,7 +1787,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 function.wasmReassign(variable: loopCtr, to: result)
             },
             GeneratorStub(
-                "End",
+                "WasmEndLoopGenerator",
                 inContext: .single(.wasmFunction)
             ) { b in
                 let function = b.currentWasmModule.currentWasmFunction
@@ -1803,7 +1803,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmLoopWithSignatureGenerator",
         [
             GeneratorStub(
-                "Begin", inContext: .single(.wasmFunction),
+                "WasmBeginLoopWithSignatureGenerator", inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
                 let function = b.currentWasmModule.currentWasmFunction
@@ -1826,7 +1826,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 b.runtimeData.push("loopLabel", loopBegin.innerOutput(0))
             },
             GeneratorStub(
-                "End", inContext: .single(.wasmFunction),
+                "WasmEndLoopWithSignatureGenerator", inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
                 let signature = b.runtimeData.pop("loopSignature")
@@ -1907,7 +1907,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmIfElseGenerator",
         [
             GeneratorStub(
-                "If",
+                "WasmBeginIfGenerator",
                 inContext: .single(.wasmFunction),
                 inputs: .required(.wasmi32),
                 provides: [.wasmFunction]
@@ -1919,14 +1919,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withInputs: [signature, condition])
             },
             GeneratorStub(
-                "Else",
+                "WasmBeginElseGenerator",
                 inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
                 b.emit(WasmBeginElse(), withInputs: [b.runtimeData.peek("ifSignature")])
             },
             GeneratorStub(
-                "End",
+                "WasmEndIfElseGenerator",
                 inContext: .single(.wasmFunction)
             ) { b in
                 b.emit(WasmEndIf(), withInputs: [b.runtimeData.pop("ifSignature")])
@@ -1937,7 +1937,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmIfElseWithSignatureGenerator",
         [
             GeneratorStub(
-                "If",
+                "WasmBeginIfGenerator",
                 inContext: .single(.wasmFunction),
                 inputs: .required(.wasmi32),
                 provides: [.wasmFunction]
@@ -1955,7 +1955,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withInputs: [signatureDef] + args + [condition])
             },
             GeneratorStub(
-                "Else",
+                "WasmBeginElseGenerator",
                 inContext: .single(.wasmFunction),
                 provides: [.wasmFunction]
             ) { b in
@@ -1970,7 +1970,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withInputs: [signature] + trueResults)
             },
             GeneratorStub(
-                "End",
+                "WasmEndIfGenerator",
                 inContext: .single(.wasmFunction)
             ) { b in
                 let function = b.currentWasmFunction

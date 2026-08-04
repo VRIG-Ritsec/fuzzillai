@@ -859,4 +859,42 @@ struct MutatorTests {
             mutatedProg.checkOrDie(onFailure: "Program must be statically valid")
         }
     }
+
+    @Test func testOperationMutatorDestructPatternCrash() throws {
+        let fuzzer = makeMockFuzzer()
+        try fuzzer.sync {
+            let pattern = DestructuringPattern.array(
+                .init(
+                    elements: [
+                        .init(target: .flatBinding, hasDefaultValue: true)
+                    ],
+                    restTarget: nil
+                )
+            )
+
+            let b = fuzzer.makeBuilder()
+            let source = b.loadInt(1)
+            let defaultValue = b.loadInt(2)
+            b.destruct(source, using: pattern, defaultValues: [defaultValue])
+            let prog = b.finalize()
+
+            let mutator = OperationMutator()
+
+            let newBuilder = fuzzer.makeBuilder()
+            newBuilder.adopting {
+                for instr in prog.code {
+                    if instr.op is Destruct {
+                        mutator.mutate(instr, newBuilder)
+                    } else {
+                        newBuilder.adopt(instr)
+                    }
+                }
+            }
+
+            let mutatedProg = newBuilder.finalize()
+            // The program should be valid and lifting should not crash.
+            try mutatedProg.code.check()
+            _ = FuzzILLifter().lift(mutatedProg)
+        }
+    }
 }

@@ -635,7 +635,11 @@ public class OperationMutator: BaseInstructionMutator {
             if let newPattern = mutateDestructuringPattern(
                 op.pattern, b, &inouts, isReassign: false)
             {
-                newOp = Destruct(pattern: newPattern, numInputs: 1, numOutputs: inouts.count - 1)
+                newOp = Destruct(
+                    pattern: newPattern,
+                    numInputs: 1 + newPattern.numExtraInputs,
+                    numOutputs: newPattern.numBindings
+                )
             } else {
                 return instr
             }

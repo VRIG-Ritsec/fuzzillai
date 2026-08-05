@@ -2989,6 +2989,37 @@ public let CodeGenerators: [CodeGenerator] = [
             },
         ]),
 
+    CodeGenerator("ChainedReassignments") { b in
+        // If we don't have enough existing variables, fewer assignments are created.
+        let numReassignments = Int.random(in: 3...10)
+        let vars = b.randomJsVariables(upTo: numReassignments + 1)
+
+        if probability(0.5) {
+            // Distributes one value in one go to all other variables via chained reassignments:
+            // v[1] = v[0]
+            // v[2] = v[1]
+            // ...
+            //
+            // This is probably the less interesting case, however it creates a lot of aliasing
+            // which might be interesting on its own,
+            for (target, source) in zip(vars.dropFirst(), vars) {
+                b.reassign(variable: target, value: source)
+            }
+        } else {
+            // "Bubbles up" a value by one step meaning it needs many iterations inside a loop for
+            // a value to reach all other variables.
+            // v[0] = v[1]
+            // v[1] = v[2]
+            // ...
+            //
+            // This is especially interesting inside loops where this creates complex dependencies
+            // between loop phis.
+            for (target, source) in zip(vars, vars.dropFirst()) {
+                b.reassign(variable: target, value: source)
+            }
+        }
+    },
+
     CodeGenerator("LoopBreakGenerator", inContext: .single(.loop)) { b in
         let label = probability(0.2) ? b.randomVariable(ofType: .jsLoopLabel) : nil
         b.loopBreak(label)

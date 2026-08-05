@@ -665,6 +665,11 @@ let fuzzer = makeFuzzer(with: mainConfig)
 // we are able to print log messages generated during initialization.
 let ui = TerminalUI(for: fuzzer)
 
+// DispatchGroup to ensure all fuzzer instances (main + workers) finish shutting down before process exits.
+let shutdownGroup = DispatchGroup()
+var workers: [Fuzzer] = []
+var mainShutdownReason: ShutdownReason? = nil
+
 // Install signal handlers to terminate the fuzzer gracefully.
 var signalSources: [DispatchSourceSignal] = []
 for sig in [SIGINT, SIGTERM] {
@@ -681,26 +686,44 @@ for sig in [SIGINT, SIGTERM] {
     signalSources.append(source)
 }
 
+// Exit this process when all fuzzer instances have stopped.
+shutdownGroup.enter()
+shutdownGroup.notify(queue: DispatchQueue.main) {
+    if resume, let path = storagePath {
+        // Check if we have an old_corpus directory on disk, this can happen if the user Ctrl-C's during an import.
+        if FileManager.default.fileExists(atPath: path + "/old_corpus") {
+            logger.info(
+                "Corpus import aborted. The old corpus is now in \(path + "/old_corpus").")
+            logger.info("You can recover the old corpus by moving it to \(path + "/corpus").")
+        }
+    }
+    let code = mainShutdownReason?.toExitCode() ?? 0
+    if code != 0 {
+        print("Aborting execution after a fatal error.")
+    }
+    exit(code)
+}
+
 // Remaining fuzzer initialization must happen on the fuzzer's dispatch queue.
 fuzzer.sync {
     // Always want some statistics.
     fuzzer.addModule(Statistics())
 
-    // Exit this process when the main fuzzer stops.
-    fuzzer.registerEventListener(for: fuzzer.events.ShutdownComplete) { reason in
-        if resume, let path = storagePath {
-            // Check if we have an old_corpus directory on disk, this can happen if the user Ctrl-C's during an import.
-            if FileManager.default.fileExists(atPath: path + "/old_corpus") {
-                logger.info(
-                    "Corpus import aborted. The old corpus is now in \(path + "/old_corpus").")
-                logger.info("You can recover the old corpus by moving it to \(path + "/corpus").")
+    fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
+        DispatchQueue.main.async {
+            for worker in workers {
+                worker.async {
+                    worker.shutdown(reason: .parentShutdown)
+                }
             }
         }
-        let code = reason.toExitCode()
-        if code != 0 {
-            print("Aborting execution after a fatal error.")
+    }
+
+    fuzzer.registerEventListener(for: fuzzer.events.ShutdownComplete) { reason in
+        DispatchQueue.main.async {
+            mainShutdownReason = reason
+            shutdownGroup.leave()
         }
-        exit(code)
     }
 
     // Store samples to disk if requested.
@@ -842,19 +865,33 @@ for i in 1..<numJobs {
         dumplingEnabled: profile.isDifferential)
 
     let worker = makeFuzzer(with: workerConfig)
-    worker.async {
-        // Wait some time between starting workers to reduce the load on the main instance.
-        // If we start the workers right away, they will all very quickly find new coverage
-        // and send lots of (probably redundant) programs to the main instance.
-        let minDelay = 1 * Minutes
-        let maxDelay = 10 * Minutes
-        let delay = Double.random(in: minDelay...maxDelay)
-        Thread.sleep(forTimeInterval: delay)
+    workers.append(worker)
 
-        worker.addModule(Statistics())
-        worker.addModule(ThreadChild(for: worker, parent: fuzzer))
-        worker.initialize()
-        worker.start()
+    // Add each worker to the shutdownGroup. When they shutdown, they leave the group making it easy
+    // for the main process to wait for the "final" process-wide shutdown until all workers have
+    // shut down gracefully.
+    shutdownGroup.enter()
+    worker.sync {
+        worker.registerEventListener(for: worker.events.ShutdownComplete) { _ in
+            shutdownGroup.leave()
+        }
+    }
+
+    // Wait some time between starting workers to reduce the load on the main instance.
+    // If we start the workers right away, they will all very quickly find new coverage
+    // and send lots of (probably redundant) programs to the main instance.
+    let minDelay = 1 * Minutes
+    let maxDelay = 10 * Minutes
+    let delay = Double.random(in: minDelay...maxDelay)
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        worker.async {
+            guard !worker.isStopped else { return }
+
+            worker.addModule(Statistics())
+            worker.addModule(ThreadChild(for: worker, parent: fuzzer))
+            worker.initialize()
+            worker.start()
+        }
     }
 }
 

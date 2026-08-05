@@ -390,7 +390,7 @@ extension Instruction: ProtobufConvertible {
             default:
                 if underlyingWasmType <= .wasmGenericRef {
                     switch underlyingWasmType.wasmReferenceType!.kind {
-                    case .Index(_):
+                    case .Index:
                         return Fuzzilli_Protobuf_WasmILType.with {
                             $0.refType = Fuzzilli_Protobuf_WasmReferenceType.with {
                                 $0.kind = Fuzzilli_Protobuf_WasmReferenceTypeKind.index

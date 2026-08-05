@@ -500,7 +500,7 @@ public struct JSTyper: Analyzer {
     func getWasmTypeDef(for type: ILType) -> Variable {
         let desc: WasmTypeDescription?
         if let refType = type.wasmReferenceType {
-            guard case .Index(let unownedDesc) = refType.kind else {
+            guard case .Index(let unownedDesc, _) = refType.kind else {
                 fatalError("\(type) is not an index type")
             }
             desc = unownedDesc.get()
@@ -775,7 +775,7 @@ public struct JSTyper: Analyzer {
     }
 
     func getTypeDescription(of type: ILType) -> WasmTypeDescription {
-        if case .Index(let desc) = type.wasmReferenceType?.kind {
+        if case .Index(let desc, _) = type.wasmReferenceType?.kind {
             return desc.get()!
         }
         return type.wasmTypeDefinition!.description!

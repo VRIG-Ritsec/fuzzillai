@@ -613,9 +613,9 @@ public class OperationMutator: BaseInstructionMutator {
                 )
                 newType = ILType.wasmRef(
                     .Abstract(HeapTypeInfo(chosenType, shared: false)), nullability: Bool.random())
-            case .Index(_):
+            case .Index(_, let isExact):
                 let nullable = op.type.wasmReferenceType!.nullability
-                newType = ILType.wasmRef(.Index(), nullability: !nullable)
+                newType = ILType.wasmRef(.Index(isExact: isExact), nullability: !nullable)
             }
             newOp = WasmRefTest(refType: newType)
         case .importVariables(let op):

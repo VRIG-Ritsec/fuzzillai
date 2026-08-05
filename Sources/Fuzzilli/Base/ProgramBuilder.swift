@@ -5965,7 +5965,8 @@ public class ProgramBuilder {
                         if type.wasmReferenceType!.nullability {
                             return wasmRefNull(type: type)
                         }
-                    case .Index(let desc):
+                    case .Index(let desc, _):
+                        // TODO(bettscheider): Use `struct.new_default_desc` etc. for exact types
                         let nullable = type.wasmReferenceType!.nullability
                         if probability(0.5) || !nullable, let desc = desc.get() {
                             let abstractSuper = desc.abstractHeapSupertype!.heapType

@@ -1431,6 +1431,13 @@ struct TypeSystemTests {
             elementType: .wasmi32, mutability: false, typeGroupIndex: 0)
         let arrayRef = ILType.wasmIndexRef(arrayDesc, nullability: true)
         #expect(arrayRef.description == ".wasmRef(null Index 0 Array[immutable .wasmi32])")
+        let exactArrayRef = ILType.wasmIndexRef(arrayDesc, nullability: false, isExact: true)
+        #expect(exactArrayRef.description == ".wasmRef(exact Index 0 Array[immutable .wasmi32])")
+        let exactNullableArrayRef = ILType.wasmIndexRef(arrayDesc, nullability: true, isExact: true)
+        #expect(
+            exactNullableArrayRef.description
+                == ".wasmRef(null exact Index 0 Array[immutable .wasmi32])")
+
         let nullableSelfRef = ILType.wasmRef(
             .Index(.init(WasmTypeDescription.selfReference)), nullability: true)
         let structDesc = WasmStructTypeDescription(
@@ -1684,6 +1691,37 @@ struct TypeSystemTests {
         #expect(subRefNonNull.intersection(with: subSubRefNonNull) == subSubRefNonNull)
         #expect(subRefNullable.intersection(with: subRefNonNull) == subRefNonNull)
         #expect(subRefNonNull.intersection(with: subSubRefNullable) == subSubRefNonNull)
+
+        let exactBase = ILType.wasmIndexRef(baseDesc, nullability: true, isExact: true)
+        let exactSub = ILType.wasmIndexRef(subDesc, nullability: true, isExact: true)
+        let inexactBase = baseRefNullable
+        let inexactSub = subRefNullable
+
+        // Identical Types
+        #expect(!(exactBase >= inexactBase))
+        #expect(inexactBase >= exactBase)
+        #expect(exactBase >= exactBase)
+
+        #expect(exactBase.union(with: inexactBase) == inexactBase)
+        #expect(inexactBase.union(with: exactBase) == inexactBase)
+        #expect(exactBase.union(with: exactBase) == exactBase)
+
+        #expect(exactBase.intersection(with: inexactBase) == exactBase)
+        #expect(inexactBase.intersection(with: exactBase) == exactBase)
+        #expect(exactBase.intersection(with: exactBase) == exactBase)
+
+        // Strict Subtypes
+        #expect(!(exactBase >= inexactSub))
+        #expect(inexactBase >= exactSub)
+        #expect(!(exactBase >= exactSub))
+
+        #expect(exactBase.union(with: inexactSub) == inexactBase)
+        #expect(inexactBase.union(with: exactSub) == inexactBase)
+        #expect(exactBase.union(with: exactSub) == inexactBase)
+
+        #expect(exactBase.intersection(with: exactSub) == .nothing)
+        #expect(exactBase.intersection(with: inexactSub) == .nothing)
+        #expect(inexactBase.intersection(with: exactSub) == exactSub)
     }
 
     @Test

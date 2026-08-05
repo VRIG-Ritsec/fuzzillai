@@ -696,7 +696,7 @@ public class WasmLifter {
 
     private func encodeHeapType(_ refKind: WasmReferenceType.Kind) throws -> Data {
         switch refKind {
-        case .Index(let description):
+        case .Index(let description, _):
             return try encodeWasmGCType(description.get())
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
@@ -718,7 +718,7 @@ public class WasmLifter {
         switch refType.kind {
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
-        case .Index(_):
+        case .Index:
             return try encodeWasmGCType(typer.getTypeDescription(of: instr.input(typeInput)))
         }
     }
@@ -1729,7 +1729,8 @@ public class WasmLifter {
 
                 if inputType.Is(.wasmTypeDef()) || inputType.Is(.anyIndexRef) {
                     // TODO(bettscheider): Remove this branch when debugging has concluded
-                    if case .Index(let desc) = inputType.wasmReferenceType?.kind, desc.get() == nil
+                    if case .Index(let desc, _) = inputType.wasmReferenceType?.kind,
+                        desc.get() == nil
                     {
                         print("Failed program:")
                         print(FuzzILLifter().lift(self.instructionBuffer))

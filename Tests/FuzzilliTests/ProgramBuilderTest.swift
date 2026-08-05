@@ -3385,14 +3385,14 @@ struct ProgramBuilderTests {
 
                 #expect(
                     subArraysTypeDescriptions.contains {
-                        if case .Index(let target) = $0.elementType.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.elementType.wasmReferenceType?.kind {
                             return target.get() == subStructDesc
                         }
                         return false
                     })
                 #expect(
                     subArraysTypeDescriptions.contains {
-                        if case .Index(let target) = $0.elementType.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.elementType.wasmReferenceType?.kind {
                             return target.get() == baseStructDesc
                         }
                         return false
@@ -3452,14 +3452,14 @@ struct ProgramBuilderTests {
 
                 #expect(
                     subOuterStructsTypeDescriptions.contains {
-                        if case .Index(let target) = $0.fields[0].type.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.fields[0].type.wasmReferenceType?.kind {
                             return target.get() == subInnerStructDesc
                         }
                         return false
                     })
                 #expect(
                     subOuterStructsTypeDescriptions.contains {
-                        if case .Index(let target) = $0.fields[0].type.wasmReferenceType?.kind {
+                        if case .Index(let target, _) = $0.fields[0].type.wasmReferenceType?.kind {
                             return target.get() == innerStructDesc
                         }
                         return false
@@ -3520,7 +3520,7 @@ struct ProgramBuilderTests {
                 // Parameters are contravariant
                 #expect(
                     subSignatureTypeDescriptions.contains {
-                        if case .Index(let target) = $0.signature.parameterTypes[0]
+                        if case .Index(let target, _) = $0.signature.parameterTypes[0]
                             .wasmReferenceType?.kind
                         {
                             return target.get() == structTypeDescription
@@ -3529,7 +3529,7 @@ struct ProgramBuilderTests {
                     })
                 #expect(
                     subSignatureTypeDescriptions.contains {
-                        if case .Index(let target) = $0.signature.parameterTypes[0]
+                        if case .Index(let target, _) = $0.signature.parameterTypes[0]
                             .wasmReferenceType?.kind
                         {
                             return target.get() == subStructTypeDescription
@@ -3550,7 +3550,8 @@ struct ProgramBuilderTests {
                 // Outputs are covariant
                 #expect(
                     subSignatureTypeDescriptions.contains {
-                        if case .Index(let target) = $0.signature.outputTypes[0].wasmReferenceType?
+                        if case .Index(let target, _) = $0.signature.outputTypes[0]
+                            .wasmReferenceType?
                             .kind
                         {
                             return target.get() == subStructTypeDescription
@@ -3559,7 +3560,8 @@ struct ProgramBuilderTests {
                     })
                 #expect(
                     subSignatureTypeDescriptions.contains {
-                        if case .Index(let target) = $0.signature.outputTypes[0].wasmReferenceType?
+                        if case .Index(let target, _) = $0.signature.outputTypes[0]
+                            .wasmReferenceType?
                             .kind
                         {
                             return target.get() == structTypeDescription

@@ -431,8 +431,11 @@ public struct ILType: Hashable {
                 wasmExt: WasmReferenceType(kind, nullability: nullability)))
     }
 
-    static func wasmIndexRef(_ desc: WasmTypeDescription, nullability: Bool) -> ILType {
-        return wasmRef(.Index(UnownedWasmTypeDescription(desc)), nullability: nullability)
+    static func wasmIndexRef(_ desc: WasmTypeDescription, nullability: Bool, isExact: Bool = false)
+        -> ILType
+    {
+        return wasmRef(
+            .Index(UnownedWasmTypeDescription(desc), isExact: isExact), nullability: nullability)
     }
 
     // The union of all primitive wasm types
@@ -1546,11 +1549,13 @@ extension ILType: CustomStringConvertible {
             case .Abstract(let heapTypeInfo):
                 let sharedPrefix = heapTypeInfo.shared ? "shared " : ""
                 return ".wasmRef(.Abstract(\(nullPrefix)\(sharedPrefix)\(heapTypeInfo.heapType)))"
-            case .Index(let indexRef):
+            case .Index(let indexRef, let isExact):
+                let exactPrefix = isExact ? "exact " : ""
                 if let desc = indexRef.get() {
-                    return ".wasmRef(\(nullPrefix)Index \(desc.format(abbreviate: abbreviate)))"
+                    return
+                        ".wasmRef(\(nullPrefix)\(exactPrefix)Index \(desc.format(abbreviate: abbreviate)))"
                 }
-                return ".wasmRef(\(nullPrefix)Index)"
+                return ".wasmRef(\(nullPrefix)\(exactPrefix)Index)"
             }
         case .wasmFunctionDef:
             if let signature = wasmFunctionDefSignature {
@@ -2154,14 +2159,14 @@ public class WasmReferenceType: WasmTypeExtension {
         // leaks. The underlying WasmTypeDescription is always owned and kept alive by the
         // corresponding WasmTypeDefinition extension attached to the type of the operation
         // defining the wasm-gc type (and is kept alive by the JSTyper).
-        case Index(UnownedWasmTypeDescription = UnownedWasmTypeDescription())
+        case Index(UnownedWasmTypeDescription = UnownedWasmTypeDescription(), isExact: Bool = false)
         case Abstract(HeapTypeInfo)
 
         func topType() -> ILType {
             switch self {
             case .Abstract(let info):
                 return .wasmRef(info.heapType.getTop())
-            case .Index(let idx):
+            case .Index(let idx, _):
                 let desc = idx.get()!
                 return .wasmRef(desc.abstractHeapSupertype!.heapType.getTop())
             }
@@ -2169,9 +2174,9 @@ public class WasmReferenceType: WasmTypeExtension {
 
         func union(_ other: Self) -> Self? {
             switch self {
-            case .Index(let desc):
+            case .Index(let desc, let isExact):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, let otherIsExact):
                     if desc.get() == nil || otherDesc.get() == nil {
                         return .Index(.init())
                     }
@@ -2180,7 +2185,8 @@ public class WasmReferenceType: WasmTypeExtension {
                     let otherType = otherDesc.get()!
 
                     if let common = selfType.union(otherType) {
-                        return .Index(UnownedWasmTypeDescription(common))
+                        let resultIsExact = isExact && otherIsExact && selfType == otherType
+                        return .Index(UnownedWasmTypeDescription(common), isExact: resultIsExact)
                     }
 
                     if let abstract = selfType.abstractHeapSupertype,
@@ -2198,7 +2204,7 @@ public class WasmReferenceType: WasmTypeExtension {
                 }
             case .Abstract(let heapType):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, _):
                     if let otherAbstract = otherDesc.get()?.abstractHeapSupertype,
                         let upperBound = heapType.union(otherAbstract)
                     {
@@ -2215,19 +2221,23 @@ public class WasmReferenceType: WasmTypeExtension {
 
         func intersection(_ other: Self) -> Self? {
             switch self {
-            case .Index(let desc):
+            case .Index(let desc, let isExact):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, let otherIsExact):
+                    // If description is nil, this means it's an anyIndexRef.
                     guard let selfType = desc.get() else {
-                        return .Index(otherDesc)
+                        return .Index(otherDesc, isExact: otherIsExact)
                     }
 
                     guard let otherType = otherDesc.get() else {
-                        return .Index(desc)
+                        return .Index(desc, isExact: isExact)
                     }
 
                     if let common = selfType.intersection(otherType) {
-                        return .Index(UnownedWasmTypeDescription(common))
+                        if isExact && common != selfType { return nil }
+                        if otherIsExact && common != otherType { return nil }
+                        let resultIsExact = isExact || otherIsExact
+                        return .Index(UnownedWasmTypeDescription(common), isExact: resultIsExact)
                     }
 
                     return nil
@@ -2240,7 +2250,7 @@ public class WasmReferenceType: WasmTypeExtension {
                 }
             case .Abstract(let heapType):
                 switch other {
-                case .Index(let otherDesc):
+                case .Index(let otherDesc, _):
                     if let otherAbstract = otherDesc.get()?.abstractHeapSupertype,
                         heapType.subsumes(otherAbstract)
                     {
@@ -2265,9 +2275,9 @@ public class WasmReferenceType: WasmTypeExtension {
 
     func isAbstract() -> Bool {
         switch self.kind {
-        case .Abstract(_):
+        case .Abstract:
             return true
-        case .Index(_):
+        case .Index:
             return false
         }
     }
@@ -2850,7 +2860,7 @@ class WasmSignatureTypeDescription: WasmTypeDescription {
 
     override func hasUnresolvedSelfReferences() -> Bool {
         for type in signature.parameterTypes + signature.outputTypes {
-            if case .Index(let target) = type.wasmReferenceType?.kind {
+            if case .Index(let target, _) = type.wasmReferenceType?.kind {
                 if target.get() == .selfReference {
                     return true
                 }
@@ -2894,7 +2904,7 @@ class WasmArrayTypeDescription: WasmTypeDescription {
     }
 
     override func hasUnresolvedSelfReferences() -> Bool {
-        if case .Index(let target) = elementType.wasmReferenceType?.kind {
+        if case .Index(let target, _) = elementType.wasmReferenceType?.kind {
             return target.get() == .selfReference
         }
         return false
@@ -2945,7 +2955,7 @@ class WasmStructTypeDescription: WasmTypeDescription {
 
     override func hasUnresolvedSelfReferences() -> Bool {
         for field in fields {
-            if case .Index(let target) = field.type.wasmReferenceType?.kind {
+            if case .Index(let target, _) = field.type.wasmReferenceType?.kind {
                 if target.get() == .selfReference {
                     return true
                 }

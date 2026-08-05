@@ -198,7 +198,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArrayLengthGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.len input not an Index")
         }
@@ -212,7 +212,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArrayGetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.get input not an Index")
         }
@@ -230,7 +230,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmArraySetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmArray))
     ) { b, array in
-        guard case .Index(let desc) = b.type(of: array).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: array).wasmReferenceType!.kind
         else {
             fatalError("unreachable: array.set input not an Index")
         }
@@ -293,7 +293,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmStruct))
     ) { b, theStruct in
-        guard case .Index(let desc) = b.type(of: theStruct).wasmReferenceType!.kind
+        guard case .Index(let desc, _) = b.type(of: theStruct).wasmReferenceType!.kind
         else {
             fatalError("unreachable: struct.get input not an Index")
         }
@@ -311,9 +311,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         "WasmStructSetGenerator", inContext: .single(.wasmFunction),
         inputs: .requiredComplex(.init(.anyNonNullableIndexRef, .IsWasmStruct)),
     ) { b, theStruct in
-        guard
-            case .Index(let desc) = b.type(of: theStruct).wasmReferenceType!
-                .kind
+        guard case .Index(let desc, _) = b.type(of: theStruct).wasmReferenceType!.kind
         else {
             fatalError("unreachable: struct.set input not an Index")
         }
@@ -447,7 +445,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             switch b.type(of: ref).wasmReferenceType!.kind {
             case .Abstract(let heapTypeInfo):
                 heapTypeInfo.heapType
-            case .Index(let desc):
+            case .Index(let desc, _):
                 desc.get()!.abstractHeapSupertype!.heapType
             }
         let sameHierarchy = WasmAbstractHeapType.allCases.filter {
@@ -498,7 +496,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             switch b.type(of: ref).wasmReferenceType!.kind {
             case .Abstract(let heapTypeInfo):
                 heapTypeInfo.heapType
-            case .Index(let desc):
+            case .Index(let desc, _):
                 desc.get()!.abstractHeapSupertype!.heapType
             }
         let incompatible: [WasmAbstractHeapType] = [.WasmStruct, .WasmArray, .WasmI31]

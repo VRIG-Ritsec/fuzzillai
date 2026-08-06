@@ -709,6 +709,14 @@ fuzzer.sync {
     // Always want some statistics.
     fuzzer.addModule(Statistics())
 
+    // ---- Marker for patch insertion ----
+    // An internal V8 component needs to insert a module for the ClusterFuzz uploader.
+    // This module should be inserted
+    // <<--- here
+    // and these extra comments are just padding increasing the chance that the patch applies
+    // cleanly.
+    // ---- End of marker ----
+
     fuzzer.registerEventListener(for: fuzzer.events.Shutdown) { _ in
         DispatchQueue.main.async {
             for worker in workers {

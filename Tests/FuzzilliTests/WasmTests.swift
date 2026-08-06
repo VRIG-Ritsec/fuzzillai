@@ -1467,7 +1467,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "42\n")
     }
 
-    func importedTableTestCase(isTable64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testImportedTable(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -1525,15 +1526,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "{\"a\":41,\"b\":42}\n")
     }
 
-    @Test func testImportedTable32() throws {
-        try importedTableTestCase(isTable64: false)
-    }
-
-    @Test func testImportedTable64() throws {
-        try importedTableTestCase(isTable64: true)
-    }
-
-    func defineTable(isTable64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testDefineTable(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .warning, enableInspection: true)
 
@@ -1604,14 +1598,6 @@ struct WasmFoundationTests {
         }
 
         testForOutput(program: jsProg, runner: runner, outputString: "43\n11\n")
-    }
-
-    @Test func testDefineTable32() throws {
-        try defineTable(isTable64: false)
-    }
-
-    @Test func testDefineTable64() throws {
-        try defineTable(isTable64: true)
     }
 
     @Test func testCallIndirect() throws {
@@ -2086,7 +2072,8 @@ struct WasmFoundationTests {
 
     // Test every memory testcase for both memory32 and memory64.
 
-    func importedMemoryTestCase(isShared: Bool, isMemory64: Bool) throws {
+    @Test(arguments: [false, true], [false, true])
+    func testImportedMemory(isShared: Bool, isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2147,17 +2134,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1337\n0\n1337\n")
     }
 
-    @Test func testImportedMemory32() throws {
-        try importedMemoryTestCase(isShared: false, isMemory64: false)
-        try importedMemoryTestCase(isShared: true, isMemory64: false)
-    }
-
-    @Test func testImportedMemory64() throws {
-        try importedMemoryTestCase(isShared: false, isMemory64: true)
-        try importedMemoryTestCase(isShared: true, isMemory64: true)
-    }
-
-    func defineMemory(isShared: Bool, isMemory64: Bool) throws {
+    @Test(arguments: [false, true], [false, true])
+    func testDefineMemory(isShared: Bool, isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2196,18 +2174,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1337\n")
     }
 
-    @Test func testDefineMemory32() throws {
-        try defineMemory(isShared: false, isMemory64: false)
-        try defineMemory(isShared: true, isMemory64: false)
-    }
-
-    @Test func testDefineMemory64() throws {
-        try defineMemory(isShared: false, isMemory64: true)
-        try defineMemory(isShared: true, isMemory64: true)
-    }
-
-    // TODO(mliedtke): Adapt this and other test cases to use parameterized tests instead.
-    func simpleDataSegmentInit(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testDataSegmentWithMemory(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
         let jsProg = buildAndLiftProgram { b in
@@ -2239,14 +2207,6 @@ struct WasmFoundationTests {
 
         // "AAAABBBB" -> 0x4242424241414141
         testForOutput(program: jsProg, runner: runner, outputString: "4774451407296217409\n")
-    }
-
-    @Test func testDataSegmentWithMemory32() throws {
-        try simpleDataSegmentInit(isMemory64: false)
-    }
-
-    @Test func testDataSegmentWithMemory64() throws {
-        try simpleDataSegmentInit(isMemory64: true)
     }
 
     @Test func testDropDataSegment() throws {
@@ -2283,6 +2243,7 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "")
     }
 
+    @Test(arguments: [false, true])
     func testInitSingleMemoryFromTwoSegments(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
@@ -2320,14 +2281,7 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "4774451407296217409\n")
     }
 
-    @Test func testInitSingleMemoryFromTwoSegments32() throws {
-        try testInitSingleMemoryFromTwoSegments(isMemory64: false)
-    }
-
-    @Test func testInitSingleMemoryFromTwoSegments64() throws {
-        try testInitSingleMemoryFromTwoSegments(isMemory64: true)
-    }
-
+    @Test(arguments: [false, true])
     func testInitTwoMemoriesFromOneSegment(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
@@ -2369,14 +2323,7 @@ struct WasmFoundationTests {
             outputString: "4774451407296217409,4774451407296217409\n")
     }
 
-    @Test func testInitTwoMemoriesFromOneSegment32() throws {
-        try testInitTwoMemoriesFromOneSegment(isMemory64: false)
-    }
-
-    @Test func testInitTwoMemoriesFromOneSegment64() throws {
-        try testInitTwoMemoriesFromOneSegment(isMemory64: true)
-    }
-
+    @Test(arguments: [false, true])
     func testMemoryInitOutOfBoundsMemory(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
@@ -2404,14 +2351,7 @@ struct WasmFoundationTests {
             errorMessageContains: "RuntimeError: memory access out of bounds")
     }
 
-    @Test func testMemoryInitOutOfBoundsMemory32() throws {
-        try testMemoryInitOutOfBoundsMemory(isMemory64: false)
-    }
-
-    @Test func testMemoryInitOutOfBoundsMemory64() throws {
-        try testMemoryInitOutOfBoundsMemory(isMemory64: true)
-    }
-
+    @Test(arguments: [false, true])
     func testMemoryInitOutOfBoundsSegment(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
@@ -2437,14 +2377,6 @@ struct WasmFoundationTests {
         testForErrorOutput(
             program: jsProg, runner: runner,
             errorMessageContains: "RuntimeError: memory access out of bounds")
-    }
-
-    @Test func testMemoryInitOutOfBoundsSegment32() throws {
-        try testMemoryInitOutOfBoundsSegment(isMemory64: false)
-    }
-
-    @Test func testMemoryInitOutOfBoundsSegment64() throws {
-        try testMemoryInitOutOfBoundsSegment(isMemory64: true)
     }
 
     @Test func testMemory64Index() throws {
@@ -2476,7 +2408,8 @@ struct WasmFoundationTests {
     }
 
     // This test doesn't check the result of the Wasm loads, just exectues them.
-    func allMemoryLoadTypesExecution(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testAllMemoryLoadTypesExecution(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2513,16 +2446,9 @@ struct WasmFoundationTests {
         testExecuteScript(program: jsProg, runner: runner)
     }
 
-    @Test func testAllMemoryLoadTypesExecutionOnMemory32() throws {
-        try allMemoryLoadTypesExecution(isMemory64: false)
-    }
-
-    @Test func testAllMemoryLoadTypesExecutionOnMemory64() throws {
-        try allMemoryLoadTypesExecution(isMemory64: true)
-    }
-
     // This test doesn't check the result of the Wasm stores, just executes them.
-    func allMemoryStoreTypesExecution(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testAllMemoryStoreTypesExecution(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2566,15 +2492,8 @@ struct WasmFoundationTests {
         testExecuteScript(program: jsProg, runner: runner)
     }
 
-    @Test func testAllMemoryStoreTypesExecutionOnMemory32() throws {
-        try allMemoryStoreTypesExecution(isMemory64: false)
-    }
-
-    @Test func testAllMemoryStoreTypesExecutionOnMemory64() throws {
-        try allMemoryStoreTypesExecution(isMemory64: true)
-    }
-
-    func multiMemory(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testMultiMemory(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2637,15 +2556,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "6\n")
     }
 
-    @Test func testMultiMemory32() throws {
-        try multiMemory(isMemory64: false)
-    }
-
-    @Test func testMultiMemory64() throws {
-        try multiMemory(isMemory64: true)
-    }
-
-    func memorySize(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testMemorySize(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -2685,15 +2597,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "7,-1,7\n5,5,6\n0,0,1\n")
     }
 
-    @Test func testMemorySize32() throws {
-        try memorySize(isMemory64: false)
-    }
-
-    @Test func testMemorySize64() throws {
-        try memorySize(isMemory64: true)
-    }
-
-    func memoryBulkOperations(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testMemoryBulkOperations(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
 
@@ -2733,15 +2638,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "43690\n")  // 0x 00 00 AA AA
     }
 
-    @Test func testMemoryBulkOperations32() throws {
-        try memoryBulkOperations(isMemory64: false)
-    }
-
-    @Test func testMemoryBulkOperations64() throws {
-        try memoryBulkOperations(isMemory64: true)
-    }
-
-    func memoryCopy(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testMemoryCopy(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
         let jsProg = buildAndLiftProgram { b in
@@ -2789,15 +2687,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "0,222,0\n")
     }
 
-    @Test func testMemoryCopy32() throws {
-        try memoryCopy(isMemory64: false)
-    }
-
-    @Test func testMemoryCopy64() throws {
-        try memoryCopy(isMemory64: true)
-    }
-
-    func wasmSimdLoadStore(isMemory64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testWasmSimdLoadStore(isMemory64: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -3251,14 +3142,6 @@ struct WasmFoundationTests {
             )
         }
         testForOutput(program: jsProg, runner: runner, outputString: expected)
-    }
-
-    @Test func testWasmSimdLoadStoreOnMemory32() throws {
-        try wasmSimdLoadStore(isMemory64: false)
-    }
-
-    @Test func testWasmSimdLoadStoreOnMemory64() throws {
-        try wasmSimdLoadStore(isMemory64: true)
     }
 
     func wasmSimdSplatAndExtractLane(
@@ -6150,7 +6033,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "100\n123\n")
     }
 
-    func tagExportedToDifferentWasmModule(defineInWasm: Bool) throws {
+    @Test(arguments: [true, false])
+    func testTagExportedToDifferentWasmModule(defineInWasm: Bool) throws {
         let runner = JavaScriptExecutor()!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -6222,14 +6106,6 @@ struct WasmFoundationTests {
             return fuzzer.lifter.lift(prog)
         }
         testForOutput(program: jsProg, runner: runner, outputString: "42\n")
-    }
-
-    @Test func testTagExportedToDifferentWasmModule() throws {
-        try tagExportedToDifferentWasmModule(defineInWasm: true)
-    }
-
-    @Test func testImportedTagReexportedToDifferentWasmModule() throws {
-        try tagExportedToDifferentWasmModule(defineInWasm: false)
     }
 
     // Test that defining a Wasm tag in JS with all supported abstract ref types does not fail.
@@ -6575,7 +6451,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "")
     }
 
-    func wasmTableInit(isTable64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testTableInit(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
         let jsProg = buildAndLiftProgram { b in
@@ -6629,15 +6506,8 @@ struct WasmFoundationTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1,2\n")
     }
 
-    @Test func testTableInit32() throws {
-        try wasmTableInit(isTable64: false)
-    }
-
-    @Test func testTableInit64() throws {
-        try wasmTableInit(isTable64: true)
-    }
-
-    func wasmTableCopy(isTable64: Bool) throws {
+    @Test(arguments: [false, true])
+    func testTableCopy(isTable64: Bool) throws {
         let runner = JavaScriptExecutor()!
 
         let jsProg = buildAndLiftProgram { b in
@@ -6688,14 +6558,6 @@ struct WasmFoundationTests {
         }
 
         testForOutput(program: jsProg, runner: runner, outputString: "1,2\n")
-    }
-
-    @Test func testTableCopy32() throws {
-        try wasmTableCopy(isTable64: false)
-    }
-
-    @Test func testTableCopy64() throws {
-        try wasmTableCopy(isTable64: true)
     }
 }
 
@@ -7600,7 +7462,8 @@ struct WasmGCTests {
         testForOutput(program: jsProg, runner: runner, outputString: "1\n0\n")
     }
 
-    func refNullAbstractTypes(sharedRef: Bool) throws {
+    @Test(arguments: [true, false])
+    func testRefNullAbstractTypes(sharedRef: Bool) throws {
         let runner = JavaScriptExecutor(withArguments: ["--experimental-wasm-shared"])!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -7648,14 +7511,6 @@ struct WasmGCTests {
             )
         }
         testForOutput(program: jsProg, runner: runner, outputString: expected)
-    }
-
-    @Test func testRefNullAbstractTypesSharedRef() throws {
-        try refNullAbstractTypes(sharedRef: true)
-    }
-
-    @Test func testRefNullAbstractTypesUnsharedRef() throws {
-        try refNullAbstractTypes(sharedRef: false)
     }
 
     @Test func testRefEq() throws {
@@ -7739,7 +7594,8 @@ struct WasmGCTests {
         testForOutput(program: jsProg, runner: runner, outputString: "42\ncaught exception\n")
     }
 
-    func i31Ref(shared: Bool) throws {
+    @Test(arguments: [true, false])
+    func testi31Ref(shared: Bool) throws {
         let runner = JavaScriptExecutor(withArguments: ["--experimental-wasm-shared"])!
         let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
         let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
@@ -7782,14 +7638,6 @@ struct WasmGCTests {
         }
         testForOutput(
             program: jsProg, runner: runner, outputString: "42\n-42\n42,42\n-42,2147483606\n")
-    }
-
-    @Test func testi31RefShared() throws {
-        try i31Ref(shared: true)
-    }
-
-    @Test func testi31RefUnshared() throws {
-        try i31Ref(shared: false)
     }
 
     @Test func testExternAnyConversions() throws {

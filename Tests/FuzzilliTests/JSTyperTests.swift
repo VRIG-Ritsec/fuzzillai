@@ -984,6 +984,65 @@ struct JSTyperTests {
         }
     }
 
+    @Test func testGlobalThisTypeInference() {
+        let env = JavaScriptEnvironment()
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let globalThis = b.createNamedVariable(forBuiltin: "globalThis")
+            #expect(b.type(of: globalThis).properties.contains("Number"))
+            #expect(b.type(of: globalThis).methods.contains("Number"))
+
+            // Property lookups on globalThis
+            let number = b.getProperty("Number", of: globalThis)
+            #expect(b.type(of: number) == .jsNumberConstructor)
+            let math = b.getProperty("Math", of: globalThis)
+            #expect(b.type(of: math) == .jsMathObject)
+            let undefined = b.getProperty("undefined", of: globalThis)
+            #expect(b.type(of: undefined) == .undefined)
+            let isNaNProp = b.getProperty("isNaN", of: globalThis)
+            #expect(b.type(of: isNaNProp) == .jsIsNaNFunction)
+            // globalThis is recursive.
+            let g = b.getProperty("globalThis", of: globalThis)
+            #expect(b.type(of: g) == b.type(of: globalThis))
+
+            // Calling methods on globalThis
+            let res = b.callMethod("isNaN", on: globalThis, withArgs: [b.loadInt(42)])
+            #expect(b.type(of: res) == .boolean)
+        }
+    }
+
+    @Test func testGlobalThisWithAdditionalBuiltins() {
+        let builtinAType = ILType.integer
+        let builtinBType = ILType.object(
+            ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1", "m2"])
+        let builtinCType = ILType.function([] => .number)
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": builtinAType,
+            "B": builtinBType,
+            "C": builtinCType,
+        ])
+
+        let fuzzer = makeMockFuzzer(environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let globalThis = b.createNamedVariable(forBuiltin: "globalThis")
+
+            let a = b.getProperty("A", of: globalThis)
+            #expect(b.type(of: a) == builtinAType)
+            let bObj = b.getProperty("B", of: globalThis)
+            #expect(b.type(of: bObj) == builtinBType)
+            let cFunc = b.getProperty("C", of: globalThis)
+            #expect(b.type(of: cFunc) == builtinCType)
+            let cCall = b.callMethod("C", on: globalThis, withArgs: [])
+            #expect(b.type(of: cCall) == .number)
+            // globalThis is recursive including the additional properties.
+            let g = b.getProperty("globalThis", of: globalThis)
+            #expect(b.type(of: g) == b.type(of: globalThis))
+        }
+    }
+
     @Test func testPropertyTypeInference() {
         let propFooType = ILType.float
         let propBarType = ILType.function([] => .jsAnything)

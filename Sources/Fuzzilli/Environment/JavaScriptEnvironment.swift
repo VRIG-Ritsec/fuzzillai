@@ -324,6 +324,7 @@ public class JavaScriptEnvironment: ComponentBase {
     private var builtinTypes: [String: ILType] = [:]
     private var groups: [String: ObjectGroup] = [:]
     private var enums: [String: ILType] = [:]
+    private var globalThisGroup: ObjectGroup
 
     // Producing generators, keyed on `type.group`
     private var producingGenerators:
@@ -361,7 +362,7 @@ public class JavaScriptEnvironment: ComponentBase {
         additionalBuiltins: [String: ILType] = [:], additionalObjectGroups: [ObjectGroup] = [],
         additionalEnumerations: [ILType] = [], additionalOptionsBags: [OptionsBag] = []
     ) {
-
+        self.globalThisGroup = ObjectGroup.jsGlobalThis
         super.init(name: "JavaScriptEnvironment")
 
         // Build model of the JavaScript environment
@@ -767,6 +768,8 @@ public class JavaScriptEnvironment: ComponentBase {
             registerBuiltin(builtin, ofType: type)
         }
 
+        finalizeGlobalThisGroup()
+
         // Add some well-known builtin properties and methods.
         builtinProperties.insert("__proto__")
         builtinProperties.insert("constructor")
@@ -977,10 +980,20 @@ public class JavaScriptEnvironment: ComponentBase {
             })
     }
 
-    public func registerBuiltin(_ name: String, ofType type: ILType) {
+    private func registerBuiltin(_ name: String, ofType type: ILType) {
         assert(builtinTypes[name] == nil)
         builtinTypes[name] = type
         builtins.insert(name)
+
+        globalThisGroup.properties[name] = type
+        if let sig = type.functionSignature ?? type.signature {
+            globalThisGroup.methods[name] = [sig]
+        }
+
+        builtinProperties.insert(name)
+        if type.functionSignature != nil || type.signature != nil {
+            builtinMethods.insert(name)
+        }
 
         let producedType = addProducingProperty(forType: type, by: name, on: "")
         if let groupName = producedType.group {
@@ -991,6 +1004,17 @@ public class JavaScriptEnvironment: ComponentBase {
                 }
             }
         }
+    }
+
+    private func finalizeGlobalThisGroup() {
+        globalThisGroup.instanceType = .object(
+            ofGroup: "GlobalThis",
+            // Sort to ensure deterministic printing of this type.
+            withProperties: Array(globalThisGroup.properties.keys).sorted(),
+            withMethods: Array(globalThisGroup.methods.keys).sorted()
+        )
+        registerBuiltin("globalThis", ofType: globalThisGroup.instanceType)
+        registerObjectGroup(globalThisGroup)
     }
 
     public func registerOptionsBag(_ bag: OptionsBag) {
@@ -2053,6 +2077,15 @@ extension ObjectGroup {
 //  * "output" type information (properties and return values) should be as precise as possible
 //  * "input" type information (function parameters) should be as broad as possible
 extension ObjectGroup {
+    /// Object group modelling the JavaScript globalThis object.
+    /// Note: The properties and methods are registered dynamically.
+    public static let jsGlobalThis = ObjectGroup(
+        name: "GlobalThis",
+        instanceType: nil,
+        properties: [:],
+        overloads: [:]
+    )
+
     /// Object group modelling JavaScript strings
     public static let jsStrings = ObjectGroup(
         name: "String",

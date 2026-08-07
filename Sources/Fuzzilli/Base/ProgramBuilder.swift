@@ -6817,6 +6817,25 @@ public class ProgramBuilder {
             let t = type(of: $0)
             return t.Is(.wasmTypeDef()) && t.wasmTypeDefinition?.description != .selfReference
         }
+
+        #if DEBUG
+            // Assert that descriptor+describes come in pairs
+            for type in types {
+                if let desc = self.type(of: type).wasmTypeDefinition?.description
+                    as? WasmStructTypeDescription
+                {
+                    if let descriptor = desc.descriptor {
+                        assert(descriptor.typeGroupIndex == desc.typeGroupIndex)
+                        assert((descriptor as? WasmStructTypeDescription)?.describes === desc)
+                    }
+                    if let describes = desc.describes {
+                        assert(describes.typeGroupIndex == desc.typeGroupIndex)
+                        assert((describes as? WasmStructTypeDescription)?.descriptor === desc)
+                    }
+                }
+            }
+        #endif  // DEBUG
+
         return Array(emit(WasmEndTypeGroup(typesCount: types.count), withInputs: types).outputs)
     }
 
@@ -7212,7 +7231,8 @@ public class ProgramBuilder {
     @discardableResult
     func wasmDefineStructType(
         fields: [WasmStructTypeDescription.Field], indexTypes: [Variable],
-        superTypeDef: Variable? = nil, isFinal: Bool = false
+        superTypeDef: Variable? = nil, isFinal: Bool = false,
+        describes: Variable? = nil
     )
         -> Variable
     {
@@ -7257,11 +7277,16 @@ public class ProgramBuilder {
             inputs.append(superTypeDef)
         }
 
+        if let describes {
+            inputs.append(describes)
+        }
+
         inputs += indexTypes
 
         return emit(
             WasmDefineStructType(
-                fields: fields, hasSuperType: superTypeDef != nil, isFinal: isFinal),
+                fields: fields, hasSuperType: superTypeDef != nil, isFinal: isFinal,
+                hasDescribes: describes != nil),
             withInputs: inputs
         ).output
     }

@@ -3006,13 +3006,18 @@ class WasmDefineStructType: WasmTypeOperation {
     let fields: [Field]
     let hasSuperType: Bool
     let isFinal: Bool
+    let hasDescribes: Bool
 
-    init(fields: [Field], hasSuperType: Bool = false, isFinal: Bool = false) {
+    init(
+        fields: [Field], hasSuperType: Bool = false, isFinal: Bool = false,
+        hasDescribes: Bool = false
+    ) {
         self.fields = fields
         self.hasSuperType = hasSuperType
         self.isFinal = isFinal
+        self.hasDescribes = hasDescribes
         let numInputs =
-            (hasSuperType ? 1 : 0)
+            (hasSuperType ? 1 : 0) + (hasDescribes ? 1 : 0)
             + fields.map {
                 $0.type.requiredInputCount()
             }.reduce(0) { $0 + $1 }

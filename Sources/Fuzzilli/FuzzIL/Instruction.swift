@@ -1825,16 +1825,18 @@ extension Instruction: ProtobufConvertible {
                     $0.isFinal = op.isFinal
                 }
             case .wasmDefineStructType(let op):
-                $0.wasmDefineStructType = Fuzzilli_Protobuf_WasmDefineStructType.with {
-                    $0.fields = op.fields.map { field in
-                        return Fuzzilli_Protobuf_WasmStructField.with {
-                            $0.type = ILTypeToWasmTypeEnum(field.type)
-                            $0.mutability = field.mutability
+                $0.wasmDefineStructType =
+                    Fuzzilli_Protobuf_WasmDefineStructType.with {
+                        $0.fields = op.fields.map { field in
+                            return Fuzzilli_Protobuf_WasmStructField.with {
+                                $0.type = ILTypeToWasmTypeEnum(field.type)
+                                $0.mutability = field.mutability
+                            }
                         }
+                        $0.hasSuperType_p = op.hasSuperType
+                        $0.isFinal = op.isFinal
+                        $0.hasDescribes_p = op.hasDescribes
                     }
-                    $0.hasSuperType_p = op.hasSuperType
-                    $0.isFinal = op.isFinal
-                }
             case .wasmDefineForwardOrSelfReference(_):
                 $0.wasmDefineForwardOrSelfReference =
                     Fuzzilli_Protobuf_WasmDefineForwardOrSelfReference()
@@ -3081,7 +3083,8 @@ extension Instruction: ProtobufConvertible {
                     return WasmDefineStructType.Field(
                         type: WasmTypeEnumToILType(field.type), mutability: field.mutability)
                 },
-                hasSuperType: p.hasSuperType_p, isFinal: p.isFinal)
+                hasSuperType: p.hasSuperType_p, isFinal: p.isFinal,
+                hasDescribes: p.hasDescribes_p)
         case .wasmDefineForwardOrSelfReference(_):
             op = WasmDefineForwardOrSelfReference()
         case .wasmResolveForwardReference(_):

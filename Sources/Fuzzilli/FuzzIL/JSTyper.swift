@@ -661,7 +661,8 @@ public struct JSTyper: Analyzer {
     mutating func addStructType(
         def: Variable, fieldsWithRefs: [(WasmStructTypeDescription.Field, Variable?)],
         concreteHeapSupertype: WasmTypeDescription? = nil,
-        isFinal: Bool = false
+        isFinal: Bool = false,
+        describes: WasmTypeDescription? = nil
     ) {
         let tgIndex = typeGroups.count - 1
         let resolvedFields = fieldsWithRefs.enumerated().map { (fieldIndex, fieldWithInput) in
@@ -701,14 +702,22 @@ public struct JSTyper: Analyzer {
             registerTypeGroupDependency(from: tgIndex, to: concreteHeapSupertype.typeGroupIndex)
         }
 
+        let newDescription = WasmStructTypeDescription(
+            fields: resolvedFields,
+            typeGroupIndex: tgIndex,
+            concreteHeapSupertype: concreteHeapSupertype,
+            isFinal: isFinal,
+            describes: describes)
+
+        if let describes = describes as? WasmStructTypeDescription {
+            assert(describes.descriptor == nil)
+            assert(describes.typeGroupIndex == tgIndex)
+            describes.descriptor = newDescription
+        }
+
         set(
             def,
-            .wasmTypeDef(
-                description: WasmStructTypeDescription(
-                    fields: resolvedFields,
-                    typeGroupIndex: tgIndex,
-                    concreteHeapSupertype: concreteHeapSupertype,
-                    isFinal: isFinal)))
+            .wasmTypeDef(description: newDescription))
 
         typeGroups[typeGroups.count - 1].append(def)
     }
@@ -2747,9 +2756,13 @@ public struct JSTyper: Analyzer {
                 isFinal: op.isFinal)
 
         case .wasmDefineStructType(let op):
+            var inputIndex = 0
             let concreteHeapSupertype =
-                op.hasSuperType ? getTypeDescription(of: instr.inputs.first!) : nil
-            var inputIndex = op.hasSuperType ? 1 : 0
+                op.hasSuperType ? getTypeDescription(of: instr.input(inputIndex)) : nil
+            if op.hasSuperType { inputIndex += 1 }
+            let describes = op.hasDescribes ? getTypeDescription(of: instr.input(inputIndex)) : nil
+            if op.hasDescribes { inputIndex += 1 }
+
             let fieldsWithRefs: [(WasmStructTypeDescription.Field, Variable?)] = op.fields.map {
                 field in
                 if field.type.requiredInputCount() == 0 {
@@ -2764,7 +2777,8 @@ public struct JSTyper: Analyzer {
             addStructType(
                 def: instr.output, fieldsWithRefs: fieldsWithRefs,
                 concreteHeapSupertype: concreteHeapSupertype,
-                isFinal: op.isFinal)
+                isFinal: op.isFinal,
+                describes: describes)
 
         case .wasmDefineForwardOrSelfReference(_):
             set(instr.output, .wasmSelfReference())

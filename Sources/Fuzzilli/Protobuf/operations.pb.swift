@@ -5978,6 +5978,8 @@ public struct Fuzzilli_Protobuf_WasmDefineStructType: Sendable {
 
   public var isFinal: Bool = false
 
+  public var hasDescribes_p: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -16137,7 +16139,7 @@ extension Fuzzilli_Protobuf_WasmStructField: SwiftProtobuf.Message, SwiftProtobu
 
 extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WasmDefineStructType"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}fields\0\u{1}hasSuperType\0\u{1}isFinal\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}fields\0\u{1}hasSuperType\0\u{1}isFinal\0\u{1}hasDescribes\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -16148,6 +16150,7 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.fields) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.hasSuperType_p) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isFinal) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.hasDescribes_p) }()
       default: break
       }
     }
@@ -16163,6 +16166,9 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
     if self.isFinal != false {
       try visitor.visitSingularBoolField(value: self.isFinal, fieldNumber: 3)
     }
+    if self.hasDescribes_p != false {
+      try visitor.visitSingularBoolField(value: self.hasDescribes_p, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -16170,6 +16176,7 @@ extension Fuzzilli_Protobuf_WasmDefineStructType: SwiftProtobuf.Message, SwiftPr
     if lhs.fields != rhs.fields {return false}
     if lhs.hasSuperType_p != rhs.hasSuperType_p {return false}
     if lhs.isFinal != rhs.isFinal {return false}
+    if lhs.hasDescribes_p != rhs.hasDescribes_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -65,7 +65,7 @@ struct LiveTests {
         let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
-                "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
+                "--wasm-staging", "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
                 "--experimental-wasm-acquire-release",
             ]
         )!
@@ -111,7 +111,7 @@ struct LiveTests {
         let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
-                "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
+                "--wasm-staging", "--experimental-fuzzing", "--wasm-allow-mixed-eh-for-testing",
             ]
         )!
 

@@ -149,6 +149,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator()]),
     CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator()]),
     CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator()]),
+    // TODO(bettscheider): Enable once instructions and subtyping is implemented.
+    // CodeGenerator(
+    //     "WasmCustomDescriptorsStructTypesGenerator", [wasmCustomDescriptorsStructTypesGenerator]),
 
     CodeGenerator(
         "WasmSelfReferenceGenerator", inContext: .single(.wasmTypeGroup),
@@ -2730,4 +2733,22 @@ private let wasmSignatureTypeGenerator = {
             => (0..<returnCount).map { _ in chooseType() }
         b.wasmDefineSignatureType(signature: signature, indexTypes: indexTypes, isFinal: isFinal)
     }
+}
+
+private let wasmCustomDescriptorsStructTypesGenerator = GeneratorStub(
+    "WasmCustomDescriptorsStructTypesGenerator",
+    inContext: .single(.wasmTypeGroup),
+    producesComplex: [
+        .init(.wasmTypeDef(), .IsWasmStruct),
+        .init(.wasmTypeDef(), .IsWasmStruct),
+    ]
+) { b in
+    let (fieldsA, indexTypesA) = b.generateRandomWasmStructFields()
+    let typeA = b.wasmDefineStructType(
+        fields: fieldsA, indexTypes: indexTypesA, isFinal: probability(0.25)
+    )
+
+    let (fieldsB, indexTypesB) = b.generateRandomWasmStructFields()
+    _ = b.wasmDefineStructType(
+        fields: fieldsB, indexTypes: indexTypesB, isFinal: probability(0.25), describes: typeA)
 }

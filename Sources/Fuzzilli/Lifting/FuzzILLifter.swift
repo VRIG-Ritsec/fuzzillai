@@ -1751,11 +1751,18 @@ public class FuzzILLifter: Lifter {
         case .wasmDefineStructType(let op):
             let fields = op.fields.map { "\($0.type) mutability=\($0.mutability)" }.joined(
                 separator: ", ")
-            let superTypeInput = op.hasSuperType ? " superType=\(lift(instr.inputs.first!))" : ""
-            let structInputs = (op.hasSuperType ? instr.inputs.dropFirst() : instr.inputs).map(lift)
+            var inputIndex = 0
+            let superTypeInput =
+                op.hasSuperType ? " superType=\(lift(instr.input(inputIndex)))" : ""
+            if op.hasSuperType { inputIndex += 1 }
+            let describesInput =
+                op.hasDescribes ? " describes=\(lift(instr.input(inputIndex)))" : ""
+            if op.hasDescribes { inputIndex += 1 }
+
+            let structInputs = instr.inputs.dropFirst(inputIndex).map(lift)
                 .joined(separator: ", ")
             w.emit(
-                "\(output()) <- WasmDefineStructType(\(fields))\(superTypeInput) isFinal=\(op.isFinal) [\(structInputs)]"
+                "\(output()) <- WasmDefineStructType(\(fields))\(superTypeInput)\(describesInput) isFinal=\(op.isFinal) [\(structInputs)]"
             )
 
         case .wasmDefineForwardOrSelfReference(_):

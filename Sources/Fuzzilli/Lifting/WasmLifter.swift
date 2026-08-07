@@ -737,6 +737,14 @@ public class WasmLifter {
             data += try encodeType(arrayDesc.elementType)
             data += [arrayDesc.mutability ? 1 : 0]
         } else if let structDesc = desc as? WasmStructTypeDescription {
+            if let describes = structDesc.describes {
+                data += [0x4C]
+                data += try encodeWasmGCType(describes)
+            }
+            if let descriptor = structDesc.descriptor {
+                data += [0x4D]
+                data += try encodeWasmGCType(descriptor)
+            }
             data += [0x5F]
             data += Leb128.unsignedEncode(structDesc.fields.count)
             for field in structDesc.fields {

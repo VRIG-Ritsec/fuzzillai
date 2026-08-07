@@ -2778,7 +2778,6 @@ class WasmTypeDescription: Hashable, CustomStringConvertible {
         sequence(first: self, next: { $0.concreteHeapSupertype })
     }
 
-    // TODO(gc): We will also need to support subtyping of struct and array types at some point.
     init(
         typeGroupIndex: Int, abstractHeapSupertype: HeapTypeInfo? = nil,
         concreteHeapSupertype: WasmTypeDescription? = nil, isFinal: Bool = false
@@ -2928,11 +2927,15 @@ class WasmStructTypeDescription: WasmTypeDescription {
 
     let fields: [Field]
 
+    unowned var descriptor: WasmTypeDescription?
+    let describes: WasmTypeDescription?
+
     init(
         fields: [Field], typeGroupIndex: Int, concreteHeapSupertype: WasmTypeDescription? = nil,
-        isFinal: Bool = false
+        isFinal: Bool = false, describes: WasmTypeDescription? = nil
     ) {
         self.fields = fields
+        self.describes = describes
         // TODO(pawkra): support shared variant.
         super.init(
             typeGroupIndex: typeGroupIndex,

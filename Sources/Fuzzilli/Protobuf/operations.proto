@@ -1549,6 +1549,7 @@ message WasmDefineStructType {
     repeated WasmStructField fields = 1;
     bool hasSuperType = 2;
     bool isFinal = 3;
+    bool hasDescribes = 4;
 }
 
 message WasmDefineForwardOrSelfReference {

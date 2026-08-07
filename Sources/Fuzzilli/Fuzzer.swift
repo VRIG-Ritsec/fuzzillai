@@ -177,8 +177,15 @@ public class Fuzzer {
         return iterations - iterationOfLastInterestingSample
     }
 
+    private final class WeakFuzzerRef {
+        weak var value: Fuzzer?
+        init(_ value: Fuzzer) {
+            self.value = value
+        }
+    }
+
     /// Fuzzer instances can be looked up from a dispatch queue through this key. See below.
-    private static let dispatchQueueKey = DispatchSpecificKey<Fuzzer>()
+    private static let dispatchQueueKey = DispatchSpecificKey<WeakFuzzerRef>()
 
     /// Constructs a new fuzzer instance with the provided components.
     public init(
@@ -221,9 +228,8 @@ public class Fuzzer {
 
         // Register this fuzzer instance with its queue so that it is possible to
         // obtain a reference to the Fuzzer instance when running on its queue.
-        // This creates a reference cycle, but Fuzzer instances aren't expected
-        // to be deallocated, so this is ok.
-        self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: self)
+        // A weak reference is used to avoid a retain cycle with the dispatch queue.
+        self.queue.setSpecific(key: Fuzzer.dispatchQueueKey, value: WeakFuzzerRef(self))
 
         #if DEBUG
             do {
@@ -255,7 +261,7 @@ public class Fuzzer {
 
     /// Returns the fuzzer for the active DispatchQueue.
     public static var current: Fuzzer? {
-        return DispatchQueue.getSpecific(key: Fuzzer.dispatchQueueKey)
+        return DispatchQueue.getSpecific(key: Fuzzer.dispatchQueueKey)?.value
     }
 
     /// Schedule work on this fuzzer's dispatch queue.
@@ -341,7 +347,8 @@ public class Fuzzer {
 
         // Install a watchdog to monitor the utilization of this instance.
         var lastCheck = Date()
-        timers.scheduleTask(every: 1 * Minutes) {
+        timers.scheduleTask(every: 1 * Minutes) { [weak self] in
+            guard let self = self else { return }
             // Monitor responsiveness
             let now = Date()
             let interval = now.timeIntervalSince(lastCheck)

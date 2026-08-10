@@ -6832,6 +6832,13 @@ public class ProgramBuilder {
                         assert(describes.typeGroupIndex == desc.typeGroupIndex)
                         assert((describes as? WasmStructTypeDescription)?.descriptor === desc)
                     }
+
+                    if let superTypeDesc = desc.concreteHeapSupertype as? WasmStructTypeDescription,
+                        let superDescriptor = superTypeDesc.descriptor
+                    {
+                        assert(desc.descriptor != nil)
+                        assert(superDescriptor.subsumes(desc.descriptor!))
+                    }
                 }
             }
         #endif  // DEBUG
@@ -6979,26 +6986,92 @@ public class ProgramBuilder {
         return (candidates.randomElement() ?? type, nil)
     }
 
+    private func randomSubtype(
+        ofAbstractType refType: WasmReferenceType, mutability: Bool, newNullability: Bool
+    ) -> (ILType, Variable?) {
+        assert(refType.isAbstract())
+        if !mutability && refType.nullability && newNullability {
+            let (newType, typeDef) = self.randomWasmReferenceType(
+                withAbstractSuperType: .wasmRef(refType.kind, nullability: true))
+            return (
+                .wasmRef(newType.wasmReferenceType!.kind, nullability: newNullability), typeDef
+            )
+        } else {
+            // randomWasmReferenceType() currently only supports generating subtypes for nullable reference types.
+            return (.wasmRef(refType.kind, nullability: newNullability), nil)
+        }
+    }
+
+    private func generateSubtypeStruct(
+        superType: Variable, isFinal: Bool, describes: Variable? = nil
+    ) -> Variable {
+        let structDesc =
+            self.type(of: superType).wasmTypeDefinition!.description as! WasmStructTypeDescription
+
+        var indexTypes: [Variable] = []
+        var cleanFields: [WasmStructTypeDescription.Field] = []
+        for field in structDesc.fields {
+            var fieldType = field.type
+
+            if let refType = fieldType.wasmReferenceType {
+                switch refType.kind {
+                case .Index:
+                    var indexType = self.getWasmTypeDef(for: fieldType)
+                    // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
+                    // This is not yet supported by WasmStructNewGenerator.
+                    assert(refType.nullability)
+                    fieldType = .wasmRef(.Index(), nullability: refType.nullability)
+
+                    let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!.description!
+                    if !field.mutability,
+                        !indexTypeDesc.hasUnresolvedSelfReferences(),
+                        !indexTypeDesc.isFinal
+                    {
+                        indexType = self.findVariable(satisfying: {
+                            guard let desc = self.type(of: $0).wasmTypeDefinition?.description
+                            else { return false }
+                            return indexTypeDesc.subsumes(desc)
+                        })!
+                    }
+                    indexTypes.append(indexType)
+                case .Abstract:
+                    let newNullability = refType.nullability
+                    let (newType, typeDef) = self.randomSubtype(
+                        ofAbstractType: refType, mutability: field.mutability,
+                        newNullability: newNullability)
+                    fieldType = newType
+                    if let typeDef {
+                        indexTypes.append(typeDef)
+                    }
+                }
+            }
+
+            cleanFields.append(
+                .init(
+                    type: fieldType,
+                    mutability: field.mutability
+                ))
+        }
+
+        if probability(0.5) && cleanFields.count < 12 {
+            let (newFields, newIndexTypes) = self.generateRandomWasmStructFields(upTo: 3)
+            cleanFields += newFields
+            indexTypes += newIndexTypes
+        }
+
+        return self.wasmDefineStructType(
+            fields: cleanFields,
+            indexTypes: indexTypes,
+            superTypeDef: superType,
+            isFinal: isFinal,
+            describes: describes
+        )
+    }
+
     @discardableResult
     public func generateSubtype(for superType: Variable, isFinal: Bool = false) -> Variable {
         guard let superTypeDesc = type(of: superType).wasmTypeDefinition?.description else {
             fatalError("superType is not a WasmTypeDefinition")
-        }
-
-        let refineAbstractType = {
-            (refType: WasmReferenceType, mutability: Bool, newNullability: Bool) -> (
-                ILType, Variable?
-            ) in
-            if !mutability && refType.nullability && newNullability {
-                let (newType, typeDef) = self.randomWasmReferenceType(
-                    withAbstractSuperType: .wasmRef(refType.kind, nullability: true))
-                return (
-                    .wasmRef(newType.wasmReferenceType!.kind, nullability: newNullability), typeDef
-                )
-            } else {
-                // randomWasmReferenceType() currently only supports generating subtypes for nullable reference types.
-                return (.wasmRef(refType.kind, nullability: newNullability), nil)
-            }
         }
 
         switch superTypeDesc {
@@ -7025,15 +7098,16 @@ public class ProgramBuilder {
                         !indexTypeDesc.hasUnresolvedSelfReferences(),
                         !indexTypeDesc.isFinal
                     {
-                        indexType = self.findVariable(satisfying: {
+                        indexType = self.findVariable {
                             guard let desc = self.type(of: $0).wasmTypeDefinition?.description
                             else { return false }
                             return indexTypeDesc.subsumes(desc)
-                        })!
+                        }!
                     }
                 case .Abstract:
-                    let (newType, typeDef) = refineAbstractType(
-                        refType, arrayDesc.mutability, newNullability)
+                    let (newType, typeDef) = self.randomSubtype(
+                        ofAbstractType: refType, mutability: arrayDesc.mutability,
+                        newNullability: newNullability)
                     elementType = newType
                     indexType = typeDef
                 }
@@ -7048,62 +7122,42 @@ public class ProgramBuilder {
             )
 
         case let structDesc as WasmStructTypeDescription:
-            var indexTypes: [Variable] = []
-            var cleanFields: [WasmStructTypeDescription.Field] = []
-            for field in structDesc.fields {
-                var fieldType = field.type
-
-                if let refType = fieldType.wasmReferenceType {
-                    switch refType.kind {
-                    case .Index:
-                        var indexType = self.getWasmTypeDef(for: fieldType)
-                        // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
-                        // This is not yet supported by WasmStructNewGenerator.
-                        assert(refType.nullability)
-                        fieldType = .wasmRef(.Index(), nullability: refType.nullability)
-
-                        let indexTypeDesc = type(of: indexType).wasmTypeDefinition!.description!
-                        if !field.mutability,
-                            !indexTypeDesc.hasUnresolvedSelfReferences(),
-                            !indexTypeDesc.isFinal
-                        {
-                            indexType = self.findVariable(satisfying: {
-                                guard let desc = self.type(of: $0).wasmTypeDefinition?.description
-                                else { return false }
-                                return indexTypeDesc.subsumes(desc)
-                            })!
-                        }
-                        indexTypes.append(indexType)
-                    case .Abstract:
-                        let newNullability = refType.nullability
-                        let (newType, typeDef) = refineAbstractType(
-                            refType, field.mutability, newNullability)
-                        fieldType = newType
-                        if let typeDef {
-                            indexTypes.append(typeDef)
-                        }
-                    }
-                }
-
-                cleanFields.append(
-                    .init(
-                        type: fieldType,
-                        mutability: field.mutability
-                    ))
+            if let describesDesc = structDesc.describes {
+                let describesVar = self.findVariable {
+                    self.type(of: $0).wasmTypeDefinition?.description == describesDesc
+                }!
+                let describedSubtype = self.generateSubtypeStruct(
+                    superType: describesVar, isFinal: probability(0.25))
+                let subtype = self.generateSubtypeStruct(
+                    superType: superType, isFinal: isFinal, describes: describedSubtype)
+                return subtype
+            } else if let descriptorDesc = structDesc.descriptor {
+                let subtype = self.generateSubtypeStruct(superType: superType, isFinal: isFinal)
+                let descriptorVar = self.findVariable {
+                    self.type(of: $0).wasmTypeDefinition?.description == descriptorDesc
+                }!
+                _ = self.generateSubtypeStruct(
+                    superType: descriptorVar,
+                    isFinal: probability(0.25),
+                    describes: subtype
+                )
+                return subtype
+            } else {
+                let subtype = self.generateSubtypeStruct(superType: superType, isFinal: isFinal)
+                // TODO(bettscheider): Uncomment this once we added custom descriptors instructions.
+                // For now, we don't ever generate custom descriptors structs outside of a few tests.
+                // if probability(0.1) {
+                //     let (descriptorFields, descriptorIndexTypes) =
+                //         self.generateRandomWasmStructFields(upTo: 3)
+                //     _ = self.wasmDefineStructType(
+                //         fields: descriptorFields,
+                //         indexTypes: descriptorIndexTypes,
+                //         isFinal: probability(0.25),
+                //         describes: subtype
+                //     )
+                // }
+                return subtype
             }
-
-            if probability(0.5) && cleanFields.count < 12 {
-                let (newFields, newIndexTypes) = generateRandomWasmStructFields(upTo: 3)
-                cleanFields += newFields
-                indexTypes += newIndexTypes
-            }
-
-            return self.wasmDefineStructType(
-                fields: cleanFields,
-                indexTypes: indexTypes,
-                superTypeDef: superType,
-                isFinal: isFinal
-            )
 
         case let sigDesc as WasmSignatureTypeDescription:
             var indexTypes: [Variable] = []
@@ -7145,8 +7199,9 @@ public class ProgramBuilder {
                         case .Abstract(let info):
                             if isCovariant {
                                 let newNullability = refType.nullability
-                                let (newType, typeDef) = refineAbstractType(
-                                    refType, false, newNullability)
+                                let (newType, typeDef) = self.randomSubtype(
+                                    ofAbstractType: refType, mutability: false,
+                                    newNullability: newNullability)
                                 if let typeDef {
                                     indexTypes.append(typeDef)
                                 }
@@ -7271,6 +7326,14 @@ public class ProgramBuilder {
                         assert(!subField.mutability)
                         assert(superField.type.subsumes(subField.type))
                     }
+                }
+
+                if let superDescribes = superStructType.describes {
+                    assert(describes != nil)
+                    let describesDesc = self.type(of: describes!).wasmTypeDefinition?.description
+                    assert(superDescribes.subsumes(describesDesc!))
+                } else {
+                    assert(describes == nil)
                 }
             #endif
 

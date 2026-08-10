@@ -2670,6 +2670,8 @@ private let wasmStructTypeGenerator = {
                     as? WasmStructTypeDescription
                 {
                     return !desc.hasUnresolvedSelfReferences() && !desc.isFinal
+                        && (desc.describes == nil || !desc.describes!.isFinal)
+                        && (desc.descriptor == nil || !desc.descriptor!.isFinal)
                 }
                 return false
             })

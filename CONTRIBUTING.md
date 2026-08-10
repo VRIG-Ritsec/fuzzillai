@@ -22,7 +22,9 @@ use GitHub pull requests for this purpose. Consult
 [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on using pull requests.
 
-## Community Guidelines
+## Community Guidelines & AI Coding Policy
 
 This project follows [Google's Open Source Community
 Guidelines](https://opensource.google.com/conduct/).
+
+It also follows the [Chromium AI Coding Policy](https://chromium.googlesource.com/chromium/src/+/main/agents/ai_policy.md).

@@ -244,7 +244,9 @@ struct LiveTests {
         let results = try Self.runLiveTest(withRunner: runner, using: fuzzer) { b in
             // Generate program in a separate builder.
             let genBuilder = fuzzer.makeBuilder()
-            let (metadata, _) = runBinaryenWasmGenerator(b: genBuilder)
+            let (metadata, exports) = runBinaryenWasmGenerator(b: genBuilder)
+            // Generate a call to an exported Wasm function (if present).
+            Self.generateACallToWasmExport(b: genBuilder, metadata: metadata, exports: exports)
             let program = genBuilder.finalize()
 
             // Verify original metadata.
@@ -279,10 +281,6 @@ struct LiveTests {
 
             // Append the mutated program onto the ProgramBuilder.
             b.append(mutatedProgram)
-
-            // Generate a call to the exported Wasm function.
-            let exports = b.lastInstruction().output
-            Self.generateACallToWasmExport(b: b, metadata: metadata, exports: exports)
         }
 
         checkFailureRate(testResults: results, maxFailureRate: 0.65)

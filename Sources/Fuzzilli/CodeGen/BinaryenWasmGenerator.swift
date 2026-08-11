@@ -126,6 +126,11 @@ public func runBinaryenWasmGenerator(b: ProgramBuilder) -> (WasmModuleMetadata, 
 
     // Emit a getProperty for the exports object to make it easier to use
     let exports = b.getProperty("exports", of: instance)
+    // In a similar fashion, already extract an existing function from the exports object (so we can
+    // also already reach them via CallFunction, not just via CallMethod).
+    if let someFunction = functions.randomElement() {
+        b.getProperty(someFunction.name, of: exports)
+    }
     return (metadata, exports)
 }
 

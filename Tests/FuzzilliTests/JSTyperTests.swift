@@ -2566,9 +2566,9 @@ struct JSTyperTests {
             let memoryPrototype = b.getProperty("prototype", of: wasmMemoryConstructor)
             let grow = b.getProperty("grow", of: memoryPrototype)
             #expect(
-                b.type(of: grow).Is(
-                    .unboundFunction([.number] => .number, receiver: .object(ofGroup: "WasmMemory"))
-                ))
+                b.type(of: grow)
+                    == .unboundFunction(
+                        [.number] => .number, receiver: ObjectGroup.jsWasmMemory.instanceType))
 
             let wasmTableConstructor = b.getProperty("Table", of: wasm)
             let wasmTable = b.construct(wasmTableConstructor)  // In theory this needs arguments.
@@ -2580,11 +2580,11 @@ struct JSTyperTests {
             let tablePrototype = b.getProperty("prototype", of: wasmTableConstructor)
             let tableGrow = b.getProperty("grow", of: tablePrototype)
             #expect(
-                b.type(of: tableGrow).Is(
-                    .unboundFunction(
+                b.type(of: tableGrow)
+                    == .unboundFunction(
                         [.number, .opt(.jsAnything)] => .number,
-                        receiver: .object(ofGroup: "WasmTable")
-                    )))
+                        receiver: ObjectGroup.wasmTable.instanceType
+                    ))
 
             let wasmTagConstructor = b.getProperty("Tag", of: wasm)
             let wasmTag = b.construct(wasmTagConstructor)  // In theory this needs arguments.
@@ -2607,10 +2607,10 @@ struct JSTyperTests {
                     ObjectGroup.jsWebAssemblyExceptionPrototype.instanceType))
             let exceptionIs = b.getProperty("is", of: exceptionPrototype)
             #expect(
-                b.type(of: exceptionIs).Is(
-                    .unboundFunction(
+                b.type(of: exceptionIs)
+                    == .unboundFunction(
                         [.plain(ObjectGroup.jsWasmTag.instanceType)] => ILType.boolean,
-                        receiver: .object(ofGroup: "WebAssembly.Exception"))))
+                        receiver: ObjectGroup.jsWebAssemblyException.instanceType))
         }
     }
 

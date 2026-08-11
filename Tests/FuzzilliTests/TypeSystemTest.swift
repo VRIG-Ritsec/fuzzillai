@@ -1928,19 +1928,28 @@ struct TypeSystemTests {
         #expect(ILType.unboundFunction(receiver: .object()).Is(.unboundFunction()))
         #expect(!ILType.unboundFunction().Is(.unboundFunction(receiver: .object())))
         #expect(
-            ILType.unboundFunction(receiver: .object()).Is(.unboundFunction(receiver: .jsAnything)))
+            ILType.unboundFunction(receiver: .jsAnything).Is(.unboundFunction(receiver: .object())))
         #expect(
-            !ILType.unboundFunction(receiver: .jsAnything).Is(.unboundFunction(receiver: .object()))
+            !ILType.unboundFunction(receiver: .object()).Is(.unboundFunction(receiver: .jsAnything))
         )
 
         let receiverNil = ILType.unboundFunction()
         let receiverObject = ILType.unboundFunction(receiver: .object())
         let receiverArray = ILType.unboundFunction(receiver: .object(ofGroup: "Array"))
+        let receiverDate = ILType.unboundFunction(receiver: .object(ofGroup: "Date"))
+        let receiverRegExp = ILType.unboundFunction(receiver: .object(ofGroup: "RegExp"))
+
+        #expect(receiverObject.Is(receiverArray))
+        #expect(!receiverArray.Is(receiverObject))
 
         #expect(receiverArray.union(with: receiverObject) == receiverArray)
         #expect(receiverObject.union(with: receiverArray) == receiverArray)
         #expect(receiverNil.union(with: receiverObject) == receiverNil)
         #expect(receiverObject.union(with: receiverNil) == receiverNil)
+        #expect(receiverDate.union(with: receiverRegExp) == receiverNil)
+        #expect(receiverRegExp.union(with: receiverDate) == receiverNil)
+        #expect(receiverDate.union(with: receiverRegExp).receiver == nil)
+
         #expect(receiverObject.intersection(with: receiverArray) == receiverObject)
         #expect(receiverArray.intersection(with: receiverObject) == receiverObject)
         #expect(receiverNil.intersection(with: receiverObject) == receiverObject)

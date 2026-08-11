@@ -593,7 +593,7 @@ public struct ILType: Hashable {
             return false
         }
 
-        guard receiver == nil || (other.receiver != nil && receiver!.subsumes(other.receiver!))
+        guard receiver == nil || (other.receiver != nil && other.receiver!.subsumes(receiver!))
         else {
             return false
         }
@@ -967,8 +967,22 @@ public struct ILType: Hashable {
         let commonMethods = self.methods.intersection(other.methods)
         let commonSymbolMethods = self.symbolMethods.intersection(other.symbolMethods)
         let signature = self.signature == other.signature ? self.signature : nil  // TODO: this is overly coarse, we could also see if one signature subsumes the other, then take the subsuming one.
-        let receiver =
+
+        // Note that the receiver is an input, so it is contravariant:
+        // Given:
+        // if (some_condition) {
+        //   var fct = Date.prototype.getDay;
+        // } else {
+        //   var fct = RegExp.prototype.compile;
+        // }
+        // After this merge point, valid receivers for `fct` are those types that are both a Date
+        // and a RegExp, which is the intersection (Date ∩ RegExp) which is bottom / .nothing.
+        // There simply is no type that can be used as a valid receiver in all cases.
+        // As .nothing is somewhat special in Fuzzilli, we unset the receiver type in such cases.
+        let receiverIntersection =
             other.receiver != nil ? self.receiver?.intersection(with: other.receiver!) : nil
+        let receiver = receiverIntersection != .nothing ? receiverIntersection : nil
+
         var group: String? = nil
         if self.group == other.group {
             group = self.group

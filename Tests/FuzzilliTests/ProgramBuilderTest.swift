@@ -4000,6 +4000,33 @@ struct ProgramBuilderTests {
             }
         }
     }
+
+    @Test func testUnboundFunctionWithImpossibleReceiver() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            b.buildPrefix()
+
+            let f = b.loadUndefined()
+            b.buildIfElse(b.loadBool(true)) {
+                let date = b.createNamedVariable(forBuiltin: "Date")
+                let proto = b.getProperty("prototype", of: date)
+                let getTime = b.getProperty("getTime", of: proto)
+                b.reassign(variable: f, value: getTime)
+            } elseBody: {
+                let regExp = b.createNamedVariable(forBuiltin: "RegExp")
+                let proto = b.getProperty("prototype", of: regExp)
+                let test = b.getProperty("test", of: proto)
+                b.reassign(variable: f, value: test)
+            }
+
+            // There isn't any valid type that is both an instance of Date and an instance of
+            // RegExp, so this type "loses" its receiver information.
+            #expect(b.type(of: f) == .unboundFunction(nil, receiver: nil))
+            let gen = CodeGenerators.first { $0.name == "UnboundFunctionCallGenerator" }!
+            let _ = gen.head.run(in: b, with: [f])
+        }
+    }
 }
 
 struct ProgramBuilderRuntimeDataTests {

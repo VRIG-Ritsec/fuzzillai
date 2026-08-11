@@ -1163,6 +1163,11 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         "--wasm-fast-api",
         "--expose-fast-api",
         "--wasm-test-streaming",  // WebAssembly.compileStreaming & WebAssembly.instantiateStreaming()
+        // This is unsafe, obviously we can't just "optimize" away casts. This should lead to
+        // finding crashes sooner or later.
+        // TODO(mliedtke): Remove this again. Besides hopefully leading to fuzzer reports, it also
+        // prevents us from properly fuzzing the actual ref.cast_desc_eq implementation.
+        "--wasm-assume-ref-cast-desc-succeeds",
     ]
     if forSandbox {
         args.append("--sandbox-fuzzing")

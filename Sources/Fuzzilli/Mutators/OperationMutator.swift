@@ -561,7 +561,7 @@ public class OperationMutator: BaseInstructionMutator {
         case .wasmSimdReplaceLane(let op):
             newOp = WasmSimdReplaceLane(
                 kind: op.kind, lane: Int.random(in: 0..<op.kind.laneCount()))
-        case .wasmSimdStoreLane(let op):
+        case .wasmSimdStoreLane(_):
             let kind = chooseUniform(from: WasmSimdStoreLane.Kind.allCases)
             let staticOffset =
                 probability(0.8)
@@ -569,8 +569,8 @@ public class OperationMutator: BaseInstructionMutator {
                 : Int64.random(in: Int64.min...Int64.max)  // most likely out of bounds
             newOp = WasmSimdStoreLane(
                 kind: kind, staticOffset: staticOffset,
-                lane: Int.random(in: 0..<op.kind.laneCount()))
-        case .wasmSimdLoadLane(let op):
+                lane: Int.random(in: 0..<kind.laneCount()))
+        case .wasmSimdLoadLane(_):
             let kind = chooseUniform(from: WasmSimdLoadLane.Kind.allCases)
             let staticOffset =
                 probability(0.8)
@@ -578,7 +578,7 @@ public class OperationMutator: BaseInstructionMutator {
                 : Int64.random(in: Int64.min...Int64.max)  // most likely out of bounds
             newOp = WasmSimdLoadLane(
                 kind: kind, staticOffset: staticOffset,
-                lane: Int.random(in: 0..<op.kind.laneCount()))
+                lane: Int.random(in: 0..<kind.laneCount()))
         case .wasmSimdLoad(_):
             let kind = chooseUniform(from: WasmSimdLoad.Kind.allCases)
             let staticOffset =

@@ -1282,8 +1282,7 @@ public class JavaScriptLifter: Lifter {
             case .setPrivateProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of an assignment, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
-                let PROPERTY = MemberExpression.new() + obj + opToken + op.propertyName
+                let PROPERTY = MemberExpression.new() + obj + ".#" + op.propertyName
                 let VALUE = input(1)
                 w.emit("\(PROPERTY) = \(VALUE);")
 

@@ -2946,6 +2946,45 @@ struct JSTyperTests {
         }
     }
 
+    @Test
+    func testAsyncMethodReturnInference() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Object literal with async method
+            let obj = b.buildObjectLiteral { obj in
+                obj.addMethod("m", with: .parameters(n: 0), isAsync: true) { _ in
+                    b.doReturn(b.loadInt(42))
+                }
+            }
+            let res = b.callMethod("m", on: obj)
+            #expect(b.type(of: res) == .jsPromise(resolvingTo: .integer))
+
+            _ = b.buildAsyncFunction(with: .parameters(n: 0)) { _ in
+                let val = b.await(res)
+                #expect(b.type(of: val) == .integer)
+            }
+
+            // Class with async instance and static methods
+            let cls = b.buildClassDefinition { cls in
+                cls.addInstanceMethod("asyncInstance", with: .parameters(n: 0), isAsync: true) {
+                    _ in
+                    b.doReturn(b.loadInt(100))
+                }
+                cls.addStaticMethod("asyncStatic", with: .parameters(n: 0), isAsync: true) { _ in
+                    b.doReturn(b.loadFloat(13.37))
+                }
+            }
+            let instance = b.construct(cls)
+            let instRes = b.callMethod("asyncInstance", on: instance)
+            #expect(b.type(of: instRes) == .jsPromise(resolvingTo: .integer))
+
+            let staticRes = b.callMethod("asyncStatic", on: cls)
+            #expect(b.type(of: staticRes) == .jsPromise(resolvingTo: .float))
+        }
+    }
+
     @Test func testPendingBundleModuleExportTyping() {
         let config = Configuration(logLevel: .error, generateBundle: true)
         let fuzzer = makeMockFuzzer(config: config)

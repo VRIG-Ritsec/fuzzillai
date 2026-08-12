@@ -1837,7 +1837,9 @@ public struct JSTyper: Analyzer {
                         ? ILType.createJsAsyncGeneratorType(ofYieldType: elementType)
                         : ILType.createJsGeneratorType(ofYieldType: elementType)
                 } else {
-                    return isAsync ? .jsPromise() : resultType.returnType
+                    return isAsync
+                        ? .jsPromise(resolvingTo: resultType.returnType.promiseResolvingTo)
+                        : resultType.returnType
                 }
             }
 

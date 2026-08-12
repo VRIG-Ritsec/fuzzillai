@@ -3489,7 +3489,7 @@ extension ObjectGroup {
             ],
             "validate": wasmBufferTypes.map {
                 [.plain($0), .opt(jsWebAssemblyCompileOptions.instanceType)]
-                    => .jsPromise(resolvingTo: .boolean)
+                    => .boolean
             },
             // The argument needs to be an exported Wasm function. Fuzzilli's type system does not
             // distinguish between Wasm and JS functions, so we can't express this precisely.

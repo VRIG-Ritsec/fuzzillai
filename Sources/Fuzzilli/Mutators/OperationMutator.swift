@@ -930,9 +930,9 @@ public class OperationMutator: BaseInstructionMutator {
     private func extendVariadicOperationByOneInput(_ instr: Instruction, _ b: ProgramBuilder)
         -> Instruction
     {
-        // Without visible variables, we can't add a new input to this instruction.
-        // This should happen rarely, so just skip this mutation.
-        guard b.hasVisibleJsVariables else { return instr }
+        // Without visible JS variables, we can't add a new input to JavaScript variadic operations.
+        // Wasm variadic operations don't depend on visible JS variables.
+        guard instr.op is WasmOperation || b.hasVisibleJsVariables else { return instr }
 
         let newOp: Operation
         var inputs = instr.inputs

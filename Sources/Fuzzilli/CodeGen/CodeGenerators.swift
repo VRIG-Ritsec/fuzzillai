@@ -426,12 +426,11 @@ public let CodeGenerators: [CodeGenerator] = [
         let fct = b.getProperty(fctName, of: prototype)
         let fctType = b.type(of: fct)
         let (arguments, matches) = b.randomArguments(forCallingGuardableFunction: fct)
-        let receiverType = fctType.receiver ?? prototypeType
         let desiredReceiverType = fctType.receiver ?? prototypeType
         let receiver = b.randomVariable(forUseAs: desiredReceiverType)
         let needGuard =
             (!fctType.Is(.function()) && !fctType.Is(.unboundFunction()))
-            || !b.type(of: receiver).Is(receiverType) || !matches
+            || fctType.receiver == nil || !b.type(of: receiver).Is(fctType.receiver!) || !matches
         if Bool.random() {
             b.callMethod("call", on: fct, withArgs: [receiver] + arguments, guard: needGuard)
         } else {
@@ -2373,7 +2372,9 @@ public let CodeGenerators: [CodeGenerator] = [
         let fctType = b.type(of: f)
         let (receiver, recMatches) = b.randomVariable(
             forUseAsGuarded: fctType.receiver ?? .object())
-        let needGuard = fctType.MayNotBe(.unboundFunction()) || !argsMatch || !recMatches
+        let needGuard =
+            fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
+            || !recMatches
         // For simplicity we just hard-code the call function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
         b.callMethod("call", on: f, withArgs: [receiver] + arguments, guard: needGuard)
@@ -2384,7 +2385,9 @@ public let CodeGenerators: [CodeGenerator] = [
         let fctType = b.type(of: f)
         let (receiver, recMatches) = b.randomVariable(
             forUseAsGuarded: fctType.receiver ?? .object())
-        let needGuard = fctType.MayNotBe(.unboundFunction()) || !argsMatch || !recMatches
+        let needGuard =
+            fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
+            || !recMatches
         // For simplicity we just hard-code the apply function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
         b.callMethod(

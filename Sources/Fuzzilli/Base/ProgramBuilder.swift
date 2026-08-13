@@ -7759,7 +7759,7 @@ public class ProgramBuilder {
             let seconds = Int.random(in: 0..<60)
             offset = String(format: "%@:%02d", offset, seconds)
             if probability(0.3) {
-                offset = String(format: "%@:.%09d", offset, Int.random(in: 0...999_999_999))
+                offset = String(format: "%@.%09d", offset, Int.random(in: 0...999_999_999))
             }
         }
         return offset
@@ -7948,7 +7948,7 @@ public class ProgramBuilder {
             // Whether to pass a Temporal-like object or a string
             if Bool.random() {
                 let fields = createTemporalDurationFieldsObject()
-                return callMethod("", on: constructor, withArgs: [fields])
+                return callMethod("from", on: constructor, withArgs: [fields])
             } else {
                 // TODO(manishearth, 439921647) Generate Temporal-like strings
                 let string = randomVariable(forUseAs: .string)
@@ -8008,8 +8008,9 @@ public class ProgramBuilder {
             type: "PlainYearMonth", dateFields: true, timeFields: false, zonedFields: false,
             optionsBag: .jsTemporalOverflowSettings
         ) { constructor in
-            // The constructor takes 3 int args, an optional calendar, and an optional reference day.
-            var args = (0..<3).map { _ in randomVariable(forUseAs: .integer) }
+            // The constructor takes 2 int args (year and month), an optional calendar, and an
+            // optional reference day.
+            var args = (0..<2).map { _ in randomVariable(forUseAs: .integer) }
             if Bool.random() {
                 args.append(randomVariable(forUseAs: .jsTemporalCalendarEnum))
                 if Bool.random() {
@@ -8025,8 +8026,9 @@ public class ProgramBuilder {
             type: "PlainMonthDay", dateFields: true, timeFields: false, zonedFields: false,
             optionsBag: .jsTemporalOverflowSettings
         ) { constructor in
-            // The constructor takes 3 int args, an optional calendar, and an optional reference day.
-            var args = (0..<3).map { _ in randomVariable(forUseAs: .integer) }
+            // The constructor takes 2 int args (month and day), an optional calendar, and an
+            // optional reference year.
+            var args = (0..<2).map { _ in randomVariable(forUseAs: .integer) }
             if Bool.random() {
                 args.append(randomVariable(forUseAs: .jsTemporalCalendarEnum))
                 if Bool.random() {

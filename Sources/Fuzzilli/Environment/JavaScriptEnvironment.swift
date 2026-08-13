@@ -3717,7 +3717,7 @@ extension ObjectGroup {
             "subtract": temporalAddSubtractSignature(
                 forType: .jsTemporalDuration, needsOverflow: false),
             "round": [[.plain(jsTemporalDurationRoundToSettings)] => .jsTemporalDuration],
-            "total": [[.plain(jsTemporalDurationTotalOfSettings)] => .jsTemporalDuration],
+            "total": [[.plain(jsTemporalDurationTotalOfSettings)] => .number],
             "toString": [[.opt(jsTemporalToStringSettings)] => .string],
             "toJSON": [[] => .string],
             "toLocaleString": [[.opt(.string), .opt(jsTemporalToLocaleStringSettings)] => .string],
@@ -3872,10 +3872,10 @@ extension ObjectGroup {
                 [
                     .plain(jsTemporalPlainDateLikeObjectForWith.instanceType),
                     .opt(jsTemporalOverflowSettings),
-                ] => .jsTemporalPlainYearMonth
+                ] => .jsTemporalPlainMonthDay
             ],
             "equals": temporalEqualsSignature(
-                possibleParams: jsTemporalPlainYearMonthLikeParameters),
+                possibleParams: jsTemporalPlainMonthDayLikeParameters),
             "toString": [[.opt(jsTemporalToStringSettings)] => .string],
             "toJSON": [[] => .string],
             "toLocaleString": [[.opt(.string), .opt(jsTemporalToLocaleStringSettings)] => .string],
@@ -4071,7 +4071,7 @@ extension ObjectGroup {
             "toLocaleString": [[.opt(.string), .opt(jsTemporalToLocaleStringSettings)] => .string],
             "startOfDay": [[] => .jsTemporalZonedDateTime],
             "getTimeZoneTransition": [
-                [.plain(jsTemporalDirectionParam)] => .jsTemporalZonedDateTime
+                [.plain(jsTemporalDirectionParam)] => (.jsTemporalInstant | .nullish)
             ],
             "toInstant": [[] => .jsTemporalInstant],
             "toPlainDate": [[] => .jsTemporalPlainDate],
@@ -4273,7 +4273,7 @@ extension OptionsBag {
         ofName: "temporalUnit",
         withValues: [
             "auto", "year", "month", "week", "day", "hour", "minute", "second", "millisecond",
-            "microsecond", "nanosecond", "auto", "years", "months", "weeks", "days", "hours",
+            "microsecond", "nanosecond", "years", "months", "weeks", "days", "hours",
             "minutes", "seconds", "milliseconds", "microseconds", "nanoseconds",
         ])
     fileprivate static let jsTemporalRoundingModeEnum = ILType.enumeration(

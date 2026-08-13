@@ -607,6 +607,7 @@ public class JavaScriptEnvironment: ComponentBase {
         registerOptionsBag(.jsTemporalZonedInterpretationSettings)
         registerOptionsBag(.jsTemporalDurationRoundToSettings)
         registerOptionsBag(.jsTemporalDurationTotalOfSettings)
+        registerOptionsBag(.jsTemporalDurationCompareSettings)
         registerOptionsBag(.toBase64Settings)
         registerOptionsBag(.fromBase64Settings)
         registerOptionsBag(.jsTemporalPlainDateToZDTSettings)
@@ -905,12 +906,11 @@ public class JavaScriptEnvironment: ComponentBase {
     }
 
     public func registerObjectGroup(_ group: ObjectGroup) {
-        assert(groups[group.name] == nil, "Registered duplicate enum \(group.name)")
+        assert(groups[group.name] == nil, "Registered duplicate object group \(group.name)")
         groups[group.name] = group
         builtinProperties.formUnion(group.properties.keys)
         builtinMethods.formUnion(group.methods.keys)
 
-        //func register
         // Step 1: Initialize `subtypes`
         //
         subtypes[group.instanceType] = [group.instanceType]
@@ -1007,6 +1007,7 @@ public class JavaScriptEnvironment: ComponentBase {
     }
 
     private func finalizeGlobalThisGroup() {
+        globalThisGroup.properties["globalThis"] = .object(ofGroup: "GlobalThis")
         globalThisGroup.instanceType = .object(
             ofGroup: "GlobalThis",
             // Sort to ensure deterministic printing of this type.
@@ -1542,7 +1543,7 @@ extension ILType {
 
     /// Type of the JavaScript Function constructor builtin.
     public static let jsFunctionConstructor =
-        ILType.constructor([.string] => .jsFunction(Signature.forUnknownFunction))
+        ILType.functionAndConstructor([.string] => .jsFunction(Signature.forUnknownFunction))
         + .object(ofGroup: "FunctionConstructor", withProperties: ["prototype"])
 
     /// Type of the JavaScript String constructor builtin.
@@ -1883,7 +1884,7 @@ extension ILType {
             + commonStringifierMethods)
 
     public static let jsTemporalInstantConstructor =
-        ILType.functionAndConstructor([.bigint] => .jsTemporalInstant)
+        ILType.constructor([.bigint] => .jsTemporalInstant)
         + .object(
             ofGroup: "TemporalInstantConstructor", withProperties: ["prototype"],
             withMethods: ["from", "fromEpochMilliseconds", "fromEpochNanoseconds", "compare"])
@@ -1898,7 +1899,7 @@ extension ILType {
             + commonStringifierMethods)
 
     public static let jsTemporalDurationConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.number), .opt(.number), .opt(.number), .opt(.number), .opt(.number),
                 .opt(.number), .opt(.number), .opt(.number), .opt(.number), .opt(.number),
@@ -1916,7 +1917,7 @@ extension ILType {
             + commonStringifierMethods)
 
     public static let jsTemporalPlainTimeConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.number), .opt(.number), .opt(.number), .opt(.number), .opt(.number),
                 .opt(.number),
@@ -1944,7 +1945,7 @@ extension ILType {
             + commonStringifierMethods)
 
     public static let jsTemporalPlainYearMonthConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.integer, .integer, .opt(.jsTemporalCalendarEnum), .opt(.integer)]
                 => .jsTemporalPlainYearMonth)
         + .object(
@@ -1956,7 +1957,7 @@ extension ILType {
         withMethods: ["with", "equals", "toPlainDate"] + commonStringifierMethods)
 
     public static let jsTemporalPlainMonthDayConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.integer, .integer, .opt(.jsTemporalCalendarEnum), .opt(.integer)]
                 => .jsTemporalPlainMonthDay)
         + .object(
@@ -1976,7 +1977,7 @@ extension ILType {
         ] + commonStringifierMethods)
 
     public static let jsTemporalPlainDateConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.number, .number, .number, .opt(.jsTemporalCalendarEnum)] => .jsTemporalPlainDate)
         + .object(
             ofGroup: "TemporalPlainDateConstructor", withProperties: ["prototype"],
@@ -1990,7 +1991,7 @@ extension ILType {
         ] + commonStringifierMethods)
 
     public static let jsTemporalPlainDateTimeConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .number, .number, .number, .opt(.number), .opt(.number), .opt(.number),
                 .opt(.number), .opt(.number), .opt(.number), .opt(.jsTemporalCalendarEnum),
@@ -2011,7 +2012,7 @@ extension ILType {
         ] + commonStringifierMethods)
 
     public static let jsTemporalZonedDateTimeConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.bigint, .string, .opt(.jsTemporalCalendarEnum)] => .jsTemporalZonedDateTime)
         + .object(
             ofGroup: "TemporalZonedDateTimeConstructor", withProperties: ["prototype"],
@@ -2115,7 +2116,7 @@ extension ObjectGroup {
             "split": [.opt(.string), .opt(.integer)] => .jsArray,
             "startsWith": [.string, .opt(.integer)] => .boolean,
             "substring": [.integer, .opt(.integer)] => .jsString,
-            "trim": [] => .undefined,
+            "trim": [] => .jsString,
             "trimStart": [] => .jsString,
             "trimLeft": [] => .jsString,
             "trimEnd": [] => .jsString,
@@ -2186,14 +2187,14 @@ extension ObjectGroup {
             "forEach": [.function(), .opt(.object())] => .undefined,
             "includes": [.jsAnything, .opt(.integer)] => .boolean,
             "indexOf": [.jsAnything, .opt(.integer)] => .integer,
-            "join": [.string] => .jsString,
+            "join": [.opt(.string)] => .jsString,
             "keys": [] => .jsIterator,
             "lastIndexOf": [.jsAnything, .opt(.integer)] => .integer,
             "reduce": [.function(), .opt(.jsAnything)] => .jsAnything,
             "reduceRight": [.function(), .opt(.jsAnything)] => .jsAnything,
             "reverse": [] => .jsArray,
             "some": [.function(), .opt(.jsAnything)] => .boolean,
-            "sort": [.function()] => .jsArray,
+            "sort": [.opt(.function())] => .jsArray,
             "values": [] => .jsIterator,
             "pop": [] => .jsAnything,
             "push": [.jsAnything...] => .integer,
@@ -2673,7 +2674,7 @@ extension ObjectGroup {
                 "forEach": [.function(), .opt(.object())] => .undefined,
                 "includes": [.jsAnything, .opt(.integer)] => .boolean,
                 "indexOf": [.jsAnything, .opt(.integer)] => .integer,
-                "join": [.string] => .jsString,
+                "join": [.opt(.string)] => .jsString,
                 "keys": [] => .jsIterator,
                 "lastIndexOf": [.jsAnything, .opt(.integer)] => .integer,
                 "reduce": [.function(), .opt(.jsAnything)] => .jsAnything,
@@ -2681,7 +2682,7 @@ extension ObjectGroup {
                 "reverse": [] => .jsTypedArray(variant),
                 "set": [.object(), .opt(.integer)] => .undefined,
                 "some": [.function(), .opt(.jsAnything)] => .boolean,
-                "sort": [.function()] => .jsTypedArray(variant),
+                "sort": [.opt(.function())] => .jsTypedArray(variant),
                 "values": [] => .jsIterator,
                 "filter": [.function(), .opt(.object())] => .jsTypedArray(variant),
                 "map": [.function(), .opt(.object())] => .jsTypedArray(variant),
@@ -2842,16 +2843,16 @@ extension ObjectGroup {
             "setTime": [.number] => .number,
             "setMilliseconds": [.number] => .number,
             "setUTCMilliseconds": [.number] => .number,
-            "setSeconds": [.number] => .number,
+            "setSeconds": [.number, .opt(.number)] => .number,
             "setUTCSeconds": [.number, .opt(.number)] => .number,
             "setMinutes": [.number, .opt(.number), .opt(.number)] => .number,
             "setUTCMinutes": [.number, .opt(.number), .opt(.number)] => .number,
-            "setHours": [.number, .opt(.number), .opt(.number)] => .number,
-            "setUTCHours": [.number, .opt(.number), .opt(.number)] => .number,
+            "setHours": [.number, .opt(.number), .opt(.number), .opt(.number)] => .number,
+            "setUTCHours": [.number, .opt(.number), .opt(.number), .opt(.number)] => .number,
             "setDate": [.number] => .number,
             "setUTCDate": [.number] => .number,
-            "setMonth": [.number] => .number,
-            "setUTCMonth": [.number] => .number,
+            "setMonth": [.number, .opt(.number)] => .number,
+            "setUTCMonth": [.number, .opt(.number)] => .number,
             "setFullYear": [.number, .opt(.number), .opt(.number)] => .number,
             "setUTCFullYear": [.number, .opt(.number), .opt(.number)] => .number,
             "setYear": [.number] => .number,
@@ -2893,7 +2894,7 @@ extension ObjectGroup {
         ],
         methods: [
             "assign": [.object(), .object()] => .object(),
-            "create": [.object(), .object()] => .object(),
+            "create": [.object(), .opt(.object())] => .object(),
             "defineProperty": [
                 .object(), .string,
                 .oneof(
@@ -2901,7 +2902,7 @@ extension ObjectGroup {
                     .object(withMethods: ["get", "set"])),
             ] => .object(),
             "defineProperties": [.object(), .object()] => .object(),
-            "entries": [.object()] => .object(),
+            "entries": [.object()] => .jsArray,
             "freeze": [.object()] => .object(),
             "fromEntries": [.object()] => .object(),
             "getOwnPropertyDescriptor": [.object(), .string]
@@ -4391,7 +4392,7 @@ extension ILType {
             "getTimeZones", "getWeekInfo", "maximize", "minimize", "toString",
         ])
     static let jsIntlLocaleConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.plain(.jsIntlLocaleString), .opt(OptionsBag.jsIntlLocaleSettings.group.instanceType)]
                 => .jsIntlLocale)
         + .object(ofGroup: "IntlLocaleConstructor", withProperties: ["prototype"], withMethods: [])
@@ -4399,7 +4400,7 @@ extension ILType {
     static let jsIntlCollator = ILType.object(
         ofGroup: "Intl.Collator", withProperties: [], withMethods: ["compare", "resolvedOptions"])
     static let jsIntlCollatorConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.opt(.jsIntlLocaleLike), .opt(OptionsBag.jsIntlCollatorSettings.group.instanceType)]
                 => .jsIntlCollator)
         + .object(
@@ -4409,7 +4410,7 @@ extension ILType {
     static let jsIntlDisplayNames = ILType.object(
         ofGroup: "Intl.DisplayNames", withProperties: [], withMethods: ["of", "resolvedOptions"])
     static let jsIntlDisplayNamesConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .plain(.jsIntlLocaleLike),
                 .plain(OptionsBag.jsIntlDisplayNamesSettings.group.instanceType),
@@ -4422,7 +4423,7 @@ extension ILType {
         ofGroup: "Intl.DurationFormat", withProperties: [],
         withMethods: ["format", "formatToParts", "resolvedOptions"])
     static let jsIntlDurationFormatConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlDurationFormatSettings.group.instanceType),
@@ -4437,7 +4438,7 @@ extension ILType {
             "format", "formatRange", "formatRangeToParts", "formatToParts", "resolvedOptions",
         ])
     static let jsIntlDateTimeFormatConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlDateTimeFormatSettings.group.instanceType),
@@ -4450,7 +4451,7 @@ extension ILType {
         ofGroup: "Intl.ListFormat", withProperties: [],
         withMethods: ["format", "formatToParts", "resolvedOptions"])
     static let jsIntlListFormatConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.opt(.jsIntlLocaleLike), .opt(OptionsBag.jsIntlListFormatSettings.group.instanceType)]
                 => .jsIntlListFormat)
         + .object(
@@ -4463,7 +4464,7 @@ extension ILType {
             "format", "formatRange", "formatRangeToParts", "formatToParts", "resolvedOptions",
         ])
     static let jsIntlNumberFormatConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlNumberFormatSettings.group.instanceType),
@@ -4476,7 +4477,7 @@ extension ILType {
         ofGroup: "Intl.PluralRules", withProperties: [],
         withMethods: ["select", "selectRange", "resolvedOptions"])
     static let jsIntlPluralRulesConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlPluralRulesSettings.group.instanceType),
@@ -4489,7 +4490,7 @@ extension ILType {
         ofGroup: "Intl.RelativeTimeFormat", withProperties: [],
         withMethods: ["format", "formatToParts", "resolvedOptions"])
     static let jsIntlRelativeTimeFormatConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlRelativeTimeFormatSettings.group.instanceType),
@@ -4501,7 +4502,7 @@ extension ILType {
     static let jsIntlSegmenter = ILType.object(
         ofGroup: "Intl.Segmenter", withProperties: [], withMethods: ["segment", "resolvedOptions"])
     static let jsIntlSegmenterConstructor =
-        ILType.functionAndConstructor(
+        ILType.constructor(
             [.opt(.jsIntlLocaleLike), .opt(OptionsBag.jsIntlSegmenterSettings.group.instanceType)]
                 => .jsIntlSegmenter)
         + .object(
@@ -4745,7 +4746,7 @@ extension ObjectGroup {
             "hourCycle": .string,
             "language": .string,
             "numberingSystem": .string,
-            "numeric": .string,
+            "numeric": .boolean,
             "region": .string,
             "script": .string,
             "variants": .string,
@@ -4755,7 +4756,7 @@ extension ObjectGroup {
             "getCollations": [] => .jsArray,
             "getHourCycles": [] => .jsArray,
             "getNumberingSystems": [] => .jsArray,
-            "getTextInfo": [] => .jsArray,
+            "getTextInfo": [] => .object(withProperties: ["direction"]),
             "getTimeZones": [] => .jsArray,
             "getWeekInfo": [] => .object(),
             "maximize": [] => .jsIntlLocale,

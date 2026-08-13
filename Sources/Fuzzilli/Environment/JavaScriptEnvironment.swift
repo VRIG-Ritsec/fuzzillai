@@ -3580,9 +3580,7 @@ extension ObjectGroup {
         if let settingsArg {
             return possibleParams.map { [.plain($0), .opt(settingsArg)] => forType }
         } else {
-            return possibleParams.map {
-                [.plain($0), .opt(jsTemporalDifferenceSettings)] => forType
-            }
+            return possibleParams.map { [.plain($0)] => forType }
         }
     }
     private static func temporalCompareSignature(
@@ -3791,7 +3789,9 @@ extension ObjectGroup {
         ],
         overloads: [
             "from": temporalFromSignature(
-                forType: .jsTemporalPlainTime, possibleParams: jsTemporalPlainTimeLikeParameters),
+                forType: .jsTemporalPlainTime,
+                possibleParams: jsTemporalPlainTimeLikeParameters,
+                settingsArg: jsTemporalOverflowSettings),
             "compare": temporalCompareSignature(possibleParams: jsTemporalPlainTimeLikeParameters),
         ]
     )
@@ -3854,7 +3854,8 @@ extension ObjectGroup {
         overloads: [
             "from": temporalFromSignature(
                 forType: .jsTemporalPlainYearMonth,
-                possibleParams: jsTemporalPlainYearMonthLikeParameters),
+                possibleParams: jsTemporalPlainYearMonthLikeParameters,
+                settingsArg: jsTemporalOverflowSettings),
             "compare": temporalCompareSignature(
                 possibleParams: jsTemporalPlainYearMonthLikeParameters),
         ]
@@ -3901,7 +3902,8 @@ extension ObjectGroup {
         overloads: [
             "from": temporalFromSignature(
                 forType: .jsTemporalPlainMonthDay,
-                possibleParams: jsTemporalPlainMonthDayLikeParameters)
+                possibleParams: jsTemporalPlainMonthDayLikeParameters,
+                settingsArg: jsTemporalOverflowSettings)
         ]
     )
 
@@ -3965,7 +3967,9 @@ extension ObjectGroup {
         ],
         overloads: [
             "from": temporalFromSignature(
-                forType: .jsTemporalPlainDate, possibleParams: jsTemporalPlainDateLikeParameters),
+                forType: .jsTemporalPlainDate,
+                possibleParams: jsTemporalPlainDateLikeParameters,
+                settingsArg: jsTemporalOverflowSettings),
             "compare": temporalCompareSignature(possibleParams: jsTemporalPlainDateLikeParameters),
         ]
     )

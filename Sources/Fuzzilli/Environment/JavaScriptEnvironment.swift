@@ -2278,8 +2278,8 @@ extension ObjectGroup {
         ],
         methods: [
             "next": [.opt(.jsAnything)] => .object(withProperties: ["done", "value"]),
-            "return": [.jsAnything] => .object(withProperties: ["done", "value"]),
-            "throw": [.jsAnything] => .object(withProperties: ["done", "value"]),
+            "return": [.opt(.jsAnything)] => .object(withProperties: ["done", "value"]),
+            "throw": [.opt(.jsAnything)] => .object(withProperties: ["done", "value"]),
             "map": [.function()] => .jsIterator,
             "filter": [.function()] => .jsIterator,
             "take": [.integer] => .jsIterator,
@@ -2291,7 +2291,7 @@ extension ObjectGroup {
             "some": [.function()] => .boolean,
             "every": [.function()] => .boolean,
             "find": [.function()] => .jsAnything,
-            "join": [.string] => .jsString,
+            "join": [.opt(.string)] => .jsString,
             "includes": [.jsAnything, .opt(.integer)] => .boolean,
         ]
     )
@@ -4400,7 +4400,7 @@ extension ILType {
     static let jsIntlCollator = ILType.object(
         ofGroup: "Intl.Collator", withProperties: [], withMethods: ["compare", "resolvedOptions"])
     static let jsIntlCollatorConstructor =
-        ILType.constructor(
+        ILType.functionAndConstructor(
             [.opt(.jsIntlLocaleLike), .opt(OptionsBag.jsIntlCollatorSettings.group.instanceType)]
                 => .jsIntlCollator)
         + .object(
@@ -4438,7 +4438,7 @@ extension ILType {
             "format", "formatRange", "formatRangeToParts", "formatToParts", "resolvedOptions",
         ])
     static let jsIntlDateTimeFormatConstructor =
-        ILType.constructor(
+        ILType.functionAndConstructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlDateTimeFormatSettings.group.instanceType),
@@ -4464,7 +4464,7 @@ extension ILType {
             "format", "formatRange", "formatRangeToParts", "formatToParts", "resolvedOptions",
         ])
     static let jsIntlNumberFormatConstructor =
-        ILType.constructor(
+        ILType.functionAndConstructor(
             [
                 .opt(.jsIntlLocaleLike),
                 .opt(OptionsBag.jsIntlNumberFormatSettings.group.instanceType),

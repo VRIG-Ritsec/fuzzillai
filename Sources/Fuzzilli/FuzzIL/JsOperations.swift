@@ -2050,12 +2050,11 @@ final class GetPrivateProperty: JsOperation, GuardableOperation {
 
     init(propertyName: String, isGuarded: Bool) {
         self.propertyName = propertyName
-        // Accessing a private property that isn't declared in the surrounding class definition is a syntax error
-        // (and so cannot even be handled with a try-catch). Since mutating private property names would often
-        // result in an access to such an undefined private property, and therefore a syntax error, we do not mutate them.
+        // To ensure validity, OperationMutator only uses private properties/methods
+        // that are both present on the receiver type and declared in the surrounding class definition.
         self.isGuarded = isGuarded
         super.init(
-            numInputs: 1, numOutputs: 1,
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
@@ -2073,10 +2072,10 @@ final class SetPrivateProperty: JsOperation, GuardableOperation {
 
     init(propertyName: String, isGuarded: Bool) {
         self.propertyName = propertyName
-        // See comment in GetPrivateProperty for why these aren't mutable.
         self.isGuarded = isGuarded
         super.init(
-            numInputs: 2, requiredContext: [.javascript, .classMethod])
+            numInputs: 2, attributes: [.isMutable],
+            requiredContext: [.javascript, .classMethod])
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
@@ -2093,8 +2092,9 @@ final class UpdatePrivateProperty: JsOperation {
     init(propertyName: String, operator op: BinaryOperator) {
         self.propertyName = propertyName
         self.op = op
-        // See comment in GetPrivateProperty for why these aren't mutable.
-        super.init(numInputs: 2, requiredContext: [.javascript, .classMethod])
+        super.init(
+            numInputs: 2, attributes: [.isMutable],
+            requiredContext: [.javascript, .classMethod])
     }
 }
 
@@ -2112,11 +2112,11 @@ final class CallPrivateMethod: JsOperation, GuardableOperation {
     init(methodName: String, numArguments: Int, isGuarded: Bool) {
         self.methodName = methodName
         // The reference object is the first input.
-        // See comment in GetPrivateProperty for why these aren't mutable.
         self.isGuarded = isGuarded
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
-            attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
+            attributes: [.isVariadic, .isCall, .isMutable],
+            requiredContext: [.javascript, .classMethod])
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
@@ -2144,7 +2144,8 @@ final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation {
         self.isGuarded = isGuarded
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
-            attributes: [.isVariadic, .isCall], requiredContext: [.javascript, .classMethod])
+            attributes: [.isVariadic, .isCall, .isMutable],
+            requiredContext: [.javascript, .classMethod])
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {

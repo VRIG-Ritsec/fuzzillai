@@ -239,13 +239,17 @@ struct JSTyperTests {
                     #expect(b.type(of: params[1]) == .integer)
                 }
 
+                cls.addPrivateInstanceProperty("q")
+                cls.addPrivateStaticProperty("q")
+
                 cls.addPrivateInstanceMethod("p", with: .parameters(n: 0)) { params in
                     let this = params[0]
                     #expect(
                         b.type(of: this)
                             == .object(
                                 ofGroup: "_fuzz_Class0", withProperties: ["a", "b", "c"],
-                                withMethods: ["f", "g"]))
+                                withMethods: ["f", "g"],
+                                withPrivateProperties: ["q"]))
                 }
 
                 cls.addPrivateStaticMethod("p", with: .parameters(n: 0)) { params in
@@ -254,7 +258,8 @@ struct JSTyperTests {
                         b.type(of: this)
                             == .object(
                                 ofGroup: "_fuzz_Constructor0", withProperties: ["a", "d", "e"],
-                                withMethods: ["g", "h"]))
+                                withMethods: ["g", "h"],
+                                withPrivateProperties: ["q"]))
                 }
             }
 
@@ -262,12 +267,16 @@ struct JSTyperTests {
             #expect(
                 b.type(of: cls) == .object(
                     ofGroup: "_fuzz_Constructor0", withProperties: ["a", "d", "e"],
-                    withMethods: ["g", "h"])
+                    withMethods: ["g", "h"],
+                    withPrivateProperties: ["q"],
+                    withPrivateMethods: ["p"])
                     + .constructor(
                         [.string]
                             => .object(
                                 ofGroup: "_fuzz_Class0", withProperties: ["a", "b", "c"],
-                                withMethods: ["f", "g"])))
+                                withMethods: ["f", "g"],
+                                withPrivateProperties: ["q"],
+                                withPrivateMethods: ["p"])))
         }
     }
 

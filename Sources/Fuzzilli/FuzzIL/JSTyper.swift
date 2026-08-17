@@ -273,6 +273,24 @@ public struct JSTyper: Analyzer {
             activeClasses.top.objectGroup.methods[methodName]!.append(signature)
         }
 
+        public func addClassStaticPrivateProperty(propertyName: String) {
+            let classType = activeClasses.top.objectGroup.instanceType
+            let newType = classType.adding(privateProperty: propertyName)
+            guard newType != .nothing else {
+                fatalError("Adding static private property resulted in .nothing ILType")
+            }
+            activeClasses.top.objectGroup.instanceType = newType
+        }
+
+        public func addClassStaticPrivateMethod(methodName: String) {
+            let classType = activeClasses.top.objectGroup.instanceType
+            let newType = classType.adding(privateMethod: methodName)
+            guard newType != .nothing else {
+                fatalError("Adding static private method resulted in .nothing ILType")
+            }
+            activeClasses.top.objectGroup.instanceType = newType
+        }
+
         // For all of the functions below the following holds which is why we can check the required context on an instruction.
         //
         // module A {
@@ -434,6 +452,24 @@ public struct JSTyper: Analyzer {
             let topGroup = activeObjectGroups.top
             assert(topGroup.instanceType.properties.contains(propertyName))
             activeObjectGroups.top.properties[propertyName] = type
+        }
+
+        public func addPrivateProperty(propertyName: String) {
+            let topGroup = activeObjectGroups.top
+            let newType = topGroup.instanceType.adding(privateProperty: propertyName)
+            guard newType != .nothing else {
+                fatalError("Adding private property resulted in .nothing ILType")
+            }
+            activeObjectGroups.top.instanceType = newType
+        }
+
+        public func addPrivateMethod(methodName: String) {
+            let topGroup = activeObjectGroups.top
+            let newType = topGroup.instanceType.adding(privateMethod: methodName)
+            guard newType != .nothing else {
+                fatalError("Adding private method resulted in .nothing ILType")
+            }
+            activeObjectGroups.top.instanceType = newType
         }
     }
 
@@ -2155,6 +2191,14 @@ public struct JSTyper: Analyzer {
                     type: op.hasValue ? type(ofInput: 0) : .jsAnything)
             }
 
+        case .classAddPrivateProperty(let op):
+            if op.isStatic {
+                dynamicObjectGroupManager.addClassStaticPrivateProperty(
+                    propertyName: op.propertyName)
+            } else {
+                dynamicObjectGroupManager.addPrivateProperty(propertyName: op.propertyName)
+            }
+
         case .beginClassStaticInitializer:
             // The first inner output is the explicit |this|
             set(
@@ -2259,8 +2303,10 @@ public struct JSTyper: Analyzer {
                 set(
                     instr.innerOutput(0),
                     dynamicObjectGroupManager.activeClasses.top.objectGroup.instanceType)
+                dynamicObjectGroupManager.addClassStaticPrivateMethod(methodName: op.methodName)
             } else {
                 set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
+                dynamicObjectGroupManager.addPrivateMethod(methodName: op.methodName)
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),
@@ -2272,8 +2318,11 @@ public struct JSTyper: Analyzer {
                 set(
                     instr.innerOutput(0),
                     dynamicObjectGroupManager.activeClasses.top.objectGroup.instanceType)
+                dynamicObjectGroupManager.addClassStaticPrivateProperty(
+                    propertyName: op.propertyName)
             } else {
                 set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
+                dynamicObjectGroupManager.addPrivateProperty(propertyName: op.propertyName)
             }
 
         case .beginClassPrivateSetter(let op):
@@ -2281,8 +2330,11 @@ public struct JSTyper: Analyzer {
                 set(
                     instr.innerOutput(0),
                     dynamicObjectGroupManager.activeClasses.top.objectGroup.instanceType)
+                dynamicObjectGroupManager.addClassStaticPrivateProperty(
+                    propertyName: op.propertyName)
             } else {
                 set(instr.innerOutput(0), dynamicObjectGroupManager.top.instanceType)
+                dynamicObjectGroupManager.addPrivateProperty(propertyName: op.propertyName)
             }
             processParameterDeclarations(
                 instr.innerOutputs(1...),

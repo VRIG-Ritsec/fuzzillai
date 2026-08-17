@@ -2589,17 +2589,14 @@ public let CodeGenerators: [CodeGenerator] = [
         inputs: .preferred(.object())
     ) { b, obj in
         // Accessing a private class property that has not been declared in the active class definition is a syntax error (i.e. wrapping the access in try-catch doesn't help).
-        // As such, we're using the active class definition object to obtain the list of private property names that are guaranteed to exist in the class that is currently being defined.
-        guard !b.currentClassDefinition.privateProperties.isEmpty else {
-            return
-        }
-        let propertyName = chooseUniform(
-            from: b.currentClassDefinition.privateProperties)
-        // Since we don't know whether the private property will exist or not (we don't track private properties in our type inference),
-        // always wrap these accesses in try-catch since they'll be runtime type errors if the property doesn't exist.
+        // As such, we use the active class definition object to select names guaranteed to exist in the enclosing class. If none exist yet, we register a pending private property so it is automatically declared before EndClassDefinition().
+        // Note: While declaring the property prevents parser SyntaxErrors, accessing a private property on an object that is not an instance of the declaring class throws a runtime TypeError. We wrap the access in try-catch so runtime TypeErrors are caught during fuzzing.
+        let (receiver, propertyName) =
+            b.currentClassDefinition.selectOrRegisterPendingPrivateProperty(
+                forReceiver: obj, in: b)
         b.buildTryCatchFinally(
             tryBody: {
-                b.getPrivateProperty(propertyName, of: obj)
+                b.getPrivateProperty(propertyName, of: receiver)
             }, catchBody: { e in })
     },
 
@@ -2607,15 +2604,12 @@ public let CodeGenerators: [CodeGenerator] = [
         "PrivatePropertyAssignmentGenerator", inContext: .single(.classMethod),
         inputs: .preferred(.object(), .jsAnything)
     ) { b, obj, value in
-        // See PrivatePropertyRetrievalGenerator for an explanation.
-        guard !b.currentClassDefinition.privateProperties.isEmpty else {
-            return
-        }
-        let propertyName = chooseUniform(
-            from: b.currentClassDefinition.privateProperties)
+        let (receiver, propertyName) =
+            b.currentClassDefinition.selectOrRegisterPendingPrivateProperty(
+                forReceiver: obj, in: b)
         b.buildTryCatchFinally(
             tryBody: {
-                b.setPrivateProperty(propertyName, of: obj, to: value)
+                b.setPrivateProperty(propertyName, of: receiver, to: value)
             }, catchBody: { e in })
     },
 
@@ -2623,16 +2617,13 @@ public let CodeGenerators: [CodeGenerator] = [
         "PrivatePropertyUpdateGenerator", inContext: .single(.classMethod),
         inputs: .preferred(.object(), .jsAnything)
     ) { b, obj, value in
-        // See PrivatePropertyRetrievalGenerator for an explanation.
-        guard !b.currentClassDefinition.privateProperties.isEmpty else {
-            return
-        }
-        let propertyName = chooseUniform(
-            from: b.currentClassDefinition.privateProperties)
+        let (receiver, propertyName) =
+            b.currentClassDefinition.selectOrRegisterPendingPrivateProperty(
+                forReceiver: obj, in: b)
         b.buildTryCatchFinally(
             tryBody: {
                 b.updatePrivateProperty(
-                    propertyName, of: obj, with: value,
+                    propertyName, of: receiver, with: value,
                     using: chooseUniform(from: BinaryOperator.allCases))
             }, catchBody: { e in })
     },
@@ -2641,16 +2632,15 @@ public let CodeGenerators: [CodeGenerator] = [
         "PrivateMethodCallGenerator", inContext: .single(.classMethod),
         inputs: .preferred(.object())
     ) { b, obj in
-        // See PrivatePropertyRetrievalGenerator for an explanation.
-        guard !b.currentClassDefinition.privateMethods.isEmpty else { return }
-        let methodName = chooseUniform(
-            from: b.currentClassDefinition.privateMethods)
+        let (receiver, methodName) =
+            b.currentClassDefinition.selectOrRegisterPendingPrivateMethod(
+                forReceiver: obj, in: b)
         b.buildTryCatchFinally(
             tryBody: {
                 let args = b.randomArguments(
                     forCallingFunctionWithSignature: Signature
                         .forUnknownFunction)
-                b.callPrivateMethod(methodName, on: obj, withArgs: args)
+                b.callPrivateMethod(methodName, on: receiver, withArgs: args)
             }, catchBody: { e in })
     },
 

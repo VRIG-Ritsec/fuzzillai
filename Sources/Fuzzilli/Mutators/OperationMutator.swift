@@ -174,6 +174,34 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = UpdateProperty(
                 propertyName: b.randomPropertyName(),
                 operator: chooseUniform(from: BinaryOperator.allCases))
+        case .getPrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = GetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = GetPrivateProperty(propertyName: prop, isGuarded: op.isGuarded)
+            }
+        case .setPrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = SetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = SetPrivateProperty(propertyName: prop, isGuarded: op.isGuarded)
+            }
+        case .updatePrivateProperty(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                newOp = UpdateProperty(
+                    propertyName: b.randomPropertyName(),
+                    operator: chooseUniform(from: BinaryOperator.allCases))
+            } else {
+                let prop = selectAvailablePrivateProperty(
+                    in: b, fallback: op.propertyName)
+                newOp = UpdatePrivateProperty(
+                    propertyName: prop,
+                    operator: chooseUniform(from: BinaryOperator.allCases))
+            }
         case .deleteProperty(let op):
             newOp = DeleteProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
         case .configureProperty(let op):
@@ -225,6 +253,17 @@ public class OperationMutator: BaseInstructionMutator {
             let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
             newOp = CallMethod(
                 methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+        case .callPrivateMethod(let op):
+            if probability(0.25) || !b.hasVisibleClassDefinition {
+                let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
+                newOp = CallMethod(
+                    methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+            } else {
+                let method = selectAvailablePrivateMethod(
+                    in: b, fallback: op.methodName)
+                newOp = CallPrivateMethod(
+                    methodName: method, numArguments: op.numArguments, isGuarded: op.isGuarded)
+            }
         case .callMethodWithSpread(let op):
             // Selecting a random method has a high chance of causing a runtime exception, so try to select an existing one.
             let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
@@ -730,10 +769,6 @@ public class OperationMutator: BaseInstructionMutator {
             .beginWith(_),
             .endWith(_),
             .callSuperConstructor(_),
-            .getPrivateProperty(_),
-            .setPrivateProperty(_),
-            .updatePrivateProperty(_),
-            .callPrivateMethod(_),
             .beginElse(_),
             .endIf(_),
             .beginWhileLoopHeader(_),
@@ -1261,5 +1296,19 @@ extension OperationMutator {
                 }
             )
         return newString
+    }
+
+    private func selectAvailablePrivateProperty(
+        in b: ProgramBuilder, fallback: String
+    ) -> String {
+        guard b.hasVisibleClassDefinition else { return fallback }
+        return b.currentClassDefinition.privateProperties.randomElement() ?? fallback
+    }
+
+    private func selectAvailablePrivateMethod(
+        in b: ProgramBuilder, fallback: String
+    ) -> String {
+        guard b.hasVisibleClassDefinition else { return fallback }
+        return b.currentClassDefinition.privateMethods.randomElement() ?? fallback
     }
 }

@@ -80,6 +80,16 @@ struct TypeSystemTests {
         #expect(.object(withMethods: ["m1"]) != .object(withMethods: ["m2"]))
         #expect(.object(withMethods: ["m1"]) != .object())
 
+        #expect(.object(withPrivateProperties: ["p1"]) == .object(withPrivateProperties: ["p1"]))
+        #expect(.object(withPrivateProperties: ["p1"]) != .object(withPrivateProperties: ["p2"]))
+        #expect(.object(withPrivateProperties: ["p1"]) != .object())
+        #expect(.object(withPrivateProperties: ["x"]) != .object(withPrivateMethods: ["x"]))
+        #expect(.object(withPrivateProperties: ["x"]) != .object(withProperties: ["x"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) == .object(withPrivateMethods: ["pm1"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) != .object(withPrivateMethods: ["pm2"]))
+        #expect(.object(withPrivateMethods: ["pm1"]) != .object())
+        #expect(.object(withPrivateMethods: ["m1"]) != .object(withMethods: ["m1"]))
+
         #expect(.function() == .function())
         #expect(
             .function([.integer, .rest(.integer)] => .undefined)
@@ -333,6 +343,9 @@ struct TypeSystemTests {
                 if t1 >= t2 && t2 != .nothing {
                     #expect(t1.properties.isSubset(of: t2.properties))
                     #expect(t1.methods.isSubset(of: t2.methods))
+                    #expect(t1.symbolMethods.isSubset(of: t2.symbolMethods))
+                    #expect(t1.privateProperties.isSubset(of: t2.privateProperties))
+                    #expect(t1.privateMethods.isSubset(of: t2.privateMethods))
                 }
 
                 // The opposite direction holds if the base types are equal and if the groups are compatible.
@@ -340,7 +353,11 @@ struct TypeSystemTests {
                 // properties and methods are a subset.
                 if t1.baseType == t2.baseType && (t1.group == nil || t1.group == t2.group) {
                     if t1.properties.isSubset(of: t2.properties)
-                        && t1.methods.isSubset(of: t2.methods) && t1.wasmType == t2.wasmType
+                        && t1.methods.isSubset(of: t2.methods)
+                        && t1.symbolMethods.isSubset(of: t2.symbolMethods)
+                        && t1.privateProperties.isSubset(of: t2.privateProperties)
+                        && t1.privateMethods.isSubset(of: t2.privateMethods)
+                        && t1.wasmType == t2.wasmType
                     {
                         #expect(t1 >= t2, "\(t1) >= \(t2)")
                     }
@@ -569,6 +586,82 @@ struct TypeSystemTests {
         #expect(fooBarObj.removing(method: "baz") == fooBarObj)
         #expect(fooBarObj.removing(method: "foo") == barObj)
         #expect(barObj.removing(method: "bar") == object)
+    }
+
+    @Test
+    func testPrivatePropertyTypeTransitions() {
+        let object = ILType.object(ofGroup: "A")
+        let p1Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1"])
+        let p2Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p2"])
+        let p3Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p3"])
+        let p1p2Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1", "p2"])
+        let p1p3Obj = ILType.object(ofGroup: "A", withPrivateProperties: ["p1", "p3"])
+
+        #expect(object.adding(privateProperty: "p1") == p1Obj)
+        #expect(p1Obj.adding(privateProperty: "p2") == p1p2Obj)
+        #expect(p2Obj.adding(privateProperty: "p1") == p1p2Obj)
+        #expect(p1Obj.adding(privateProperty: "p3") == p1p3Obj)
+        #expect(p3Obj.adding(privateProperty: "p1") == p1p3Obj)
+
+        var mutableObj = object
+        mutableObj.add(privateProperty: "p1")
+        #expect(mutableObj == p1Obj)
+        mutableObj.add(privateProperty: "p2")
+        #expect(mutableObj == p1p2Obj)
+    }
+
+    @Test
+    func testPrivateMethodTypeTransitions() {
+        let object = ILType.object(ofGroup: "A")
+        let pm1Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1"])
+        let pm2Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm2"])
+        let pm3Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm3"])
+        let pm1pm2Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1", "pm2"])
+        let pm1pm3Obj = ILType.object(ofGroup: "A", withPrivateMethods: ["pm1", "pm3"])
+
+        #expect(object.adding(privateMethod: "pm1") == pm1Obj)
+        #expect(pm1Obj.adding(privateMethod: "pm2") == pm1pm2Obj)
+        #expect(pm2Obj.adding(privateMethod: "pm1") == pm1pm2Obj)
+        #expect(pm1Obj.adding(privateMethod: "pm3") == pm1pm3Obj)
+        #expect(pm3Obj.adding(privateMethod: "pm1") == pm1pm3Obj)
+
+        var mutableObj = object
+        mutableObj.add(privateMethod: "pm1")
+        #expect(mutableObj == pm1Obj)
+        mutableObj.add(privateMethod: "pm2")
+        #expect(mutableObj == pm1pm2Obj)
+    }
+
+    @Test
+    func testPrivateMemberUnionAndIntersection() {
+        let obj1 = ILType.object(withPrivateProperties: ["p1", "p2"], withPrivateMethods: ["pm1"])
+        let obj2 = ILType.object(
+            withPrivateProperties: ["p2", "p3"], withPrivateMethods: ["pm1", "pm2"])
+
+        // Union finds the intersection of private members (common shared members)
+        let union = obj1.union(with: obj2)
+        #expect(union.privateProperties == ["p2"])
+        #expect(union.privateMethods == ["pm1"])
+        #expect(union >= obj1)
+        #expect(union >= obj2)
+
+        // Intersection finds the union of private members
+        let intersection = obj1.intersection(with: obj2)
+        #expect(intersection.privateProperties == ["p1", "p2", "p3"])
+        #expect(intersection.privateMethods == ["pm1", "pm2"])
+        #expect(obj1 >= intersection)
+        #expect(obj2 >= intersection)
+
+        // Subsumption
+        let superObj = ILType.object(withPrivateProperties: ["p1"])
+        let subObj = ILType.object(withPrivateProperties: ["p1", "p2"])
+        #expect(superObj >= subObj)
+        #expect(!(subObj >= superObj))
+
+        let superMethodObj = ILType.object(withPrivateMethods: ["pm1"])
+        let subMethodObj = ILType.object(withPrivateMethods: ["pm1", "pm2"])
+        #expect(superMethodObj >= subMethodObj)
+        #expect(!(subMethodObj >= superMethodObj))
     }
 
     @Test
@@ -2119,6 +2212,13 @@ struct TypeSystemTests {
             .object(ofGroup: "B", withProperties: ["foo"], withMethods: ["m1"]),
             .object(ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1"]),
             .object(ofGroup: "B", withProperties: ["foo", "bar"], withMethods: ["m1", "m2"]),
+            .object(withPrivateProperties: ["p1"]),
+            .object(withPrivateProperties: ["p1", "p2"]),
+            .object(withPrivateMethods: ["pm1"]),
+            .object(withPrivateMethods: ["pm1", "pm2"]),
+            .object(withPrivateProperties: ["p1"], withPrivateMethods: ["pm1"]),
+            .object(withProperties: ["foo"], withPrivateProperties: ["p1"]),
+            .object(ofGroup: "A", withPrivateProperties: ["p1"]),
             .function(),
             .function([.string] => .string),
             .function([.string] => .jsAnything),

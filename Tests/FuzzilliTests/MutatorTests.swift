@@ -1038,4 +1038,36 @@ struct MutatorTests {
             _ = FuzzILLifter().lift(mutatedProg)
         }
     }
+
+    @Test func testPrivatePropertyAndMethodMutation() throws {
+        let env = JavaScriptEnvironment()
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let _ = b.buildClassDefinition { cls in
+                cls.addPrivateInstanceProperty("foo")
+                cls.addPrivateInstanceProperty("bar")
+                cls.addPrivateInstanceMethod("m", with: .parameters(n: 0)) { params in
+                    let this = params[0]
+                    b.getPrivateProperty("foo", of: this)
+                    b.setPrivateProperty("foo", of: this, to: b.loadInt(42))
+                }
+            }
+            let program = b.finalize()
+
+            let mutator = OperationMutator()
+            var mutated = false
+            for _ in 0..<100 {
+                if let mutatedProg = mutator.mutate(
+                    program, using: fuzzer.makeBuilder(), for: fuzzer)
+                {
+                    mutatedProg.checkOrDie(
+                        onFailure: "Mutated program with private members must be statically valid")
+                    mutated = true
+                }
+            }
+            #expect(mutated)
+        }
+    }
 }

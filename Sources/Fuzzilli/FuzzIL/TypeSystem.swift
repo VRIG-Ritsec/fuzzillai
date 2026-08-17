@@ -184,12 +184,15 @@ public struct ILType: Hashable {
     public static func object(
         ofGroup group: String? = nil, withProperties properties: [String] = [],
         withMethods methods: [String] = [], withSymbolMethods symbolMethods: [String] = [],
+        withPrivateProperties privateProperties: [String] = [],
+        withPrivateMethods privateMethods: [String] = [],
         withWasmType wasmExt: WasmTypeExtension? = nil,
         promiseResolvingTo: ILType? = nil
     ) -> ILType {
         let ext = TypeExtension(
             group: group, properties: Set(properties), methods: Set(methods),
-            symbolMethods: Set(symbolMethods), signature: nil, wasmExt: wasmExt,
+            symbolMethods: Set(symbolMethods), privateProperties: Set(privateProperties),
+            privateMethods: Set(privateMethods), signature: nil, wasmExt: wasmExt,
             promiseResolvingTo: promiseResolvingTo)
         return ILType(definiteType: .object, ext: ext)
     }
@@ -592,6 +595,12 @@ public struct ILType: Hashable {
         guard symbolMethods.isSubset(of: other.symbolMethods) else {
             return false
         }
+        guard privateProperties.isSubset(of: other.privateProperties) else {
+            return false
+        }
+        guard privateMethods.isSubset(of: other.privateMethods) else {
+            return false
+        }
 
         guard receiver == nil || (other.receiver != nil && other.receiver!.subsumes(receiver!))
         else {
@@ -898,6 +907,30 @@ public struct ILType: Hashable {
         return ext?.symbolMethods.randomElement()
     }
 
+    public var privateProperties: Set<String> {
+        return ext?.privateProperties ?? Set()
+    }
+
+    public var privateMethods: Set<String> {
+        return ext?.privateMethods ?? Set()
+    }
+
+    public var numPrivateProperties: Int {
+        return ext?.privateProperties.count ?? 0
+    }
+
+    public var numPrivateMethods: Int {
+        return ext?.privateMethods.count ?? 0
+    }
+
+    public func randomPrivateProperty() -> String? {
+        return ext?.privateProperties.randomElement()
+    }
+
+    public func randomPrivateMethod() -> String? {
+        return ext?.privateMethods.randomElement()
+    }
+
     // Returns how many additional inputs an operation using this type will need
     // to "refine" the type. This value is 1 for indexed wasm-gc reference
     // types, zero otherwise.
@@ -966,6 +999,8 @@ public struct ILType: Hashable {
         let commonProperties = self.properties.intersection(other.properties)
         let commonMethods = self.methods.intersection(other.methods)
         let commonSymbolMethods = self.symbolMethods.intersection(other.symbolMethods)
+        let commonPrivateProperties = self.privateProperties.intersection(other.privateProperties)
+        let commonPrivateMethods = self.privateMethods.intersection(other.privateMethods)
         let signature = self.signature == other.signature ? self.signature : nil  // TODO: this is overly coarse, we could also see if one signature subsumes the other, then take the subsuming one.
 
         // Note that the receiver is an input, so it is contravariant:
@@ -1033,6 +1068,7 @@ public struct ILType: Hashable {
             ext: TypeExtension(
                 group: group, properties: commonProperties, methods: commonMethods,
                 symbolMethods: commonSymbolMethods,
+                privateProperties: commonPrivateProperties, privateMethods: commonPrivateMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration, iterableElementType: iterableElementType,
                 exports: commonExports, promiseResolvingTo: promiseResolvingTo))
@@ -1089,6 +1125,9 @@ public struct ILType: Hashable {
         let properties = self.properties.union(other.properties)
         let methods = self.methods.union(other.methods)
         let symbolMethods = self.symbolMethods.union(other.symbolMethods)
+
+        let privateProperties = self.privateProperties.union(other.privateProperties)
+        let privateMethods = self.privateMethods.union(other.privateMethods)
 
         // Groups must either be equal or one of them must be nil, in which case
         // the result will have the non-nil group as that is again the smaller type.
@@ -1197,6 +1236,7 @@ public struct ILType: Hashable {
             ext: TypeExtension(
                 group: group, properties: properties, methods: methods,
                 symbolMethods: symbolMethods,
+                privateProperties: privateProperties, privateMethods: privateMethods,
                 signature: signature, wasmExt: wasmExt, receiver: receiver,
                 isEnumeration: isEnumeration,
                 iterableElementType: iterableElementType, exports: exports,
@@ -1300,6 +1340,8 @@ public struct ILType: Hashable {
             group: group, properties: self.properties.union(other.properties),
             methods: self.methods.union(other.methods),
             symbolMethods: self.symbolMethods.union(other.symbolMethods),
+            privateProperties: self.privateProperties.union(other.privateProperties),
+            privateMethods: self.privateMethods.union(other.privateMethods),
             signature: signature, wasmExt: wasmExt, receiver: receiver,
             isEnumeration: isEnumeration,
             iterableElementType: iterableElementType, promiseResolvingTo: promiseResolvingTo)
@@ -1328,8 +1370,12 @@ public struct ILType: Hashable {
         var newProperties = properties
         newProperties.insert(property)
         let newExt = TypeExtension(
-            group: group, properties: newProperties, methods: methods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: newProperties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1344,14 +1390,19 @@ public struct ILType: Hashable {
             return self
         }
 
-        // Deleting a property in JavaScript will remove it from either one, whereever it is present.
+        // Deleting a property in JavaScript will remove it from either one, wherever it is present.
         var newProperties = properties
         newProperties.remove(name)
         var newMethods = methods
         newMethods.remove(name)
         let newExt = TypeExtension(
-            group: group, properties: newProperties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: newProperties, methods: newMethods,
+            symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1363,8 +1414,12 @@ public struct ILType: Hashable {
         var newMethods = methods
         newMethods.insert(method)
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: newMethods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1381,8 +1436,12 @@ public struct ILType: Hashable {
         var newMethods = methods
         newMethods.remove(method)
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: newMethods, signature: signature,
-            wasmExt: wasmType, isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: newMethods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
     }
 
@@ -1391,9 +1450,57 @@ public struct ILType: Hashable {
             return self
         }
         let newExt = TypeExtension(
-            group: group, properties: properties, methods: methods, signature: signature,
-            isEnumeration: isEnumeration)
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
         return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Returns a new type that represents this type with the added private property.
+    public func adding(privateProperty: String) -> ILType {
+        guard Is(.object()) else {
+            fatalError("Cannot add private property to non-object ILType")
+        }
+        var newPrivateProperties = privateProperties
+        newPrivateProperties.insert(privateProperty)
+        let newExt = TypeExtension(
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: newPrivateProperties, privateMethods: privateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
+        return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Adds a private property to this type.
+    public mutating func add(privateProperty: String) {
+        self = self.adding(privateProperty: privateProperty)
+    }
+
+    /// Returns a new ObjectType that represents this type with the added private method.
+    public func adding(privateMethod: String) -> ILType {
+        guard Is(.object()) else {
+            fatalError("Cannot add private method to non-object ILType")
+        }
+        var newPrivateMethods = privateMethods
+        newPrivateMethods.insert(privateMethod)
+        let newExt = TypeExtension(
+            group: group, properties: properties, methods: methods, symbolMethods: symbolMethods,
+            privateProperties: privateProperties, privateMethods: newPrivateMethods,
+            signature: signature, wasmExt: wasmType, receiver: receiver,
+            isEnumeration: isEnumeration,
+            iterableElementType: iterableElementType, exports: exports,
+            promiseResolvingTo: ext?.promiseResolvingTo)
+        return ILType(definiteType: definiteType, possibleType: possibleType, ext: newExt)
+    }
+
+    /// Adds a private method to this type.
+    public mutating func add(privateMethod: String) {
+        self = self.adding(privateMethod: privateMethod)
     }
 
     //
@@ -1510,6 +1617,23 @@ extension ILType: CustomStringConvertible {
                     params.append("withSymbolMethods: [\(selection.joined(separator: ", ")), ...]")
                 } else {
                     params.append("withSymbolMethods: \(symbolMethods)")
+                }
+            }
+            if !privateProperties.isEmpty {
+                if abbreviate && privateProperties.count > 5 {
+                    let selection = privateProperties.prefix(3).map { "\"\($0)\"" }
+                    params.append(
+                        "withPrivateProperties: [\(selection.joined(separator: ", ")), ...]")
+                } else {
+                    params.append("withPrivateProperties: \(privateProperties)")
+                }
+            }
+            if !privateMethods.isEmpty {
+                if abbreviate && privateMethods.count > 5 {
+                    let selection = privateMethods.prefix(3).map { "\"\($0)\"" }
+                    params.append("withPrivateMethods: [\(selection.joined(separator: ", ")), ...]")
+                } else {
+                    params.append("withPrivateMethods: \(privateMethods)")
                 }
             }
             if let target = ext?.promiseResolvingTo {
@@ -1714,6 +1838,8 @@ class TypeExtension: Hashable {
     let properties: Set<String>
     let methods: Set<String>
     let symbolMethods: Set<String>
+    let privateProperties: Set<String>
+    let privateMethods: Set<String>
 
     // The group name. Basically each group is its own sub type of the object type.
     // (For now), there is no subtyping for group: if two objects have a different
@@ -1744,12 +1870,14 @@ class TypeExtension: Hashable {
 
     init?(
         group: String? = nil, properties: Set<String>, methods: Set<String>,
-        symbolMethods: Set<String> = [], signature: Signature?,
+        symbolMethods: Set<String> = [], privateProperties: Set<String> = [],
+        privateMethods: Set<String> = [], signature: Signature?,
         wasmExt: WasmTypeExtension? = nil, receiver: ILType? = nil, isEnumeration: Bool = false,
         iterableElementType: ILType? = nil, exports: [String: ILType] = [:],
         promiseResolvingTo: ILType? = nil
     ) {
         if group == nil && properties.isEmpty && methods.isEmpty && symbolMethods.isEmpty
+            && privateProperties.isEmpty && privateMethods.isEmpty
             && signature == nil
             && wasmExt == nil && receiver == nil && isEnumeration == false
             && iterableElementType == nil && exports.isEmpty
@@ -1761,6 +1889,8 @@ class TypeExtension: Hashable {
         self.properties = properties
         self.methods = methods
         self.symbolMethods = symbolMethods
+        self.privateProperties = privateProperties
+        self.privateMethods = privateMethods
         self.group = group
         self.signature = signature
         self.wasmExt = wasmExt
@@ -1775,6 +1905,8 @@ class TypeExtension: Hashable {
         return lhs.properties == rhs.properties
             && lhs.methods == rhs.methods
             && lhs.symbolMethods == rhs.symbolMethods
+            && lhs.privateProperties == rhs.privateProperties
+            && lhs.privateMethods == rhs.privateMethods
             && lhs.group == rhs.group
             && lhs.signature == rhs.signature
             && lhs.wasmExt == rhs.wasmExt
@@ -1790,6 +1922,8 @@ class TypeExtension: Hashable {
         hasher.combine(properties)
         hasher.combine(methods)
         hasher.combine(symbolMethods)
+        hasher.combine(privateProperties)
+        hasher.combine(privateMethods)
         hasher.combine(signature)
         hasher.combine(wasmExt)
         hasher.combine(receiver)

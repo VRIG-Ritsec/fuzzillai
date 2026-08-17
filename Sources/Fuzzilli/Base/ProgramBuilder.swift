@@ -153,6 +153,11 @@ public class ProgramBuilder {
     /// Similar to object literals, class definitions can be nested so this needs to be a stack.
     private var activeClassDefinitions = Stack<ClassDefinition>()
 
+    /// Whether there is an active class definition currently being built.
+    public var hasVisibleClassDefinition: Bool {
+        return !activeClassDefinitions.isEmpty
+    }
+
     /// When building class definitions, the state for the current definition is exposed through this member and
     /// can be used to add fields to the class or to determine if some field already exists.
     public var currentClassDefinition: ClassDefinition {
@@ -2833,6 +2838,10 @@ public class ProgramBuilder {
     public func emit(_ op: Operation, withInputs inputs: [Variable] = [], types: [ILType]? = nil)
         -> Instruction
     {
+        if op is EndClassDefinition && hasVisibleClassDefinition {
+            currentClassDefinition.emitPendingPrivateMembers()
+        }
+
         var inouts = inputs
         for _ in 0..<op.numOutputs {
             inouts.append(nextVariable())
@@ -3106,6 +3115,93 @@ public class ProgramBuilder {
             return privateProperties + privateMethods
         }
 
+        public var allPrivateFields: [String] {
+            return privateFields + pendingPrivateProperties + pendingPrivateMethods
+        }
+
+        public fileprivate(set) var pendingPrivateProperties: [String] = []
+        public fileprivate(set) var pendingPrivateMethods: [String] = []
+        var currentThisVariable: Variable? = nil
+
+        public func recordPendingPrivateProperty(_ name: String) {
+            if !allPrivateFields.contains(name) {
+                pendingPrivateProperties.append(name)
+            }
+        }
+
+        public func recordPendingPrivateMethod(_ name: String) {
+            if !allPrivateFields.contains(name) {
+                pendingPrivateMethods.append(name)
+            }
+        }
+
+        public func emitPendingPrivateMembers() {
+            // TODO: We currently only fulfill pending private properties with simple instance properties.
+            // We could also generate private getters/setters or static properties to produce more diverse code combinations.
+            for prop in pendingPrivateProperties {
+                if !privateFields.contains(prop) {
+                    let value =
+                        probability(0.5) && b.hasVisibleJsVariables
+                        ? b.randomJsVariable() : nil
+                    addPrivateInstanceProperty(prop, value: value)
+                }
+            }
+            for method in pendingPrivateMethods {
+                if !privateFields.contains(method) {
+                    addPrivateInstanceMethod(
+                        method, with: .parameters(n: 0),
+                        defaultValues: []
+                    ) { _ in
+                        b.maybeReturnRandomJsVariable(0.5)
+                    }
+                }
+            }
+            pendingPrivateProperties.removeAll()
+            pendingPrivateMethods.removeAll()
+        }
+
+        public func selectOrRegisterPendingPrivateProperty(
+            forReceiver obj: Variable, in b: ProgramBuilder
+        ) -> (receiver: Variable, name: String) {
+            let receiver: Variable
+            if let thisVar = currentThisVariable, probability(0.5) {
+                receiver = thisVar
+            } else {
+                receiver = obj
+            }
+            let propertyName: String
+            if let prop = privateProperties.randomElement() {
+                propertyName = prop
+            } else {
+                propertyName = b.generateString(
+                    b.randomCustomIdentifierName,
+                    notIn: allPrivateFields)
+                recordPendingPrivateProperty(propertyName)
+            }
+            return (receiver, propertyName)
+        }
+
+        public func selectOrRegisterPendingPrivateMethod(
+            forReceiver obj: Variable, in b: ProgramBuilder
+        ) -> (receiver: Variable, name: String) {
+            let receiver: Variable
+            if let thisVar = currentThisVariable, probability(0.5) {
+                receiver = thisVar
+            } else {
+                receiver = obj
+            }
+            let methodName: String
+            if let method = privateMethods.randomElement() {
+                methodName = method
+            } else {
+                methodName = b.generateString(
+                    b.randomCustomPrivateMethodName,
+                    notIn: allPrivateFields)
+                recordPendingPrivateMethod(methodName)
+            }
+            return (receiver, methodName)
+        }
+
         fileprivate init(in b: ProgramBuilder, isDerived: Bool) {
             assert(b.context.contains(.classDefinition))
             self.b = b
@@ -3179,7 +3275,7 @@ public class ProgramBuilder {
 
         public func addInstanceGetter(for name: String, _ body: (_ this: Variable) -> Void) {
             let instr = b.emit(BeginClassGetter(propertyName: name, isStatic: false))
-            body(instr.innerOutput)
+            body(instr.innerOutput(0))
             b.emit(EndClassGetter())
         }
 
@@ -3187,7 +3283,7 @@ public class ProgramBuilder {
             for name: Variable, _ body: (_ this: Variable) -> Void
         ) {
             let instr = b.emit(BeginClassComputedGetter(isStatic: false), withInputs: [name])
-            body(instr.innerOutput)
+            body(instr.innerOutput(0))
             b.emit(EndClassComputedGetter())
         }
 
@@ -3230,7 +3326,7 @@ public class ProgramBuilder {
 
         public func addStaticInitializer(_ body: (Variable) -> Void) {
             let instr = b.emit(BeginClassStaticInitializer())
-            body(instr.innerOutput)
+            body(instr.innerOutput(0))
             b.emit(EndClassStaticInitializer())
         }
 
@@ -3268,14 +3364,14 @@ public class ProgramBuilder {
 
         public func addStaticGetter(for name: String, _ body: (_ this: Variable) -> Void) {
             let instr = b.emit(BeginClassGetter(propertyName: name, isStatic: true))
-            body(instr.innerOutput)
+            body(instr.innerOutput(0))
             b.emit(EndClassGetter())
         }
 
         public func addStaticComputedGetter(for name: Variable, _ body: (_ this: Variable) -> Void)
         {
             let instr = b.emit(BeginClassComputedGetter(isStatic: true), withInputs: [name])
-            body(instr.innerOutput)
+            body(instr.innerOutput(0))
             b.emit(EndClassComputedGetter())
         }
 
@@ -7529,6 +7625,7 @@ public class ProgramBuilder {
             activeClassDefinitions.push(ClassDefinition(in: self, isDerived: op.hasSuperclass))
         case .beginClassConstructor:
             activeClassDefinitions.top.hasConstructor = true
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .classAddProperty(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticProperties.append(op.propertyName)
@@ -7553,36 +7650,42 @@ public class ProgramBuilder {
             } else {
                 activeClassDefinitions.top.instanceMethods.append(op.methodName)
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassComputedMethod(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticComputedMethods.append(instr.input(0))
             } else {
                 activeClassDefinitions.top.instanceComputedMethods.append(instr.input(0))
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassGetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticGetters.append(op.propertyName)
             } else {
                 activeClassDefinitions.top.instanceGetters.append(op.propertyName)
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassComputedGetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticComputedGetters.append(instr.input(0))
             } else {
                 activeClassDefinitions.top.instanceComputedGetters.append(instr.input(0))
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassSetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticSetters.append(op.propertyName)
             } else {
                 activeClassDefinitions.top.instanceSetters.append(op.propertyName)
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassComputedSetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.staticComputedSetters.append(instr.input(0))
             } else {
                 activeClassDefinitions.top.instanceComputedSetters.append(instr.input(0))
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .classAddPrivateProperty(let op):
             if op.isStatic {
                 activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
@@ -7595,23 +7698,35 @@ public class ProgramBuilder {
             } else {
                 activeClassDefinitions.top.privateInstanceMethods.append(op.methodName)
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassPrivateGetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
             } else {
                 activeClassDefinitions.top.privateInstanceProperties.append(op.propertyName)
             }
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassPrivateSetter(let op):
             if op.isStatic {
                 activeClassDefinitions.top.privateStaticProperties.append(op.propertyName)
             } else {
                 activeClassDefinitions.top.privateInstanceProperties.append(op.propertyName)
             }
-        case .endClassPrivateGetter,
-            .endClassPrivateSetter:
-            break
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
         case .beginClassStaticInitializer:
-            break
+            activeClassDefinitions.top.currentThisVariable = instr.innerOutput(0)
+        case .endClassConstructor,
+            .endClassMethod,
+            .endClassComputedMethod,
+            .endClassGetter,
+            .endClassComputedGetter,
+            .endClassSetter,
+            .endClassComputedSetter,
+            .endClassPrivateMethod,
+            .endClassPrivateGetter,
+            .endClassPrivateSetter,
+            .endClassStaticInitializer:
+            activeClassDefinitions.top.currentThisVariable = nil
         case .endClassDefinition:
             activeClassDefinitions.pop()
 

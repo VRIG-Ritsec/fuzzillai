@@ -1779,14 +1779,14 @@ struct JSTyperTests {
         ]
 
         let env = JavaScriptEnvironment(
-            additionalBuiltins: [:], additionalObjectGroups: objectGroups)
+            additionalBuiltins: [
+                "myO": .object(ofGroup: "O", withProperties: ["foo", "bar", "baz"])
+            ], additionalObjectGroups: objectGroups)
         let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
             let obj = b.createNamedVariable(forBuiltin: "myO")
-            b.setType(
-                ofVariable: obj, to: .object(ofGroup: "O", withProperties: ["foo", "bar", "baz"]))
 
             let outputs = b.destruct(obj, selecting: ["foo", "bar"], hasRestElement: true)
             #expect(b.type(of: outputs[0]) == .integer)
@@ -1807,14 +1807,14 @@ struct JSTyperTests {
         ]
 
         let env = JavaScriptEnvironment(
-            additionalBuiltins: [:], additionalObjectGroups: objectGroups)
+            additionalBuiltins: [
+                "myO": .object(ofGroup: "O", withProperties: ["foo"])
+            ], additionalObjectGroups: objectGroups)
         let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
             let obj = b.createNamedVariable(forBuiltin: "myO")
-            b.setType(
-                ofVariable: obj, to: .object(ofGroup: "O", withProperties: ["foo"]))
 
             let v1 = b.loadInt(0)
             let v2 = b.loadInt(0)
@@ -3038,6 +3038,82 @@ struct JSTyperTests {
 
                 #expect(b.type(of: vC) == .jsModule(exports: ["export_C": .float]))
             }
+        }
+    }
+
+    @Test func testSymbolIteratorTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // 1. Test Object Literal with [Symbol.iterator]
+            let iteratorSymbol = b.createSymbolProperty("iterator")
+            let iterableObject = b.buildObjectLiteral { obj in
+                obj.addComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            #expect(b.type(of: iterableObject).Is(.iterable()))
+            #expect(b.type(of: iterableObject).Is(.object()))
+
+            // 2. Test Object Literal with [Symbol.asyncIterator]
+            let asyncIteratorSymbol = b.createSymbolProperty("asyncIterator")
+            let asyncIterableObject = b.buildObjectLiteral { obj in
+                obj.addComputedMethod(asyncIteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            #expect(b.type(of: asyncIterableObject).Is(.asyncIterable()))
+            #expect(b.type(of: asyncIterableObject).Is(.object()))
+
+            // 3. Test Class Definition with [Symbol.iterator]
+            let iterableClass = b.buildClassDefinition { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+                cls.addInstanceComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            let classInstance = b.construct(iterableClass)
+            #expect(b.type(of: classInstance).Is(.iterable()))
+        }
+    }
+
+    @Test func testDisposableStackTyping() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            let dispStack = b.createNamedVariable(forBuiltin: "DisposableStack")
+            let dispInstance = b.construct(dispStack)
+            #expect(b.type(of: dispInstance).Is(.disposable))
+            #expect(b.type(of: dispInstance).symbolMethods.contains("Symbol.dispose"))
+
+            let asyncDispStack = b.createNamedVariable(forBuiltin: "AsyncDisposableStack")
+            let asyncDispInstance = b.construct(asyncDispStack)
+            #expect(b.type(of: asyncDispInstance).Is(.asyncDisposable))
+            #expect(b.type(of: asyncDispInstance).symbolMethods.contains("Symbol.asyncDispose"))
+        }
+    }
+
+    @Test func testDerivedClassIterableInheritance() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // 1. Subclassing an iterable class (with [Symbol.iterator])
+            let iteratorSymbol = b.createSymbolProperty("iterator")
+            let baseClass = b.buildClassDefinition { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+                cls.addInstanceComputedMethod(iteratorSymbol, with: .parameters(n: 0)) { _ in }
+            }
+            let derivedClass = b.buildClassDefinition(withSuperclass: baseClass) { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+            }
+            let derivedInstance = b.construct(derivedClass)
+            #expect(b.type(of: derivedInstance).Is(.iterable()))
+            #expect(b.type(of: derivedInstance).symbolMethods.contains("Symbol.iterator"))
+
+            // 2. Subclassing Array
+            let arrayBuiltin = b.createNamedVariable(forBuiltin: "Array")
+            let arraySubclass = b.buildClassDefinition(withSuperclass: arrayBuiltin) { cls in
+                cls.addConstructor(with: .parameters(n: 0)) { _ in }
+            }
+            let arraySubclassInstance = b.construct(arraySubclass)
+            #expect(b.type(of: arraySubclassInstance).Is(.iterable()))
         }
     }
 }

@@ -1455,12 +1455,14 @@ extension ILType {
     /// Type of a JavaScript DisposableStack object.
     public static let jsDisposableStack = ILType.object(
         ofGroup: "DisposableStack", withProperties: ["disposed"],
-        withMethods: ["dispose", "use", "adopt", "defer", "move"])
+        withMethods: ["dispose", "use", "adopt", "defer", "move"],
+        withSymbolMethods: ["Symbol.dispose"])
 
     /// Type of a JavaScript AsyncDisposableStack object.
     public static let jsAsyncDisposableStack = ILType.object(
         ofGroup: "AsyncDisposableStack", withProperties: ["disposed"],
-        withMethods: ["disposeAsync", "use", "adopt", "defer", "move"])
+        withMethods: ["disposeAsync", "use", "adopt", "defer", "move"],
+        withSymbolMethods: ["Symbol.asyncDispose"])
 
     /// Type of a JavaScript ArrayBuffer object.
     public static let jsArrayBuffer = ILType.object(
@@ -2995,8 +2997,8 @@ extension ObjectGroup {
         name: "SymbolConstructor",
         instanceType: .jsSymbolConstructor,
         properties: [
-            "iterator": .jsSymbol,
-            "asyncIterator": .jsSymbol,
+            "iterator": .jsSymbol(ofGroup: "Symbol.iterator"),
+            "asyncIterator": .jsSymbol(ofGroup: "Symbol.asyncIterator"),
             "match": .jsSymbol,
             "matchAll": .jsSymbol,
             "replace": .jsSymbol,

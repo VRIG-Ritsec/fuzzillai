@@ -211,10 +211,20 @@ public struct JSTyper: Analyzer {
             let instanceName = "_fuzz_Class\(numGroups)"
 
             // This type and the object group will be updated dynamically
-            let instanceType: ILType = .object(
+            var instanceType: ILType = .object(
                 ofGroup: instanceName, withProperties: Array(superType.properties),
                 withMethods: Array(superType.methods),
                 withSymbolMethods: Array(superType.symbolMethods))
+            if superType.Is(.iterable()) || superType.symbolMethods.contains("Symbol.iterator") {
+                instanceType += .iterable(
+                    ofElementType: superType.iterableElementType ?? .jsAnything)
+            }
+            if superType.Is(.asyncIterable())
+                || superType.symbolMethods.contains("Symbol.asyncIterator")
+            {
+                instanceType += .asyncIterable(
+                    ofElementType: superType.iterableElementType ?? .jsAnything)
+            }
 
             // This is the wip object group.
             let objectGroup = ObjectGroup(
@@ -422,9 +432,14 @@ public struct JSTyper: Analyzer {
 
         public func addSymbolMethod(_ symbol: String) {
             let topGroup = activeObjectGroups.top
-            let newType =
+            var newType =
                 ILType.object(ofGroup: topGroup.name, withSymbolMethods: [symbol])
                 + topGroup.instanceType
+            if symbol == "Symbol.iterator" {
+                newType += .iterable()
+            } else if symbol == "Symbol.asyncIterator" {
+                newType += .asyncIterable()
+            }
             assert(newType != .nothing)
             activeObjectGroups.top.instanceType = newType
         }
@@ -1554,7 +1569,7 @@ public struct JSTyper: Analyzer {
         return .jsAnything
     }
 
-    public mutating func setType(of v: Variable, to t: ILType) {
+    private mutating func setType(of v: Variable, to t: ILType) {
         assert(t != .nothing)
         state.updateType(of: v, to: t)
     }

@@ -559,14 +559,13 @@ struct MutatorTests {
     }
 
     @Test func testInputMutatorFallbackWhenReplacementIsNil() {
-        let env = JavaScriptEnvironment()
+        let env = JavaScriptEnvironment(additionalBuiltins: ["dummy": .wasmi32])
         let config = Configuration(logLevel: .error)
         let fuzzer = makeMockFuzzer(config: config, environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
-            let v0 = b.loadInt(10)
-            b.setType(ofVariable: v0, to: .wasmi32)
+            let v0 = b.createNamedVariable(forBuiltin: "dummy")
             b.hide(v0)
 
             let _ = b.getProperty("foo", of: v0)

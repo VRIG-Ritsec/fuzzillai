@@ -1587,13 +1587,6 @@ public class ProgramBuilder {
         return jsTyper.inferMethodSignatures(of: methodName, on: objType)
     }
 
-    /// Overwrite the current type of the given variable with a new type.
-    /// This can be useful if a certain code construct is guaranteed to produce a value of a specific type,
-    /// but where our static type inference cannot determine that.
-    public func setType(ofVariable variable: Variable, to variableType: ILType) {
-        jsTyper.setType(of: variable, to: variableType)
-    }
-
     public func getWasmTypeDef(for type: ILType) -> Variable {
         jsTyper.getWasmTypeDef(for: type)
     }

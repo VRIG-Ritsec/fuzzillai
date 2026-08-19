@@ -265,7 +265,8 @@ struct ProgramBuilderTests {
         // This API will always return a variable for which `type(of: v).Is(requestedType)` is true,
         // i.e. for which we can statically infer that the variable has the requested type.
 
-        let fuzzer = makeMockFuzzer()
+        let env = JavaScriptEnvironment(additionalBuiltins: ["theNumber": .number])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
@@ -293,7 +294,6 @@ struct ProgramBuilderTests {
             let _ = b.finalize()
 
             let n = b.createNamedVariable(forBuiltin: "theNumber")
-            b.setType(ofVariable: n, to: .number)
             #expect(b.type(of: n) == .number)
             #expect(b.randomVariable(ofType: .integer) == nil)
             #expect(b.randomVariable(ofType: .string) == nil)
@@ -4166,11 +4166,12 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeLoop), produces: [typeRoot]
         ) { b, _ in
             calledGenerators.append("GenRecursionRoot")
-            let v = b.createNamedVariable(forBuiltin: "Root")
-            b.setType(ofVariable: v, to: typeRoot)
+            let _ = b.createNamedVariable(forBuiltin: "Root")
         }
 
+        let env = JavaScriptEnvironment(additionalBuiltins: ["Root": typeRoot])
         let fuzzer = makeMockFuzzer(
+            environment: env,
             overwriteGenerators: WeightedList<CodeGenerator>([
                 (loopingGenerator, 1), (genRecursionRoot, 1),
             ]))
@@ -4213,8 +4214,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(cycleTypeB), produces: [cycleTypeA]
         ) { b, ref in
             calledGenerators.append("LoopingGeneratorA")
-            let v = b.createNamedVariable(forBuiltin: "CycleA")
-            b.setType(ofVariable: v, to: cycleTypeA)
+            let _ = b.createNamedVariable(forBuiltin: "CycleA")
         }
 
         let loopingGeneratorB = CodeGenerator(
@@ -4222,8 +4222,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(cycleTypeA), produces: [cycleTypeB]
         ) { b, ref in
             calledGenerators.append("LoopingGeneratorB")
-            let v = b.createNamedVariable(forBuiltin: "CycleB")
-            b.setType(ofVariable: v, to: cycleTypeB)
+            let _ = b.createNamedVariable(forBuiltin: "CycleB")
         }
 
         let fallbackGenerator = CodeGenerator(
@@ -4231,8 +4230,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(.integer, .boolean, .string), produces: [cycleTypeA]
         ) { b, intVar, boolVar, strVar in
             calledGenerators.append("FallbackGenerator")
-            let v = b.createNamedVariable(forBuiltin: "FallbackA")
-            b.setType(ofVariable: v, to: cycleTypeA)
+            let _ = b.createNamedVariable(forBuiltin: "FallbackA")
         }
 
         let genRecursionRoot = CodeGenerator(
@@ -4240,8 +4238,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(cycleTypeA), produces: [typeRoot]
         ) { b, _ in
             calledGenerators.append("GenRecursionRoot")
-            let v = b.createNamedVariable(forBuiltin: "Root")
-            b.setType(ofVariable: v, to: typeRoot)
+            let _ = b.createNamedVariable(forBuiltin: "Root")
         }
 
         let triggerGenerator = CodeGenerator(
@@ -4258,7 +4255,14 @@ struct ProgramBuilderRuntimeDataTests {
             b in b.loadString("dummy")
         }
 
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "CycleA": cycleTypeA,
+            "CycleB": cycleTypeB,
+            "FallbackA": cycleTypeA,
+            "Root": typeRoot,
+        ])
         let fuzzer = makeMockFuzzer(
+            environment: env,
             overwriteGenerators: WeightedList<CodeGenerator>([
                 (loopingGeneratorA, 1),
                 (loopingGeneratorB, 1),
@@ -4304,8 +4308,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeB, typeC), produces: [typeA]
         ) { b, bVar, cVar in
             calledGenerators.append("GeneratorA")
-            let v = b.createNamedVariable(forBuiltin: "A")
-            b.setType(ofVariable: v, to: typeA)
+            let _ = b.createNamedVariable(forBuiltin: "A")
         }
 
         let genB = CodeGenerator(
@@ -4313,8 +4316,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeInt), produces: [typeB]
         ) { b, intVar in
             calledGenerators.append("GeneratorB")
-            let v = b.createNamedVariable(forBuiltin: "B")
-            b.setType(ofVariable: v, to: typeB)
+            let _ = b.createNamedVariable(forBuiltin: "B")
         }
 
         let genC = CodeGenerator(
@@ -4322,8 +4324,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeInt), produces: [typeC]
         ) { b, intVar in
             calledGenerators.append("GeneratorC")
-            let v = b.createNamedVariable(forBuiltin: "C")
-            b.setType(ofVariable: v, to: typeC)
+            let _ = b.createNamedVariable(forBuiltin: "C")
         }
 
         let genInt = CodeGenerator(
@@ -4331,8 +4332,7 @@ struct ProgramBuilderRuntimeDataTests {
             produces: [typeInt]
         ) { b in
             calledGenerators.append("GeneratorInt")
-            let v = b.loadInt(42)
-            b.setType(ofVariable: v, to: typeInt)
+            let _ = b.loadInt(42)
         }
 
         let genRecursionRoot = CodeGenerator(
@@ -4340,8 +4340,7 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeA), produces: [typeRoot]
         ) { b, _ in
             calledGenerators.append("GenRecursionRoot")
-            let v = b.createNamedVariable(forBuiltin: "Root")
-            b.setType(ofVariable: v, to: typeRoot)
+            let _ = b.createNamedVariable(forBuiltin: "Root")
         }
 
         let triggerGenerator = CodeGenerator(
@@ -4349,7 +4348,14 @@ struct ProgramBuilderRuntimeDataTests {
             inputs: .required(typeRoot)
         ) { b, aVar in }
 
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "Root": typeRoot,
+        ])
         let fuzzer = makeMockFuzzer(
+            environment: env,
             overwriteGenerators: WeightedList<CodeGenerator>([
                 (genA, 1),
                 (genB, 1),
@@ -4391,13 +4397,14 @@ struct ProgramBuilderRuntimeDataTests {
          *   GenIntegerToFloat(req: .integer, produces: .float)
          *   GenInt(no req, produces: .integer)
          */
-        let fuzzer = makeMockFuzzer()
+        let typeRoot = ILType.object(ofGroup: "Root")
+        let env = JavaScriptEnvironment(additionalBuiltins: ["Root": typeRoot])
+        let fuzzer = makeMockFuzzer(environment: env)
         try fuzzer.sync {
             let b = fuzzer.makeBuilder()
             let typeInt = ILType.integer
             let typeFloat = ILType.float
             let typeString = ILType.string
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             var calledGenerators = [String]()
 
@@ -4407,30 +4414,26 @@ struct ProgramBuilderRuntimeDataTests {
 
             let genInt = CodeGenerator("GenInt", produces: [typeInt], useInPrefix: false) { b in
                 calledGenerators.append("GenInt")
-                let v = b.loadInt(42)
-                b.setType(ofVariable: v, to: typeInt)
+                let _ = b.loadInt(42)
             }
             let genIntegerToFloat = CodeGenerator(
                 "GenIntegerToFloat", inputs: .required(typeInt), produces: [typeFloat]
             ) { b, _ in
                 calledGenerators.append("GenIntegerToFloat")
-                let v = b.loadFloat(42.0)
-                b.setType(ofVariable: v, to: typeFloat)
+                let _ = b.loadFloat(42.0)
             }
             let genFloatToString = CodeGenerator(
                 "GenFloatToString", inputs: .required(typeFloat), produces: [typeString]
             ) { b, _ in
                 calledGenerators.append("GenFloatToString")
-                let v = b.loadString("42")
-                b.setType(ofVariable: v, to: typeString)
+                let _ = b.loadString("42")
             }
 
             let genRecursionRoot = CodeGenerator(
                 "GenRecursionRoot", inputs: .required(typeString), produces: [typeRoot]
             ) { b, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(
@@ -4475,16 +4478,24 @@ struct ProgramBuilderRuntimeDataTests {
          *
          * The search algorithm schedules Path 2 (shorter depth).
          */
-        let fuzzer = makeMockFuzzer()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
-            let typeA = ILType.object(ofGroup: "A")
-            let typeB = ILType.object(ofGroup: "B")
-            let typeC = ILType.object(ofGroup: "C")
-            let typeD = ILType.object(ofGroup: "D")
 
             var calledGenerators = [String]()
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
                 Issue.record("should not be called")
@@ -4494,31 +4505,26 @@ struct ProgramBuilderRuntimeDataTests {
             let genLongA = CodeGenerator("GenLongA", inputs: .required(typeB), produces: [typeA]) {
                 b, _ in
                 calledGenerators.append("GenLongA")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
             let genB = CodeGenerator("GenB", inputs: .required(typeC), produces: [typeB]) { b, _ in
                 calledGenerators.append("GenB")
-                let v = b.createNamedVariable(forBuiltin: "B")
-                b.setType(ofVariable: v, to: typeB)
+                let _ = b.createNamedVariable(forBuiltin: "B")
             }
             let genC = CodeGenerator("GenC", produces: [typeC]) { b in
                 calledGenerators.append("GenC")
-                let v = b.createNamedVariable(forBuiltin: "C")
-                b.setType(ofVariable: v, to: typeC)
+                let _ = b.createNamedVariable(forBuiltin: "C")
             }
 
             // Short path: A requires D.
             let genShortA = CodeGenerator("GenShortA", inputs: .required(typeD), produces: [typeA])
             { b, _ in
                 calledGenerators.append("GenShortA")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
             let genD = CodeGenerator("GenD", produces: [typeD]) { b in
                 calledGenerators.append("GenD")
-                let v = b.createNamedVariable(forBuiltin: "D")
-                b.setType(ofVariable: v, to: typeD)
+                let _ = b.createNamedVariable(forBuiltin: "D")
             }
 
             // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
@@ -4526,8 +4532,7 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
             ) { b, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(
@@ -4559,17 +4564,25 @@ struct ProgramBuilderRuntimeDataTests {
          *
          * Dead end fallback mechanism tries Path 1 (Cost=2), fails, then tries Path 2 (Cost=3) and succeeds.
          */
-        let fuzzer = makeMockFuzzer()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "C": typeC,
+            "D": typeD,
+            "E": typeE,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
-            let typeA = ILType.object(ofGroup: "A")
-            let typeB = ILType.object(ofGroup: "B")
-            let typeC = ILType.object(ofGroup: "C")
-            let typeD = ILType.object(ofGroup: "D")
-            let typeE = ILType.object(ofGroup: "E")
 
             var calledGenerators = [String]()
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             let gPrefix = CodeGenerator("GPrefix", produces: [.undefined], useInPrefix: true) { b in
                 Issue.record("should not be called")
@@ -4587,24 +4600,20 @@ struct ProgramBuilderRuntimeDataTests {
             ) {
                 b, _, _, _ in
                 calledGenerators.append("GenY")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
 
             let genC = CodeGenerator("GenC", produces: [typeC]) { b in
                 calledGenerators.append("GenC")
-                let v = b.createNamedVariable(forBuiltin: "C")
-                b.setType(ofVariable: v, to: typeC)
+                let _ = b.createNamedVariable(forBuiltin: "C")
             }
             let genD = CodeGenerator("GenD", produces: [typeD]) { b in
                 calledGenerators.append("GenD")
-                let v = b.createNamedVariable(forBuiltin: "D")
-                b.setType(ofVariable: v, to: typeD)
+                let _ = b.createNamedVariable(forBuiltin: "D")
             }
             let genE = CodeGenerator("GenE", produces: [typeE]) { b in
                 calledGenerators.append("GenE")
-                let v = b.createNamedVariable(forBuiltin: "E")
-                b.setType(ofVariable: v, to: typeE)
+                let _ = b.createNamedVariable(forBuiltin: "E")
             }
 
             // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
@@ -4612,8 +4621,7 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
             ) { b, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(
@@ -4664,18 +4672,27 @@ struct ProgramBuilderRuntimeDataTests {
          *
          * GenRecursionRoot will try GenX first, then GenY, hit dead-ends on both, and successfully fallback to GenZ.
          */
-        let fuzzer = makeMockFuzzer()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E")
+        let typeF = ILType.object(ofGroup: "F")
+        let typeG = ILType.object(ofGroup: "G")
+        let typeH = ILType.object(ofGroup: "H")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "C": typeC,
+            "E": typeE,
+            "F": typeF,
+            "G": typeG,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
-            let typeA = ILType.object(ofGroup: "A")
-            let typeB = ILType.object(ofGroup: "B")
-            let typeC = ILType.object(ofGroup: "C")
-            let typeD = ILType.object(ofGroup: "D")
-            let typeE = ILType.object(ofGroup: "E")
-            let typeF = ILType.object(ofGroup: "F")
-            let typeG = ILType.object(ofGroup: "G")
-            let typeH = ILType.object(ofGroup: "H")
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             var calledGenerators = [String]()
 
@@ -4704,29 +4721,24 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenZ", inputs: .required(typeC, typeE, typeF, typeG), produces: [typeA]
             ) { b, _, _, _, _ in
                 calledGenerators.append("GenZ")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
 
             let genC = CodeGenerator("GenC", produces: [typeC]) { b in
                 calledGenerators.append("GenC")
-                let v = b.createNamedVariable(forBuiltin: "C")
-                b.setType(ofVariable: v, to: typeC)
+                let _ = b.createNamedVariable(forBuiltin: "C")
             }
             let genE = CodeGenerator("GenE", produces: [typeE]) { b in
                 calledGenerators.append("GenE")
-                let v = b.createNamedVariable(forBuiltin: "E")
-                b.setType(ofVariable: v, to: typeE)
+                let _ = b.createNamedVariable(forBuiltin: "E")
             }
             let genF = CodeGenerator("GenF", produces: [typeF]) { b in
                 calledGenerators.append("GenF")
-                let v = b.createNamedVariable(forBuiltin: "F")
-                b.setType(ofVariable: v, to: typeF)
+                let _ = b.createNamedVariable(forBuiltin: "F")
             }
             let genG = CodeGenerator("GenG", produces: [typeG]) { b in
                 calledGenerators.append("GenG")
-                let v = b.createNamedVariable(forBuiltin: "G")
-                b.setType(ofVariable: v, to: typeG)
+                let _ = b.createNamedVariable(forBuiltin: "G")
             }
 
             // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
@@ -4734,8 +4746,7 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
             ) { b, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(
@@ -4786,14 +4797,22 @@ struct ProgramBuilderRuntimeDataTests {
          * The algorithm deduplicates the double TypeD requirement, giving Gen2 a lower cost (1 missing input)
          * compared to Gen1 (2 missing inputs). Thus Gen2 is scheduled.
          */
-        let fuzzer = makeMockFuzzer()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
-            let typeA = ILType.object(ofGroup: "A")
-            let typeB = ILType.object(ofGroup: "B")
-            let typeC = ILType.object(ofGroup: "C")
-            let typeD = ILType.object(ofGroup: "D")
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             var calledGenerators = [String]()
 
@@ -4805,32 +4824,27 @@ struct ProgramBuilderRuntimeDataTests {
             let gen1 = CodeGenerator("Gen1", inputs: .required(typeB, typeC), produces: [typeA]) {
                 b, _, _ in
                 calledGenerators.append("Gen1")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
 
             // Gen2 needs D and D. Cost = 1 (due to Set deduplication).
             let gen2 = CodeGenerator("Gen2", inputs: .required(typeD, typeD), produces: [typeA]) {
                 b, _, _ in
                 calledGenerators.append("Gen2")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
 
             let genB = CodeGenerator("GenB", produces: [typeB]) { b in
                 calledGenerators.append("GenB")
-                let v = b.createNamedVariable(forBuiltin: "B")
-                b.setType(ofVariable: v, to: typeB)
+                let _ = b.createNamedVariable(forBuiltin: "B")
             }
             let genC = CodeGenerator("GenC", produces: [typeC]) { b in
                 calledGenerators.append("GenC")
-                let v = b.createNamedVariable(forBuiltin: "C")
-                b.setType(ofVariable: v, to: typeC)
+                let _ = b.createNamedVariable(forBuiltin: "C")
             }
             let genD = CodeGenerator("GenD", produces: [typeD]) { b in
                 calledGenerators.append("GenD")
-                let v = b.createNamedVariable(forBuiltin: "D")
-                b.setType(ofVariable: v, to: typeD)
+                let _ = b.createNamedVariable(forBuiltin: "D")
             }
 
             // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
@@ -4838,8 +4852,7 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenRecursionRoot", inputs: .required(typeA), produces: [typeRoot]
             ) { b, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(
@@ -4878,18 +4891,27 @@ struct ProgramBuilderRuntimeDataTests {
          * The Min-Heap tie-breaking accidentally generates a duplicate `GenE`,
          * which relies on finalGeneratorSequence to correctly deduplicate the execution chain.
          */
-        let fuzzer = makeMockFuzzer()
+        let typeA = ILType.object(ofGroup: "A")
+        let typeB = ILType.object(ofGroup: "B")
+        let typeC = ILType.object(ofGroup: "C")
+        let typeD = ILType.object(ofGroup: "D")
+        let typeE = ILType.object(ofGroup: "E", withProperties: ["foo"])
+        let typeF = ILType.object(ofGroup: "F")
+        let superTypeOfE = ILType.object(ofGroup: "E")
+        let typeRoot = ILType.object(ofGroup: "Root")
+
+        let env = JavaScriptEnvironment(additionalBuiltins: [
+            "A": typeA,
+            "B": typeB,
+            "C": typeC,
+            "D": typeD,
+            "E": typeE,
+            "F": typeF,
+            "Root": typeRoot,
+        ])
+        let fuzzer = makeMockFuzzer(environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()
-
-            let typeA = ILType.object(ofGroup: "A")
-            let typeB = ILType.object(ofGroup: "B")
-            let typeC = ILType.object(ofGroup: "C")
-            let typeD = ILType.object(ofGroup: "D")
-            let typeE = ILType.object(ofGroup: "E", withProperties: ["foo"])
-            let typeF = ILType.object(ofGroup: "F")
-            let superTypeOfE = ILType.object(ofGroup: "E")
-            let typeRoot = ILType.object(ofGroup: "Root")
 
             var calledGenerators = [String]()
 
@@ -4899,35 +4921,29 @@ struct ProgramBuilderRuntimeDataTests {
 
             let genE = CodeGenerator("GenE", produces: [typeE]) { b in
                 calledGenerators.append("GenE")
-                let v = b.createNamedVariable(forBuiltin: "E")
-                b.setType(ofVariable: v, to: typeE)
+                let _ = b.createNamedVariable(forBuiltin: "E")
             }
             let genD = CodeGenerator("GenD", inputs: .required(superTypeOfE), produces: [typeD]) {
                 b, _ in
                 calledGenerators.append("GenD")
-                let v = b.createNamedVariable(forBuiltin: "D")
-                b.setType(ofVariable: v, to: typeD)
+                let _ = b.createNamedVariable(forBuiltin: "D")
             }
             let genC = CodeGenerator("GenC", inputs: .required(typeD), produces: [typeC]) { b, _ in
                 calledGenerators.append("GenC")
-                let v = b.createNamedVariable(forBuiltin: "C")
-                b.setType(ofVariable: v, to: typeC)
+                let _ = b.createNamedVariable(forBuiltin: "C")
             }
             let genF = CodeGenerator("GenF", produces: [typeF]) { b in
                 calledGenerators.append("GenF")
-                let v = b.createNamedVariable(forBuiltin: "F")
-                b.setType(ofVariable: v, to: typeF)
+                let _ = b.createNamedVariable(forBuiltin: "F")
             }
             let genB = CodeGenerator("GenB", inputs: .required(typeC, typeF), produces: [typeB]) {
                 b, _, _ in
                 calledGenerators.append("GenB")
-                let v = b.createNamedVariable(forBuiltin: "B")
-                b.setType(ofVariable: v, to: typeB)
+                let _ = b.createNamedVariable(forBuiltin: "B")
             }
             let genA = CodeGenerator("GenA", inputs: .required(typeE), produces: [typeA]) { b, _ in
                 calledGenerators.append("GenA")
-                let v = b.createNamedVariable(forBuiltin: "A")
-                b.setType(ofVariable: v, to: typeA)
+                let _ = b.createNamedVariable(forBuiltin: "A")
             }
 
             // The unsatisfied requirements of this generator trigger findGeneratorSequence at that one level.
@@ -4935,8 +4951,7 @@ struct ProgramBuilderRuntimeDataTests {
                 "GenRecursionRoot", inputs: .required(typeA, typeB), produces: [typeRoot]
             ) { b, _, _ in
                 calledGenerators.append("GenRecursionRoot")
-                let v = b.createNamedVariable(forBuiltin: "Root")
-                b.setType(ofVariable: v, to: typeRoot)
+                let _ = b.createNamedVariable(forBuiltin: "Root")
             }
 
             fuzzer.setCodeGenerators(

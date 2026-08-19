@@ -3569,9 +3569,6 @@ public let CodeGenerators: [CodeGenerator] = [
                 b.doReturn(iterator)
             }
         }
-
-        // Manually mark the object as iterable as our static type inference cannot determine that.
-        b.setType(ofVariable: iterableObject, to: .iterable() + .object())
     },
 
     CodeGenerator("DisposableGenerator", produces: [.disposable], useInPrefix: true) { b in

@@ -276,7 +276,7 @@ struct WasmFoundationTests {
             let typeDefs = b.wasmDefineTypeGroup {
                 let structDef = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [])
+                )
                 let arrayDef = b.wasmDefineArrayType(elementType: .wasmi32, mutability: true)
                 let signatureDef = b.wasmDefineSignatureType(
                     signature: [] => [.wasmi32], indexTypes: [])
@@ -1376,7 +1376,6 @@ struct WasmFoundationTests {
                 [
                     b.wasmDefineStructType(
                         fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                        indexTypes: [],
                         isFinal: true
                     )
                 ]
@@ -1422,7 +1421,6 @@ struct WasmFoundationTests {
                 [
                     b.wasmDefineStructType(
                         fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                        indexTypes: [],
                         isFinal: true
                     )
                 ]
@@ -1680,7 +1678,7 @@ struct WasmFoundationTests {
                     fields: [
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
-                    ], indexTypes: [])
+                    ])
 
                 // Signature: (array, struct) -> (struct)
                 // We use .wasmRef(.Index(), nullability: false) as placeholders in the signature and provide the actual type definitions in indexTypes.
@@ -6748,13 +6746,13 @@ struct WasmGCTests {
         let jsProg = buildAndLiftProgram { b in
             let types = b.wasmDefineTypeGroup {
                 let superStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [],
+                    fields: [.init(type: .wasmi32, mutability: true)],
                     isFinal: false)
                 let subStruct = b.wasmDefineStructType(
                     fields: [
                         .init(type: .wasmi32, mutability: true),
                         .init(type: .wasmi64, mutability: true),
-                    ], indexTypes: [], superTypeDef: superStruct, isFinal: false)
+                    ], superTypeDef: superStruct, isFinal: false)
 
                 let superArray = b.wasmDefineArrayType(
                     elementType: .wasmRef(.Index(), nullability: true), mutability: false,
@@ -6818,12 +6816,12 @@ struct WasmGCTests {
 
             let types = b.wasmDefineTypeGroup {
                 let superStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [],
+                    fields: [.init(type: .wasmi32, mutability: true)],
                     isFinal: false)
                 let subStruct = b.wasmDefineStructType(
                     fields: [
                         .init(type: .wasmi32, mutability: true)
-                    ], indexTypes: [], superTypeDef: superStruct, isFinal: true)
+                    ], superTypeDef: superStruct, isFinal: true)
 
                 return [superStruct, subStruct]
             }
@@ -6846,12 +6844,12 @@ struct WasmGCTests {
         let jsProg = buildAndLiftProgram { b in
             let types = b.wasmDefineTypeGroup {
                 let superStructType = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: true)])
                 let subStructType = b.wasmDefineStructType(
                     fields: [
                         .init(type: .wasmi32, mutability: true),
                         .init(type: .wasmi64, mutability: true),
-                    ], indexTypes: [], superTypeDef: superStructType)
+                    ], superTypeDef: superStructType)
 
                 // Parameters are contravariant, return types are covariant.
                 // Super signature: [ref subStruct] => [ref superStruct]
@@ -6926,7 +6924,7 @@ struct WasmGCTests {
             let types = b.wasmDefineTypeGroup {
                 let structOfi32 = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [])
+                )
                 let structOfStruct = b.wasmDefineStructType(
                     fields: [
                         WasmStructTypeDescription.Field(
@@ -6975,7 +6973,7 @@ struct WasmGCTests {
             let types = b.wasmDefineTypeGroup {
                 let structOfi32 = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [])
+                )
                 let structOfStruct = b.wasmDefineStructType(
                     fields: [
                         WasmStructTypeDescription.Field(
@@ -7027,7 +7025,7 @@ struct WasmGCTests {
                             WasmStructTypeDescription.Field(type: .wasmPackedI8, mutability: true),
                             WasmStructTypeDescription.Field(type: .wasmPackedI8, mutability: true),
                             WasmStructTypeDescription.Field(type: .wasmPackedI16, mutability: true),
-                        ], indexTypes: [])
+                        ])
                 ]
             }[0]
 
@@ -7155,7 +7153,7 @@ struct WasmGCTests {
                 [
                     b.wasmDefineStructType(
                         fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                        indexTypes: [])
+                    )
                 ]
             }[0]
 
@@ -7983,7 +7981,7 @@ struct WasmGCTests {
             let structType = b.wasmDefineTypeGroup {
                 b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [])
+                )
             }[0]
 
             let module = b.buildWasmModule { wasmModule in
@@ -8048,7 +8046,7 @@ struct WasmGCTests {
             let structType = b.wasmDefineTypeGroup {
                 b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [])
+                )
             }[0]
 
             let module = b.buildWasmModule { wasmModule in
@@ -8246,7 +8244,7 @@ struct WasmGCTests {
 
             let typeGroupA = b.wasmDefineTypeGroup {
                 let superStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: true)])
                 return [superStruct]
             }
             let typeGroupB = b.wasmDefineTypeGroup {
@@ -8254,7 +8252,7 @@ struct WasmGCTests {
                     fields: [
                         .init(type: .wasmi32, mutability: true),
                         .init(type: .wasmi64, mutability: true),
-                    ], indexTypes: [], superTypeDef: typeGroupA[0])
+                    ], superTypeDef: typeGroupA[0])
                 return [subStruct]
             }
 

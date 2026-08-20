@@ -3223,7 +3223,7 @@ struct ProgramBuilderTests {
                 [
                     b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
                     b.wasmDefineStructType(
-                        fields: [.init(type: .wasmi64, mutability: false)], indexTypes: []),
+                        fields: [.init(type: .wasmi64, mutability: false)]),
                 ]
             }
             let arrayDefI32 = typeGroupA[0]
@@ -3327,7 +3327,7 @@ struct ProgramBuilderTests {
 
             b.wasmDefineTypeGroup {
                 let baseStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: false)])
                 let subStruct = b.generateSubtype(for: baseStruct)
 
                 let baseArray = b.wasmDefineArrayType(
@@ -3422,7 +3422,7 @@ struct ProgramBuilderTests {
 
             b.wasmDefineTypeGroup { () -> [Variable] in
                 let innerStruct = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: false)])
                 let subInnerStruct = b.generateSubtype(for: innerStruct)
                 let outerStruct = b.wasmDefineStructType(
                     fields: [
@@ -3488,7 +3488,7 @@ struct ProgramBuilderTests {
 
             b.wasmDefineTypeGroup { () -> [Variable] in
                 let structType = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: false)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: false)])
                 let subStructType = b.generateSubtype(for: structType)
                 let baseSignatureType = b.wasmDefineSignatureType(
                     signature: [
@@ -3813,7 +3813,7 @@ struct ProgramBuilderTests {
                                 b.wasmDefineArrayType(elementType: .wasmi32, mutability: true),
                                 b.wasmDefineStructType(
                                     fields: [.init(type: .wasmi32, mutability: true)],
-                                    indexTypes: []),
+                                ),
                             ]
                         }
                     }

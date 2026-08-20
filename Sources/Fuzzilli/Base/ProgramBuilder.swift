@@ -7434,7 +7434,7 @@ public class ProgramBuilder {
 
     @discardableResult
     func wasmDefineStructType(
-        fields: [WasmStructTypeDescription.Field], indexTypes: [Variable],
+        fields: [WasmStructTypeDescription.Field], indexTypes: [Variable] = [],
         superTypeDef: Variable? = nil, isFinal: Bool = false,
         describes: Variable? = nil
     )

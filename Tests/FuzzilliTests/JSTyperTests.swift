@@ -1911,13 +1911,13 @@ struct JSTyperTests {
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
                     ],
-                    indexTypes: [])
+                )
                 let structType2 = b.wasmDefineStructType(
                     fields: [
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
                     ],
-                    indexTypes: [])
+                )
                 #expect(b.type(of: structType).Is(.wasmTypeDef()))
                 // Despite having identical structure, the two struct types are not comparable.
                 #expect(!b.type(of: structType).Is(b.type(of: structType2)))

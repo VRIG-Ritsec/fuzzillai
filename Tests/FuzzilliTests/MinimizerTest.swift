@@ -3070,7 +3070,7 @@ struct MinimizerTests {
                     indexType: fwd
                 )
                 let structType = b.wasmDefineStructType(
-                    fields: [.init(type: .wasmi32, mutability: true)], indexTypes: [])
+                    fields: [.init(type: .wasmi32, mutability: true)])
                 b.wasmResolveForwardReference(fwd, to: structType)
                 return [structType, arrayType]
             }
@@ -3232,7 +3232,6 @@ struct MinimizerTests {
                 [
                     b.wasmDefineStructType(
                         fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                        indexTypes: [],
                         isFinal: true
                     )
                 ]

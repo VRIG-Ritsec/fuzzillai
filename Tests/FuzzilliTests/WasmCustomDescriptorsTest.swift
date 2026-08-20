@@ -15,11 +15,10 @@ struct WasmCustomDescriptorsTests {
             let types = b.wasmDefineTypeGroup {
                 let described = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: []
+
                 )
                 let descriptor = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [],
                     describes: described
                 )
                 return [described, descriptor]
@@ -44,11 +43,10 @@ struct WasmCustomDescriptorsTests {
             let types = b.wasmDefineTypeGroup {
                 let described = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: []
+
                 )
                 let descriptor = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [],
                     describes: described
                 )
 
@@ -57,7 +55,6 @@ struct WasmCustomDescriptorsTests {
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmf64, mutability: false),
                     ],
-                    indexTypes: [],
                     superTypeDef: described
                 )
                 let descriptorSub = b.wasmDefineStructType(
@@ -65,7 +62,6 @@ struct WasmCustomDescriptorsTests {
                         WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
                         WasmStructTypeDescription.Field(type: .wasmf64, mutability: false),
                     ],
-                    indexTypes: [],
                     superTypeDef: descriptor,
                     describes: describedSub
                 )
@@ -91,11 +87,10 @@ struct WasmCustomDescriptorsTests {
             let types = b.wasmDefineTypeGroup {
                 let described = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: []
+
                 )
                 let descriptor = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [],
                     describes: described
                 )
 
@@ -122,11 +117,10 @@ struct WasmCustomDescriptorsTests {
             let types = b.wasmDefineTypeGroup {
                 let described = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: []
+
                 )
                 let descriptor = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: [],
                     describes: described
                 )
 
@@ -174,7 +168,7 @@ struct WasmCustomDescriptorsTests {
             let types = b.wasmDefineTypeGroup {
                 let structType = b.wasmDefineStructType(
                     fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
-                    indexTypes: []
+
                 )
                 let arrayType = b.wasmDefineArrayType(
                     elementType: .wasmi32,

@@ -6,7 +6,10 @@ testRMWOrdering()
 testMemoryOrdering()
 # Emit both wide arithmetics and relaxed atomics instructions
 testWasmCodeGenerationAndCompilation()
-testWasmCodeGenerationAndCompilationAndExecution()
+testWasmCodeGenerationAndCompilationAndExecution(enableCustomDescriptors:)
 testBinaryenWasmCodeGenerationAndCompilation()
 testBinaryenWasmCodeGenerationAndCompilationAndExecution()
 testBinaryenWasmMutator()
+# Custom descriptors not yet available
+testGenerateSubtypeOnDescriptor()
+testGlobalIndexExactTyped()

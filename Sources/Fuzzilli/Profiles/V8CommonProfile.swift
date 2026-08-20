@@ -1250,6 +1250,14 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         args.append("--wasm-random-rescheduling")
     }
 
+    if probability(0.4) {
+        // This flag tells the engine it should assume that partial OOB writes do not write
+        // anything on this architecture and trap immediately, which allows using implicit bounds
+        // checks for multi-byte Wasm linear memory stores on arm64 (and for arm64, this is
+        // otherwise only enabled on MacOS hardware by default).
+        args.append("--wasm-partial-oob-writes-are-noops")
+    }
+
     // Disabling batching allows the fuzzer to reach higher JIT tiers faster; sometimes test the
     // production configuration too.
     if probability(0.8) {

@@ -1038,6 +1038,36 @@ struct MutatorTests {
         }
     }
 
+    @Test func testOperationMutatorObjectDestructAndReassign() throws {
+        let fuzzer = makeMockFuzzer()
+        try fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let v0 = b.loadInt(42)
+            let v1 = b.loadFloat(13.37)
+            let v2 = b.loadString("Hello")
+            let v3 = b.createObject(with: ["foo": v0, "bar": v1])
+            b.destruct(v3, selecting: ["foo", "bar"], into: [v2, v0], hasRestElement: false)
+            b.destruct(v3, selecting: ["foo", "bar"], into: [v2, v0, v1], hasRestElement: true)
+            let prog = b.finalize()
+
+            let mutator = OperationMutator()
+            let newBuilder = fuzzer.makeBuilder()
+            newBuilder.adopting {
+                for instr in prog.code {
+                    // TODO(rherouart): Find a way to make these tests deterministic
+                    if instr.op is DestructAndReassign {
+                        mutator.mutate(instr, newBuilder)
+                    } else {
+                        newBuilder.adopt(instr)
+                    }
+                }
+            }
+            let mutatedProg = newBuilder.finalize()
+            try mutatedProg.code.check()
+            _ = FuzzILLifter().lift(mutatedProg)
+        }
+    }
+
     @Test func testPrivatePropertyAndMethodMutation() throws {
         let env = JavaScriptEnvironment()
         let config = Configuration(logLevel: .error)

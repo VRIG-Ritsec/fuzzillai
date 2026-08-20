@@ -1239,14 +1239,17 @@ extension OperationMutator {
             guard !properties.contains(newValue) else { return nil }
             properties[indexToReplace] = newValue
 
-            // TODO(rherouart): Toggle this behind some probability.
+            // Toggle the rest element with 50% probability.
             // We can only add/remove bindings if we are reassigning, because changing
             // the number of outputs of an existing instruction breaks contiguous variables.
-            let hasRest = isReassign ? !obj.hasRestElement : obj.hasRestElement
-            if hasRest && !obj.hasRestElement {
-                inouts.append(b.randomJsVariable())
-            } else if !hasRest && obj.hasRestElement {
-                inouts.removeLast()
+            var hasRest = obj.hasRestElement
+            if isReassign && probability(0.5) {
+                hasRest.toggle()
+                if hasRest {
+                    inouts.append(b.randomJsVariable())
+                } else {
+                    inouts.removeLast()
+                }
             }
 
             let newProps = properties.sorted().map {

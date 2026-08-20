@@ -96,9 +96,9 @@ import Testing
         return b.callMethod("join", on: hexArray, withArgs: [b.loadString("")])
     }
 
-    @Test(.enabled(if: JavaScriptExecutor(type: .any, withArguments: ["--js-base-64"]) != nil))
+    @Test(.enabled { JavaScriptExecutor() != nil })
     func testBase64OptionsBag() throws {
-        let runner = try #require(JavaScriptExecutor(type: .any, withArguments: ["--js-base-64"]))
+        let runner = JavaScriptExecutor()!
         let jsProg = buildAndLiftProgram { b in
             let arrayConstructor = b.createNamedVariable(forBuiltin: "Uint8Array")
             // Whatever the options object looks like, it should construct something valid.

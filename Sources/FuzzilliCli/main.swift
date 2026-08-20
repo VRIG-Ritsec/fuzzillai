@@ -103,6 +103,7 @@ if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 
             --tag=tag                    : Optional string tag associated with this instance which will be stored in the settings.json file as well as in crashing samples.
                                            This can for example be used to remember the target revision that is being fuzzed.
             --wasm                       : Enable Wasm CodeGenerators (see WasmCodeGenerators.swift).
+            --wasm-features=features     : Enable experimental Wasm features. A comma-separated list. Available: "custom-descriptors".
             --wasm-opt-path=path         : Path to the wasm-opt binary to enable Binaryen Wasm generation.
             --forDifferentialFuzzing     : Enable additional features for better support of external differential fuzzing.
             --bundle                     : Generate bundles containing multiple JS scripts and modules
@@ -165,6 +166,14 @@ let argumentRandomization = args.has("--argumentRandomization")
 let additionalArguments = args["--additionalArguments"] ?? ""
 let tag = args["--tag"]
 let enableWasm = args.has("--wasm")
+let wasmFeaturesRaw = args["--wasm-features"]?.split(separator: ",").map(String.init) ?? []
+let validWasmFeatures = ["custom-descriptors"]
+if let unknownFeature = wasmFeaturesRaw.first(where: { !validWasmFeatures.contains($0) }) {
+    configError(
+        "Unknown Wasm feature \"\(unknownFeature)\". Valid features are: \(validWasmFeatures.joined(separator: ", "))"
+    )
+}
+let enableCustomDescriptors = wasmFeaturesRaw.contains("custom-descriptors")
 let wasmOptPath = args["--wasm-opt-path"]
 let generateBundle = args.has("--bundle")
 let forDifferentialFuzzing = args.has("--forDifferentialFuzzing")
@@ -657,7 +666,8 @@ let mainConfig = Configuration(
     corpusGenerationIterations: corpusGenerationIterations,
     forDifferentialFuzzing: forDifferentialFuzzing,
     instanceId: 0,
-    dumplingEnabled: profile.isDifferential)
+    dumplingEnabled: profile.isDifferential,
+    enableCustomDescriptors: enableCustomDescriptors)
 
 let fuzzer = makeFuzzer(with: mainConfig)
 
@@ -870,7 +880,8 @@ for i in 1..<numJobs {
         corpusGenerationIterations: corpusGenerationIterations,
         forDifferentialFuzzing: forDifferentialFuzzing,
         instanceId: i,
-        dumplingEnabled: profile.isDifferential)
+        dumplingEnabled: profile.isDifferential,
+        enableCustomDescriptors: enableCustomDescriptors)
 
     let worker = makeFuzzer(with: workerConfig)
     workers.append(worker)

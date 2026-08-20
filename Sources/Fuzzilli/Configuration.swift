@@ -116,6 +116,9 @@ public struct Configuration {
     // Whether the fuzzer generates bundles containing multiple JavaScript scripts or modules.
     public let generateBundle: Bool
 
+    // Wasm experimental features
+    public let enableCustomDescriptors: Bool
+
     public init(
         arguments: [String] = [],
         timeout: UInt32 = 250,
@@ -135,7 +138,8 @@ public struct Configuration {
         corpusGenerationIterations: Int = 100,
         forDifferentialFuzzing: Bool = false,
         instanceId: Int = -1,
-        dumplingEnabled: Bool = false
+        dumplingEnabled: Bool = false,
+        enableCustomDescriptors: Bool = false
     ) {
         self.arguments = arguments
         self.timeout = timeout
@@ -151,6 +155,7 @@ public struct Configuration {
         self.isWasmEnabled = isWasmEnabled
         self.wasmOptPath = wasmOptPath
         self.generateBundle = generateBundle
+        self.enableCustomDescriptors = enableCustomDescriptors
         self.storagePath = storagePath
         self.corpusGenerationIterations = corpusGenerationIterations
         self.forDifferentialFuzzing = forDifferentialFuzzing

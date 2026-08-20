@@ -400,6 +400,8 @@ message Instruction {
         WasmJSStringEquals wasmJSStringEquals = 374;
         WasmJSStringCompare wasmJSStringCompare = 375;
         WasmStringConstant wasmStringConstant = 376;
+        WasmStructNewDefaultDesc wasmStructNewDefaultDesc = 377;
+        WasmStructNewDesc wasmStructNewDesc = 378;
     }
 }
 

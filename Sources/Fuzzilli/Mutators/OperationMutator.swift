@@ -929,6 +929,8 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmArrayLen(_),
             .wasmArraySet(_),
             .wasmStructNewDefault(_),
+            .wasmStructNewDefaultDesc(_),
+            .wasmStructNewDesc(_),
             .wasmStructSet(_),
             .wasmRefNull(_),
             .wasmRefIsNull(_),

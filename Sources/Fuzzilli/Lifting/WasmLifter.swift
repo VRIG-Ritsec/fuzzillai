@@ -2719,6 +2719,14 @@ public class WasmLifter {
             let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
             let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
             return Data([Prefix.GC.rawValue, 0x01]) + structIndex
+        case .wasmStructNewDesc(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x20]) + structIndex
+        case .wasmStructNewDefaultDesc(_):
+            let typeDesc = typer.getTypeDescription(of: wasmInstruction.input(0))
+            let structIndex = Leb128.unsignedEncode(typeDescToIndex[typeDesc]!)
+            return Data([Prefix.GC.rawValue, 0x21]) + structIndex
         case .wasmStructGet(let op):
             let typeDesc =
                 typer.getTypeDescription(of: wasmInstruction.input(0)) as! WasmStructTypeDescription

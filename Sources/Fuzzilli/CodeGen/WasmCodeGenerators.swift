@@ -132,6 +132,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             },
             wasmArrayTypeGenerator(),
             wasmStructTypeGenerator(),
+            // TODO(bettscheider): Also run "wasmCustomDescriptorsStructTypesGenerator" here
             wasmSignatureTypeGenerator(),
             GeneratorStub(
                 "WasmTypeGroupEndGenerator",
@@ -270,7 +271,17 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let fieldValue = function.findOrGenerateWasmVar(ofType: fieldType)
             initial_fields.append(fieldValue)
         }
-        function.wasmStructNew(structType: structType, fields: initial_fields)
+
+        if let descriptorDesc = typeDesc.descriptor {
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: true, isExact: true)
+            let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
+
+            function.wasmStructNewDesc(
+                structType: structType, descriptor: descriptorVar, fields: initial_fields)
+        } else {
+            function.wasmStructNew(structType: structType, fields: initial_fields)
+        }
     },
 
     CodeGenerator(
@@ -288,7 +299,16 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         guard typeDesc.isDefaultable() else {
             fatalError("Non-defaultable type in Wasm struct fields \(typeDesc)")
         }
-        function.wasmStructNewDefault(structType: structType)
+
+        if let descriptorDesc = typeDesc.descriptor {
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: true, isExact: true)
+            let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
+
+            function.wasmStructNewDefaultDesc(structType: structType, descriptor: descriptorVar)
+        } else {
+            function.wasmStructNewDefault(structType: structType)
+        }
     },
 
     CodeGenerator(

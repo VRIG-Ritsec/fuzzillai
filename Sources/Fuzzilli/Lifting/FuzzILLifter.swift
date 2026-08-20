@@ -1674,6 +1674,13 @@ public class FuzzILLifter: Lifter {
         case .wasmStructNewDefault(_):
             w.emit("\(output()) <- WasmStructNewDefault [\(input(0))]")
 
+        case .wasmStructNewDesc(_):
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmStructNewDesc [\(inputs)]")
+
+        case .wasmStructNewDefaultDesc(_):
+            w.emit("\(output()) <- WasmStructNewDefaultDesc [\(input(0)), \(input(1))]")
+
         case .wasmStructGet(let op):
             w.emit("\(output()) <- WasmStructGet [\(input(0))].\(op.fieldIndex)")
 

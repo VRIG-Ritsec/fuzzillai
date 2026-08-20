@@ -131,20 +131,41 @@ struct WasmCustomDescriptorsTests {
                 )
 
                 let descriptorSub = b.generateSubtype(for: descriptor)
-                return [described, descriptor, descriptorSub]
+
+                let describedSubDesc =
+                    (b.type(of: descriptorSub).wasmTypeDefinition?.description
+                    as! WasmStructTypeDescription).describes!
+                let describedSub = b.findVariable {
+                    b.type(of: $0).wasmTypeDefinition?.description == describedSubDesc
+                }!
+
+                return [described, descriptor, descriptorSub, describedSub]
             }
 
             let module = b.buildWasmModule { wasmModule in
-                let _ = wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
-                    for type in types {
-                        _ = function.wasmRefNull(typeDef: type)
-                    }
-                    return []
+                let _ = wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let i32 = function.consti32(42)
+
+                    let descriptorInst = function.wasmStructNewDefault(structType: types[1])
+                    let describedInst = function.wasmStructNewDesc(
+                        structType: types[0], descriptor: descriptorInst, fields: [i32])
+                    let v0 = function.wasmStructGet(theStruct: describedInst, fieldIndex: 0)
+
+                    let subDescInst = function.wasmStructNewDefault(structType: types[2])
+                    let defaultDescribedInst = function.wasmStructNewDefaultDesc(
+                        structType: types[3], descriptor: subDescInst)
+                    let v1 = function.wasmStructGet(theStruct: defaultDescribedInst, fieldIndex: 0)
+
+                    let sum = function.wasmi32BinOp(v0, v1, binOpKind: .Add)
+                    return [sum]
                 }
             }
-            let _ = module.loadExports()
+            let exports = module.loadExports()
+            let res = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [res])
         }
-        testForOutput(program: jsProg, runner: runner, outputString: "")
+        testForOutput(program: jsProg, runner: runner, outputString: "42\n")
     }
 
     @Test func testExactTypeOutputs() throws {

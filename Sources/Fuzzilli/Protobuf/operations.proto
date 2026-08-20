@@ -1581,6 +1581,12 @@ message WasmStructNewDefault {
 message WasmStructNew {
 }
 
+message WasmStructNewDefaultDesc {
+}
+
+message WasmStructNewDesc {
+}
+
 message WasmStructGet {
     int32 fieldIndex = 1;
     bool isSigned = 2;

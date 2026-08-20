@@ -2118,6 +2118,8 @@ public class JavaScriptLifter: Lifter {
                 .wasmArraySet(_),
                 .wasmStructNew(_),
                 .wasmStructNewDefault(_),
+                .wasmStructNewDesc(_),
+                .wasmStructNewDefaultDesc(_),
                 .wasmStructGet(_),
                 .wasmStructSet(_),
                 .wasmRefNull(_),

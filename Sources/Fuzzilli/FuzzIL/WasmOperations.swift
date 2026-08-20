@@ -2538,6 +2538,7 @@ class WasmStructNew: WasmOperation {
     override var opcode: Opcode { .wasmStructNew(self) }
 
     init(fieldCount: Int) {
+        // The inputs are the struct type definition and the field values.
         super.init(numInputs: fieldCount + 1, numOutputs: 1, requiredContext: [.wasmFunction])
     }
 }
@@ -2546,7 +2547,26 @@ class WasmStructNewDefault: WasmOperation {
     override var opcode: Opcode { .wasmStructNewDefault(self) }
 
     init() {
+        // The input is the struct type definition.
         super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+class WasmStructNewDefaultDesc: WasmOperation {
+    override var opcode: Opcode { .wasmStructNewDefaultDesc(self) }
+
+    init() {
+        // The inputs are the struct type definition and a descriptor reference.
+        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
+class WasmStructNewDesc: WasmOperation {
+    override var opcode: Opcode { .wasmStructNewDesc(self) }
+
+    init(fieldCount: Int) {
+        // The inputs are the struct type definition, the field values, and a descriptor reference.
+        super.init(numInputs: fieldCount + 2, numOutputs: 1, requiredContext: [.wasmFunction])
     }
 }
 

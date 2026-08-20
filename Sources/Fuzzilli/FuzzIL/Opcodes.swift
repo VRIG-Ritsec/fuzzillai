@@ -405,4 +405,6 @@ enum Opcode {
     case wasmJSStringEquals(WasmJSStringEquals)
     case wasmJSStringCompare(WasmJSStringCompare)
     case wasmStringConstant(WasmStringConstant)
+    case wasmStructNewDefaultDesc(WasmStructNewDefaultDesc)
+    case wasmStructNewDesc(WasmStructNewDesc)
 }

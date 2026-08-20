@@ -1325,7 +1325,9 @@ public struct JSTyper: Analyzer {
         case .wasmArraySet(_):
             break
         case .wasmStructNew(_),
-            .wasmStructNewDefault(_):
+            .wasmStructNewDefault(_),
+            .wasmStructNewDesc(_),
+            .wasmStructNewDefaultDesc(_):
             setReferenceType(
                 of: instr.output, typeDef: instr.input(0), nullability: false,
                 isExact: enableCustomDescriptors)

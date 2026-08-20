@@ -5963,6 +5963,20 @@ public class ProgramBuilder {
         }
 
         public func generateRandomWasmVar(ofType type: ILType) -> Variable? {
+            let generateDefaultStruct: (Variable, WasmStructTypeDescription) -> Variable = {
+                structType, structDesc in
+                if let descriptorDesc = structDesc.descriptor {
+                    let descriptorType = ILType.wasmIndexRef(
+                        descriptorDesc, nullability: true, isExact: true)
+                    let descriptorVar = self.findOrGenerateWasmVar(ofType: descriptorType)
+                    return self.wasmStructNewDefaultDesc(
+                        structType: structType,
+                        descriptor: descriptorVar)
+                } else {
+                    return self.wasmStructNewDefault(structType: structType)
+                }
+            }
+
             switch type {
             case .wasmi32:
                 return self.consti32(Int32(truncatingIfNeeded: b.randomInt()))
@@ -6005,7 +6019,12 @@ public class ProgramBuilder {
                                                 == .WasmStruct
                                                 && (desc as! WasmStructTypeDescription)
                                                     .isDefaultable()
-                                        }.flatMap(self.wasmStructNewDefault)
+                                        }.flatMap { structType in
+                                            let structDesc =
+                                                self.b.type(of: structType).wasmTypeDefinition!
+                                                .description as! WasmStructTypeDescription
+                                            return generateDefaultStruct(structType, structDesc)
+                                        }
                                     }
                                 ),
                                 (
@@ -6055,7 +6074,6 @@ public class ProgramBuilder {
                             return wasmRefNull(type: type)
                         }
                     case .Index(let desc, _):
-                        // TODO(bettscheider): Use `struct.new_default_desc` etc. for exact types
                         let nullable = type.wasmReferenceType!.nullability
                         if probability(0.5) || !nullable, let desc = desc.get() {
                             let abstractSuper = desc.abstractHeapSupertype!.heapType
@@ -6068,8 +6086,9 @@ public class ProgramBuilder {
                             if abstractSuper == .WasmStruct
                                 && (desc as! WasmStructTypeDescription).isDefaultable()
                             {
-                                return wasmStructNewDefault(
-                                    structType: b.jsTyper.getWasmTypeDef(for: type))
+                                let structDesc = desc as! WasmStructTypeDescription
+                                return generateDefaultStruct(
+                                    b.jsTyper.getWasmTypeDef(for: type), structDesc)
                             }
                             if abstractSuper == .WasmFunc {
                                 let signatureType = b.type(of: b.jsTyper.getWasmTypeDef(for: type))
@@ -6338,6 +6357,31 @@ public class ProgramBuilder {
         @discardableResult
         public func wasmStructNewDefault(structType: Variable) -> Variable {
             return b.emit(WasmStructNewDefault(), withInputs: [structType]).output
+        }
+
+        @discardableResult
+        public func wasmStructNewDesc(
+            structType: Variable, descriptor: Variable, fields: [Variable]
+        ) -> Variable {
+            let structDesc =
+                b.jsTyper.getTypeDescription(of: structType) as! WasmStructTypeDescription
+            return b.emit(
+                WasmStructNewDesc(fieldCount: fields.count),
+                withInputs: [structType] + fields + [descriptor],
+                types: [.wasmTypeDef()] + structDesc.fields.map { $0.type.unpacked() } + [
+                    .anyExactIndexRef
+                ]
+            ).output
+        }
+
+        @discardableResult
+        public func wasmStructNewDefaultDesc(structType: Variable, descriptor: Variable) -> Variable
+        {
+            return b.emit(
+                WasmStructNewDefaultDesc(),
+                withInputs: [structType, descriptor],
+                types: [.wasmTypeDef(), .anyExactIndexRef]
+            ).output
         }
 
         @discardableResult

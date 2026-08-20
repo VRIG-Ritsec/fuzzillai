@@ -458,6 +458,7 @@ public struct ILType: Hashable {
 
     public static let anyNonNullableIndexRef = wasmRef(.Index(), nullability: false)
     public static let anyIndexRef = wasmRef(.Index(), nullability: true)
+    public static let anyExactIndexRef = wasmRef(.Index(isExact: true), nullability: true)
 
     //
     // Type testing
@@ -2112,9 +2113,9 @@ public class WasmTypeDefinition: WasmTypeExtension {
         return nil
     }
 
-    func getReferenceTypeTo(nullability: Bool) -> ILType {
+    func getReferenceTypeTo(nullability: Bool, isExact: Bool = false) -> ILType {
         assert(description != nil)
-        return .wasmIndexRef(description!, nullability: nullability)
+        return .wasmIndexRef(description!, nullability: nullability, isExact: isExact)
     }
 }
 
@@ -2310,6 +2311,13 @@ public class WasmReferenceType: WasmTypeExtension {
         case Index(UnownedWasmTypeDescription = UnownedWasmTypeDescription(), isExact: Bool = false)
         case Abstract(HeapTypeInfo)
 
+        public var isExact: Bool {
+            if case .Index(_, let exact) = self {
+                return exact
+            }
+            return false
+        }
+
         func topType() -> ILType {
             switch self {
             case .Abstract(let info):
@@ -2326,7 +2334,7 @@ public class WasmReferenceType: WasmTypeExtension {
                 switch other {
                 case .Index(let otherDesc, let otherIsExact):
                     if desc.get() == nil || otherDesc.get() == nil {
-                        return .Index(.init())
+                        return .Index(.init(), isExact: isExact && otherIsExact)
                     }
 
                     let selfType = desc.get()!
@@ -2374,11 +2382,11 @@ public class WasmReferenceType: WasmTypeExtension {
                 case .Index(let otherDesc, let otherIsExact):
                     // If description is nil, this means it's an anyIndexRef.
                     guard let selfType = desc.get() else {
-                        return .Index(otherDesc, isExact: otherIsExact)
+                        return .Index(otherDesc, isExact: isExact || otherIsExact)
                     }
 
                     guard let otherType = otherDesc.get() else {
-                        return .Index(desc, isExact: isExact)
+                        return .Index(desc, isExact: isExact || otherIsExact)
                     }
 
                     if let common = selfType.intersection(otherType) {

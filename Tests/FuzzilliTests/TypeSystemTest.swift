@@ -1918,6 +1918,39 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testWasmAnyExactIndexRefSubsumptionRules() {
+        let anyIndexRef = ILType.anyIndexRef
+        let anyExactIndexRef = ILType.anyExactIndexRef
+
+        #expect(anyIndexRef.subsumes(anyExactIndexRef))
+        #expect(!anyExactIndexRef.subsumes(anyIndexRef))
+
+        #expect(anyIndexRef.union(with: anyExactIndexRef) == anyIndexRef)
+        #expect(anyIndexRef.intersection(with: anyExactIndexRef) == anyExactIndexRef)
+
+        let structDesc = WasmStructTypeDescription(
+            fields: [], typeGroupIndex: 0)
+        let concreteRef = ILType.wasmIndexRef(structDesc, nullability: true, isExact: false)
+        let concreteExactRef = ILType.wasmIndexRef(structDesc, nullability: true, isExact: true)
+
+        #expect(anyIndexRef.subsumes(concreteRef))
+        #expect(anyIndexRef.subsumes(concreteExactRef))
+
+        #expect(anyExactIndexRef.subsumes(concreteExactRef))
+        #expect(!anyExactIndexRef.subsumes(concreteRef))
+
+        #expect(anyIndexRef.union(with: concreteRef) == anyIndexRef)
+        #expect(anyIndexRef.union(with: concreteExactRef) == anyIndexRef)
+        #expect(anyExactIndexRef.union(with: concreteExactRef) == anyExactIndexRef)
+        #expect(anyExactIndexRef.union(with: concreteRef) == anyIndexRef)
+
+        #expect(anyIndexRef.intersection(with: concreteRef) == concreteRef)
+        #expect(anyIndexRef.intersection(with: concreteExactRef) == concreteExactRef)
+        #expect(anyExactIndexRef.intersection(with: concreteExactRef) == concreteExactRef)
+        #expect(anyExactIndexRef.intersection(with: concreteRef) == concreteExactRef)
+    }
+
+    @Test
     func testWasmAbstractHeapTypeSubsumptionRules() {
         let groupAny: [WasmAbstractHeapType] =
             [.WasmAny, .WasmEq, .WasmI31, .WasmStruct, .WasmArray, .WasmNone]

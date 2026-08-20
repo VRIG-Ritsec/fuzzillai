@@ -495,11 +495,13 @@ public struct JSTyper: Analyzer {
     private var indexOfLastInstruction = -1
 
     private let isBundle: Bool
+    private let enableCustomDescriptors: Bool
 
     init(for environ: JavaScriptEnvironment, isBundle: Bool) {
         self.environment = environ
         self.isBundle = isBundle
         self.defUseAnalyzer = DefUseAnalyzer(isBundle: isBundle)
+        self.enableCustomDescriptors = Fuzzer.current?.config.enableCustomDescriptors == true
     }
 
     public mutating func reset() {
@@ -606,8 +608,9 @@ public struct JSTyper: Analyzer {
                             as! WasmSignatureTypeDescription
                         var params = desc.signature.parameterTypes
                         let nullability = params[i].wasmReferenceType!.nullability
+                        let isExact = params[i].wasmReferenceType!.kind.isExact
                         params[i] = typer.type(of: replacement ?? def).wasmTypeDefinition!
-                            .getReferenceTypeTo(nullability: nullability)
+                            .getReferenceTypeTo(nullability: nullability, isExact: isExact)
                         desc.signature = params => desc.signature.outputTypes
                     })
                 } else {
@@ -617,8 +620,9 @@ public struct JSTyper: Analyzer {
                             as! WasmSignatureTypeDescription
                         var outputTypes = desc.signature.outputTypes
                         let nullability = outputTypes[i].wasmReferenceType!.nullability
+                        let isExact = outputTypes[i].wasmReferenceType!.kind.isExact
                         outputTypes[i] = typer.type(of: replacement ?? def).wasmTypeDefinition!
-                            .getReferenceTypeTo(nullability: nullability)
+                            .getReferenceTypeTo(nullability: nullability, isExact: isExact)
                         desc.signature = desc.signature.parameterTypes => outputTypes
                     })
                 }
@@ -626,7 +630,9 @@ public struct JSTyper: Analyzer {
             }
             registerTypeGroupDependency(from: tgIndex, to: elementDesc.typeGroupIndex)
             return type(of: typeDef).wasmTypeDefinition!
-                .getReferenceTypeTo(nullability: paramType.wasmReferenceType!.nullability)
+                .getReferenceTypeTo(
+                    nullability: paramType.wasmReferenceType!.nullability,
+                    isExact: paramType.wasmReferenceType!.kind.isExact)
         }
 
         let resolvedParameterTypes = signature.parameterTypes.enumerated().map(resolveType)
@@ -659,6 +665,7 @@ public struct JSTyper: Analyzer {
         let resolvedElementType: ILType
         if let elementRef = elementRef {
             let elementNullability = elementType.wasmReferenceType!.nullability
+            let isExact = elementType.wasmReferenceType!.kind.isExact
             let typeDefType = type(of: elementRef)
             guard let elementDesc = typeDefType.wasmTypeDefinition?.description else {
                 // TODO(mliedtke): Investigate. The `typeDefType` should be `.wasmTypeDef`.
@@ -683,11 +690,12 @@ public struct JSTyper: Analyzer {
                     (typer.type(of: def).wasmTypeDefinition!.description
                         as! WasmArrayTypeDescription).elementType = typer.type(
                             of: replacement ?? def
-                        ).wasmTypeDefinition!.getReferenceTypeTo(nullability: elementNullability)
+                        ).wasmTypeDefinition!.getReferenceTypeTo(
+                            nullability: elementNullability, isExact: isExact)
                 })
             }
             resolvedElementType = type(of: elementRef).wasmTypeDefinition!.getReferenceTypeTo(
-                nullability: elementNullability)
+                nullability: elementNullability, isExact: isExact)
             registerTypeGroupDependency(from: tgIndex, to: elementDesc.typeGroupIndex)
         } else {
             resolvedElementType = elementType
@@ -720,6 +728,7 @@ public struct JSTyper: Analyzer {
             let (field, fieldTypeRef) = fieldWithInput
             if let fieldTypeRef {
                 let fieldNullability = field.type.wasmReferenceType!.nullability
+                let isExact = field.type.wasmReferenceType!.kind.isExact
                 let typeDefType = type(of: fieldTypeRef)
                 guard let fieldTypeDesc = typeDefType.wasmTypeDefinition?.description else {
                     // TODO(mliedtke): Investigate.
@@ -734,7 +743,7 @@ public struct JSTyper: Analyzer {
                         (typer.type(of: def).wasmTypeDefinition!.description!
                             as! WasmStructTypeDescription).fields[fieldIndex].type =
                             typer.type(of: replacement ?? def).wasmTypeDefinition!
-                            .getReferenceTypeTo(nullability: fieldNullability)
+                            .getReferenceTypeTo(nullability: fieldNullability, isExact: isExact)
                     })
                 }
 
@@ -742,7 +751,7 @@ public struct JSTyper: Analyzer {
 
                 return WasmStructTypeDescription.Field(
                     type: type(of: fieldTypeRef).wasmTypeDefinition!.getReferenceTypeTo(
-                        nullability: fieldNullability),
+                        nullability: fieldNullability, isExact: isExact),
                     mutability: field.mutability)
             } else {
                 return field
@@ -828,10 +837,13 @@ public struct JSTyper: Analyzer {
         return moduleType
     }
 
-    mutating func setReferenceType(of: Variable, typeDef: Variable, nullability: Bool) {
+    mutating func setReferenceType(
+        of: Variable, typeDef: Variable, nullability: Bool, isExact: Bool = false
+    ) {
         setType(
             of: of,
-            to: type(of: typeDef).wasmTypeDefinition!.getReferenceTypeTo(nullability: nullability))
+            to: type(of: typeDef).wasmTypeDefinition!.getReferenceTypeTo(
+                nullability: nullability, isExact: isExact))
     }
 
     func getTypeDescription(of type: ILType) -> WasmTypeDescription {
@@ -1037,7 +1049,10 @@ public struct JSTyper: Analyzer {
             let valueType: ILType
             if case .indexRef = op.wasmGlobal {
                 valueType = type(of: instr.input(0)).wasmTypeDefinition!.getReferenceTypeTo(
-                    nullability: true)
+                    nullability: true, isExact: false)
+            } else if case .indexExactRef = op.wasmGlobal {
+                valueType = type(of: instr.input(0)).wasmTypeDefinition!.getReferenceTypeTo(
+                    nullability: true, isExact: true)
             } else {
                 valueType = op.wasmGlobal.toType()
             }
@@ -1299,7 +1314,9 @@ public struct JSTyper: Analyzer {
         // No need to analyze this and add them to the DynamicObjectGroupManager.
         case .wasmArrayNewFixed(_),
             .wasmArrayNewDefault(_):
-            setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
+            setReferenceType(
+                of: instr.output, typeDef: instr.input(0), nullability: false,
+                isExact: enableCustomDescriptors)
         case .wasmArrayLen(_):
             setType(of: instr.output, to: .wasmi32)
         case .wasmArrayGet(_):
@@ -1309,7 +1326,9 @@ public struct JSTyper: Analyzer {
             break
         case .wasmStructNew(_),
             .wasmStructNewDefault(_):
-            setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: false)
+            setReferenceType(
+                of: instr.output, typeDef: instr.input(0), nullability: false,
+                isExact: enableCustomDescriptors)
         case .wasmStructGet(let op):
             let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmStructTypeDescription
             setType(of: instr.output, to: typeDesc.fields[op.fieldIndex].type.unpacked())
@@ -1317,7 +1336,9 @@ public struct JSTyper: Analyzer {
             break
         case .wasmRefNull(let op):
             if instr.hasInputs {
-                setReferenceType(of: instr.output, typeDef: instr.input(0), nullability: true)
+                setReferenceType(
+                    of: instr.output, typeDef: instr.input(0), nullability: true,
+                    isExact: self.enableCustomDescriptors)
             } else {
                 setType(of: instr.output, to: op.type!)
             }
@@ -1332,7 +1353,7 @@ public struct JSTyper: Analyzer {
         case .wasmRefFunc(_):
             if let signatureType = type(of: instr.input(0)).wasmFunctionDef?.signatureType,
                 let refType = signatureType.wasmTypeDefinition?.getReferenceTypeTo(
-                    nullability: false)
+                    nullability: false, isExact: enableCustomDescriptors)
             {
                 setType(of: instr.output, to: refType)
             } else {
@@ -1349,8 +1370,10 @@ public struct JSTyper: Analyzer {
         case .wasmRefCast(let op):
             if op.type.requiredInputCount() == 1 {
                 let nullable = op.type.wasmReferenceType!.nullability
+                let isExact = op.type.wasmReferenceType!.kind.isExact
                 setReferenceType(
-                    of: instr.output, typeDef: instr.input(1), nullability: nullable)
+                    of: instr.output, typeDef: instr.input(1), nullability: nullable,
+                    isExact: isExact)
             } else {
                 setType(of: instr.output, to: op.type)
             }
@@ -1410,7 +1433,7 @@ public struct JSTyper: Analyzer {
                 let typeDefInputIndex = 1 + op.parameterCount + 1
                 setReferenceType(
                     of: instr.outputs.last!, typeDef: instr.input(typeDefInputIndex),
-                    nullability: targetType.nullability)
+                    nullability: targetType.nullability, isExact: targetType.kind.isExact)
             }
 
         case .wasmBranchOnNonNull(_):

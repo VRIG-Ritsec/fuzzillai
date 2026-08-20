@@ -6664,7 +6664,8 @@ public class ProgramBuilder {
             let nullability = true
             if let elementType = randomWasmTypeDef(), probability(0.25) {
                 indexTypes.append(elementType)
-                type = .wasmRef(.Index(), nullability: nullability)
+                let isExact = self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                type = .wasmRef(.Index(isExact: isExact), nullability: nullability)
             } else {
                 type = chooseUniform(
                     from: [
@@ -6770,7 +6771,8 @@ public class ProgramBuilder {
                     || self.type(of: elementType).wasmTypeDefinition!.description == .selfReference
                     || probability(0.5)
                 indexTypes.append(elementType)
-                return ILType.wasmRef(.Index(), nullability: nullability)
+                let isExact = self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                return ILType.wasmRef(.Index(isExact: isExact), nullability: nullability)
             } else {
                 let nullability = !allowNonNullable || probability(0.5)
                 let abstractRefTypes = WasmAbstractHeapType.allCases.map {
@@ -6798,7 +6800,8 @@ public class ProgramBuilder {
         let types = (0..<Int.random(in: 0...n)).map { _ in
             if let elementType = randomWasmTypeDef(), probability(0.25) {
                 indexTypes.append(elementType)
-                return ILType.wasmRef(.Index(), nullability: true)
+                let isExact = self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                return ILType.wasmRef(.Index(isExact: isExact), nullability: true)
             } else {
                 return chooseUniform(
                     from: ILType.wasmNonRefValueTypes + [.wasmRefI31()]
@@ -6811,10 +6814,11 @@ public class ProgramBuilder {
     public func wasmLinkIndexTypes(_ types: [ILType], with indexTypes: [Variable]) -> [ILType] {
         var it = indexTypes.makeIterator()
         let result: [ILType] = types.map { type in
-            if type.Is(.anyIndexRef) && type.wasmReferenceType?.kind == .Index() {
+            if case .Index(_, let isExact) = type.wasmReferenceType?.kind {
                 let typeDef = it.next()!
                 let desc = self.type(of: typeDef).wasmTypeDefinition!.description!
-                return .wasmIndexRef(desc, nullability: type.wasmReferenceType!.nullability)
+                return .wasmIndexRef(
+                    desc, nullability: type.wasmReferenceType!.nullability, isExact: isExact)
             }
             return type
         }
@@ -6956,23 +6960,11 @@ public class ProgramBuilder {
                     signature.parameterTypes.count == superSigType.signature.parameterTypes.count)
                 assert(signature.outputTypes.count == superSigType.signature.outputTypes.count)
 
-                var indexTypeIterator = indexTypes.makeIterator()
-                let linkTypes = { (types: [ILType]) -> [ILType] in
-                    return types.map { type in
-                        if case .Index = type.wasmReferenceType?.kind {
-                            let indexType = indexTypeIterator.next()!
-                            let linkedType = self.type(of: indexType).wasmTypeDefinition!
-                                .getReferenceTypeTo(
-                                    nullability: type.wasmReferenceType!.nullability)
-                            return linkedType
-                        } else {
-                            return type
-                        }
-                    }
-                }
-
+                let allLinkedTypes = self.wasmLinkIndexTypes(
+                    signature.parameterTypes + signature.outputTypes, with: indexTypes)
                 let linkedSignature =
-                    linkTypes(signature.parameterTypes) => linkTypes(signature.outputTypes)
+                    Array(allLinkedTypes.prefix(signature.parameterTypes.count))
+                    => Array(allLinkedTypes.suffix(signature.outputTypes.count))
 
                 // Contravariant parameters
                 for (superParam, subParam) in zip(
@@ -7015,9 +7007,11 @@ public class ProgramBuilder {
             .filter { $0.Is(.anyIndexRef) }
             .map(getWasmTypeDef)
         let cleanIndexTypes = { (type: ILType) -> ILType in
-            type.Is(.anyIndexRef)
-                ? .wasmRef(.Index(), nullability: type.wasmReferenceType!.nullability)
-                : type
+            if case .Index(_, let isExact) = type.wasmReferenceType?.kind {
+                return .wasmRef(
+                    .Index(isExact: isExact), nullability: type.wasmReferenceType!.nullability)
+            }
+            return type
         }
         let signature =
             signature.parameterTypes.map(cleanIndexTypes)
@@ -7064,7 +7058,8 @@ public class ProgramBuilder {
             }
 
             if let typeDef {
-                return (.wasmRef(.Index(), nullability: nullability), typeDef)
+                let isExact = self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                return (.wasmRef(.Index(isExact: isExact), nullability: nullability), typeDef)
             }
         }
 
@@ -7104,17 +7099,24 @@ public class ProgramBuilder {
 
             if let refType = fieldType.wasmReferenceType {
                 switch refType.kind {
-                case .Index:
+                case .Index(_, let isExact):
                     var indexType = self.getWasmTypeDef(for: fieldType)
                     // TODO(bettscheider): Possibly set field to non-nullable in the subtype.
                     // This is not yet supported by WasmStructNewGenerator.
                     assert(refType.nullability)
-                    fieldType = .wasmRef(.Index(), nullability: refType.nullability)
+
+                    let canRefine = !field.mutability
+                    let randomlyExact =
+                        self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                    let newIsExact = isExact || (canRefine && randomlyExact)
+                    fieldType = .wasmRef(
+                        .Index(isExact: newIsExact), nullability: refType.nullability)
 
                     let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!.description!
                     if !field.mutability,
                         !indexTypeDesc.hasUnresolvedSelfReferences(),
-                        !indexTypeDesc.isFinal
+                        !indexTypeDesc.isFinal,
+                        !isExact
                     {
                         indexType = self.findVariable(satisfying: {
                             guard let desc = self.type(of: $0).wasmTypeDefinition?.description
@@ -7177,15 +7179,22 @@ public class ProgramBuilder {
                     : originalNullability
 
                 switch refType.kind {
-                case .Index:
+                case .Index(_, let isExact):
                     indexType = self.getWasmTypeDef(for: elementType)
+
+                    let canRefine = !arrayDesc.mutability
+                    let randomlyExact =
+                        self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                    let newIsExact = isExact || (canRefine && randomlyExact)
+
                     elementType = .wasmRef(
-                        .Index(), nullability: newNullability)
+                        .Index(isExact: newIsExact), nullability: newNullability)
 
                     let indexTypeDesc = type(of: indexType!).wasmTypeDefinition!.description!
                     if !arrayDesc.mutability,
                         !indexTypeDesc.hasUnresolvedSelfReferences(),
-                        !indexTypeDesc.isFinal
+                        !indexTypeDesc.isFinal,
+                        !isExact
                     {
                         indexType = self.findVariable {
                             guard let desc = self.type(of: $0).wasmTypeDefinition?.description
@@ -7255,13 +7264,14 @@ public class ProgramBuilder {
                 return types.map { type in
                     if let refType = type.wasmReferenceType {
                         switch refType.kind {
-                        case .Index:
+                        case .Index(_, let isExact):
                             var indexType = self.getWasmTypeDef(for: type)
 
                             let indexTypeDesc = self.type(of: indexType).wasmTypeDefinition!
                                 .description!
                             if !indexTypeDesc.hasUnresolvedSelfReferences()
                                 && !indexTypeDesc.isFinal
+                                && !isExact
                             {
                                 if isCovariant {
                                     indexType = self.findVariable(satisfying: {
@@ -7284,7 +7294,12 @@ public class ProgramBuilder {
 
                             indexTypes.append(indexType)
                             // TODO(bettscheider): Possibly refine nullability.
-                            return .wasmRef(.Index(), nullability: refType.nullability)
+                            let canRefine = isCovariant  // if it's covariant, it implies the original field was immutable
+                            let randomlyExact =
+                                self.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                            let newIsExact = isExact || (canRefine && randomlyExact)
+                            return .wasmRef(
+                                .Index(isExact: newIsExact), nullability: refType.nullability)
                         case .Abstract(let info):
                             if isCovariant {
                                 let newNullability = refType.nullability
@@ -7344,8 +7359,9 @@ public class ProgramBuilder {
 
                 let linkedElementType: ILType
                 if let indexType {
+                    let isExact = elementType.wasmReferenceType!.kind.isExact
                     linkedElementType = type(of: indexType).wasmTypeDefinition!.getReferenceTypeTo(
-                        nullability: elementType.wasmReferenceType!.nullability)
+                        nullability: elementType.wasmReferenceType!.nullability, isExact: isExact)
                 } else {
                     linkedElementType = elementType
                 }
@@ -7393,17 +7409,10 @@ public class ProgramBuilder {
                 assert(!superStructType.isFinal)
                 assert(!superStructType.hasUnresolvedSelfReferences())
 
-                var indexTypeIterator = indexTypes.makeIterator()
-                var linkedFields: [WasmStructTypeDescription.Field] = []
-                for field in fields {
-                    if case .Index = field.type.wasmReferenceType?.kind {
-                        let indexType = indexTypeIterator.next()!
-                        let linkedType = type(of: indexType).wasmTypeDefinition!.getReferenceTypeTo(
-                            nullability: field.type.wasmReferenceType!.nullability)
-                        linkedFields.append(.init(type: linkedType, mutability: field.mutability))
-                    } else {
-                        linkedFields.append(field)
-                    }
+                let linkedFieldTypes = self.wasmLinkIndexTypes(
+                    fields.map { $0.type }, with: indexTypes)
+                let linkedFields = zip(fields, linkedFieldTypes).map {
+                    WasmStructTypeDescription.Field(type: $1, mutability: $0.mutability)
                 }
 
                 assert(fields.count >= superStructType.fields.count)

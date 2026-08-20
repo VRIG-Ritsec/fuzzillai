@@ -617,19 +617,20 @@ public enum Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf.Enum, Swift.CaseItera
 public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case index // = 0
-  case externref // = 1
-  case funcref // = 2
-  case exnref // = 3
-  case i31Ref // = 4
-  case anyref // = 5
-  case eqref // = 6
-  case structref // = 7
-  case arrayref // = 8
-  case noneref // = 9
-  case noexternref // = 10
-  case nofuncref // = 11
-  case noexnref // = 12
-  case jsstringref // = 13
+  case indexExact // = 1
+  case externref // = 2
+  case funcref // = 3
+  case exnref // = 4
+  case i31Ref // = 5
+  case anyref // = 6
+  case eqref // = 7
+  case structref // = 8
+  case arrayref // = 9
+  case noneref // = 10
+  case noexternref // = 11
+  case nofuncref // = 12
+  case noexnref // = 13
+  case jsstringref // = 14
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -639,19 +640,20 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   public init?(rawValue: Int) {
     switch rawValue {
     case 0: self = .index
-    case 1: self = .externref
-    case 2: self = .funcref
-    case 3: self = .exnref
-    case 4: self = .i31Ref
-    case 5: self = .anyref
-    case 6: self = .eqref
-    case 7: self = .structref
-    case 8: self = .arrayref
-    case 9: self = .noneref
-    case 10: self = .noexternref
-    case 11: self = .nofuncref
-    case 12: self = .noexnref
-    case 13: self = .jsstringref
+    case 1: self = .indexExact
+    case 2: self = .externref
+    case 3: self = .funcref
+    case 4: self = .exnref
+    case 5: self = .i31Ref
+    case 6: self = .anyref
+    case 7: self = .eqref
+    case 8: self = .structref
+    case 9: self = .arrayref
+    case 10: self = .noneref
+    case 11: self = .noexternref
+    case 12: self = .nofuncref
+    case 13: self = .noexnref
+    case 14: self = .jsstringref
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -659,19 +661,20 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   public var rawValue: Int {
     switch self {
     case .index: return 0
-    case .externref: return 1
-    case .funcref: return 2
-    case .exnref: return 3
-    case .i31Ref: return 4
-    case .anyref: return 5
-    case .eqref: return 6
-    case .structref: return 7
-    case .arrayref: return 8
-    case .noneref: return 9
-    case .noexternref: return 10
-    case .nofuncref: return 11
-    case .noexnref: return 12
-    case .jsstringref: return 13
+    case .indexExact: return 1
+    case .externref: return 2
+    case .funcref: return 3
+    case .exnref: return 4
+    case .i31Ref: return 5
+    case .anyref: return 6
+    case .eqref: return 7
+    case .structref: return 8
+    case .arrayref: return 9
+    case .noneref: return 10
+    case .noexternref: return 11
+    case .nofuncref: return 12
+    case .noexnref: return 13
+    case .jsstringref: return 14
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -679,6 +682,7 @@ public enum Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf.Enum, Swift.C
   // The compiler won't synthesize support with the UNRECOGNIZED case.
   public static let allCases: [Fuzzilli_Protobuf_WasmReferenceTypeKind] = [
     .index,
+    .indexExact,
     .externref,
     .funcref,
     .exnref,
@@ -7219,7 +7223,7 @@ extension Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_WasmReferenceTypeKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0\u{1}JSSTRINGREF\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INDEX\0\u{1}INDEX_EXACT\0\u{1}EXTERNREF\0\u{1}FUNCREF\0\u{1}EXNREF\0\u{1}I31REF\0\u{1}ANYREF\0\u{1}EQREF\0\u{1}STRUCTREF\0\u{1}ARRAYREF\0\u{1}NONEREF\0\u{1}NOEXTERNREF\0\u{1}NOFUNCREF\0\u{1}NOEXNREF\0\u{1}JSSTRINGREF\0")
 }
 
 extension Fuzzilli_Protobuf_WasmMemoryLoadType: SwiftProtobuf._ProtoNameProviding {

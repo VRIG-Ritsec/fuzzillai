@@ -107,7 +107,8 @@ struct LiveTests {
         checkFailureRate(testResults: results, maxFailureRate: 0.01)
     }
 
-    @Test func testWasmCodeGenerationAndCompilationAndExecution() throws {
+    @Test(arguments: [false, true])
+    func testWasmCodeGenerationAndCompilationAndExecution(enableCustomDescriptors: Bool) throws {
         let runner = JavaScriptExecutor(
             type: .any,
             withArguments: [
@@ -115,7 +116,12 @@ struct LiveTests {
             ]
         )!
 
-        let results = try Self.runLiveTest(withRunner: runner) { b in
+        let config = Configuration(
+            logLevel: .error, enableInspection: true,
+            enableCustomDescriptors: enableCustomDescriptors)
+        let fuzzer = makeMockFuzzer(config: config, environment: JavaScriptEnvironment())
+
+        let results = try Self.runLiveTest(withRunner: runner, using: fuzzer) { b in
             // Fuzzilli can't handle situations where there aren't any variables available.
             // Calling buildPrefix() however would significantly increase the error rate due to
             // the prefix itself failing. Instead we just create a dummy integer to bypass these

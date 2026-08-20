@@ -390,10 +390,13 @@ extension Instruction: ProtobufConvertible {
             default:
                 if underlyingWasmType <= .wasmGenericRef {
                     switch underlyingWasmType.wasmReferenceType!.kind {
-                    case .Index:
+                    case .Index(_, let isExact):
                         return Fuzzilli_Protobuf_WasmILType.with {
                             $0.refType = Fuzzilli_Protobuf_WasmReferenceType.with {
-                                $0.kind = Fuzzilli_Protobuf_WasmReferenceTypeKind.index
+                                $0.kind =
+                                    isExact
+                                    ? Fuzzilli_Protobuf_WasmReferenceTypeKind.indexExact
+                                    : Fuzzilli_Protobuf_WasmReferenceTypeKind.index
                                 $0.nullability = underlyingWasmType.wasmReferenceType!.nullability
                             }
                         }
@@ -533,6 +536,9 @@ extension Instruction: ProtobufConvertible {
             case .indexRef:
                 return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.nullref(
                     Fuzzilli_Protobuf_WasmReferenceTypeKind.index)
+            case .indexExactRef:
+                return Fuzzilli_Protobuf_WasmGlobal.OneOf_WasmGlobal.nullref(
+                    Fuzzilli_Protobuf_WasmReferenceTypeKind.indexExact)
             }
         }
 
@@ -1998,8 +2004,11 @@ extension Instruction: ProtobufConvertible {
                     fatalError("Unrecognized wasm value type \(value)")
                 }
             case .refType(_):
-                if wasmType.refType.kind == .index {
-                    return .wasmRef(.Index(), nullability: wasmType.refType.nullability)
+                if wasmType.refType.kind == .index || wasmType.refType.kind == .indexExact {
+                    return .wasmRef(
+                        .Index(isExact: wasmType.refType.kind == .indexExact),
+                        nullability: wasmType.refType.nullability
+                    )
                 }
                 let heapType: WasmAbstractHeapType =
                     switch wasmType.refType.kind {
@@ -2029,7 +2038,7 @@ extension Instruction: ProtobufConvertible {
                         .WasmNoFunc
                     case .noexnref:
                         .WasmNoExn
-                    case .index:
+                    case .index, .indexExact:
                         fatalError("Unexpected index type.")
                     case .UNRECOGNIZED(let value):
                         fatalError("Unrecognized wasm reference type \(value)")
@@ -2118,6 +2127,8 @@ extension Instruction: ProtobufConvertible {
                     return .i31ref
                 case .index:
                     return .indexRef
+                case .indexExact:
+                    return .indexExactRef
                 default:
                     fatalError("Unrecognized global wasm reference type \(val)")
                 }

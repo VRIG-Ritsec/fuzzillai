@@ -925,19 +925,20 @@ enum WasmValueType {
 
 enum WasmReferenceTypeKind {
   INDEX = 0;
-  EXTERNREF = 1;
-  FUNCREF = 2;
-  EXNREF = 3;
-  I31REF = 4;
-  ANYREF = 5;
-  EQREF = 6;
-  STRUCTREF = 7;
-  ARRAYREF = 8;
-  NONEREF = 9;
-  NOEXTERNREF = 10;
-  NOFUNCREF = 11;
-  NOEXNREF = 12;
-  JSSTRINGREF = 13;
+  INDEX_EXACT = 1;
+  EXTERNREF = 2;
+  FUNCREF = 3;
+  EXNREF = 4;
+  I31REF = 5;
+  ANYREF = 6;
+  EQREF = 7;
+  STRUCTREF = 8;
+  ARRAYREF = 9;
+  NONEREF = 10;
+  NOEXTERNREF = 11;
+  NOFUNCREF = 12;
+  NOEXNREF = 13;
+  JSSTRINGREF = 14;
 }
 
 message WasmReferenceType {

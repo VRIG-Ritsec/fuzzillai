@@ -341,7 +341,8 @@ public class OperationMutator: BaseInstructionMutator {
                 .imported:
                 // TODO(cffsmith): Support these enum values or drop them from the WasmGlobal.
                 fatalError("unimplemented")
-            case .indexRef:
+            case .indexRef,
+                .indexExactRef:
                 fatalError("JS globals cannot have Wasm index types")
             }
             newOp = CreateWasmGlobal(value: wasmGlobal, isMutable: probability(0.5))
@@ -452,9 +453,10 @@ public class OperationMutator: BaseInstructionMutator {
 
         case .wasmDefineGlobal(let op):
             // We never change the type of the global, only the value as changing the type will break the following code pretty much instantly.
-            if case .indexRef = op.wasmGlobal {
-                newOp = WasmDefineGlobal(wasmGlobal: .indexRef, isMutable: probability(0.5))
-            } else {
+            switch op.wasmGlobal {
+            case .indexRef, .indexExactRef:
+                newOp = WasmDefineGlobal(wasmGlobal: op.wasmGlobal, isMutable: probability(0.5))
+            default:
                 let oldWasmGlobal = op.wasmGlobal
                 let wasmGlobal: WasmGlobal =
                     switch oldWasmGlobal.toType() {

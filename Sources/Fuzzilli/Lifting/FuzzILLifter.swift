@@ -1033,6 +1033,8 @@ public class FuzzILLifter: Lifter {
             let isMutable = op.isMutable ? ", mutable" : ""
             if case .indexRef = op.wasmGlobal {
                 w.emit("\(output()) <- WasmDefineGlobal (ref null \(input(0)))\(isMutable)")
+            } else if case .indexExactRef = op.wasmGlobal {
+                w.emit("\(output()) <- WasmDefineGlobal (ref null exact \(input(0)))\(isMutable)")
             } else {
                 w.emit("\(output()) <- WasmDefineGlobal \(op.wasmGlobal)\(isMutable)")
             }

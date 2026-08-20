@@ -434,7 +434,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             default:
                 fatalError("The type \(abstractType) shouldn't have a definition")
             }
-        let refType = ILType.wasmRef(.Index(), nullability: Bool.random())
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: Bool.random())
         function.wasmRefTest(variable, refType: refType, typeDef: typeDef)
     },
 
@@ -485,7 +486,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             default:
                 fatalError("The type \(abstractType) shouldn't have a definition")
             }
-        let refType = ILType.wasmRef(.Index(), nullability: Bool.random())
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: Bool.random())
         function.wasmRefCast(variable, refType: refType, typeDef: typeDef)
     },
 
@@ -857,7 +859,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         produces: [.object(ofGroup: "WasmGlobal")]
     ) { b, type in
         let module = b.currentWasmModule
-        module.addGlobal(wasmGlobal: .indexRef, isMutable: probability(0.5), typeDef: type)
+        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+        let wasmGlobal: WasmGlobal = isExact ? .indexExactRef : .indexRef
+        module.addGlobal(wasmGlobal: wasmGlobal, isMutable: probability(0.5), typeDef: type)
     },
 
     CodeGenerator(
@@ -2173,8 +2177,10 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let isIndexType = !lastParamType.wasmReferenceType!.isAbstract()
             if isIndexType {
                 let typeDef = b.getWasmTypeDef(for: lastParamType)
+                let isExact = lastParamType.wasmReferenceType!.kind.isExact
                 let unlinkedLastParamType = ILType.wasmRef(
-                    .Index(), nullability: lastParamType.wasmReferenceType!.nullability)
+                    .Index(isExact: isExact),
+                    nullability: lastParamType.wasmReferenceType!.nullability)
                 function.wasmBranchOnCast(
                     v, targetRefType: unlinkedLastParamType, to: label, args: args, typeDef: typeDef
                 )
@@ -2634,8 +2640,9 @@ private let wasmArrayTypeGenerator = {
             let nullability =
                 b.type(of: elementType).wasmTypeDefinition!.description
                 == .selfReference || probability(0.5)
+            let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
             b.wasmDefineArrayType(
-                elementType: .wasmRef(.Index(), nullability: nullability),
+                elementType: .wasmRef(.Index(isExact: isExact), nullability: nullability),
                 mutability: mutability, indexType: elementType, isFinal: isFinal)
         } else {
             b.wasmDefineArrayType(
@@ -2724,7 +2731,8 @@ private let wasmSignatureTypeGenerator = {
                     b.type(of: elementType).wasmTypeDefinition!.description
                     == .selfReference || probability(0.5)
                 indexTypes.append(elementType)
-                return ILType.wasmRef(.Index(), nullability: nullability)
+                let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+                return ILType.wasmRef(.Index(isExact: isExact), nullability: nullability)
             } else {
                 // TODO(mliedtke): Extend list with abstract heap types.
                 return chooseUniform(from: ILType.wasmNonRefValueTypes)

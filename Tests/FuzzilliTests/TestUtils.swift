@@ -48,10 +48,13 @@ func v(_ n: Int) -> Variable {
     return Variable(number: n)
 }
 
-func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (ProgramBuilder) -> Void)
+func buildAndLiftProgram(
+    withLiftingOptions: LiftingOptions = [], config: Configuration? = nil,
+    buildFunc: (ProgramBuilder) -> Void
+)
     -> String
 {
-    let liveTestConfig = Configuration(logLevel: .error, enableInspection: true)
+    let liveTestConfig = config ?? Configuration(logLevel: .error, enableInspection: true)
 
     // We have to use the proper JavaScriptEnvironment here.
     // This ensures that we use the available builtins.
@@ -71,10 +74,6 @@ func buildAndLiftProgram(withLiftingOptions: LiftingOptions, buildFunc: (Program
 
         return fuzzer.lifter.lift(prog, withOptions: withLiftingOptions)
     }
-}
-
-func buildAndLiftProgram(buildFunc: (ProgramBuilder) -> Void) -> String {
-    return buildAndLiftProgram(withLiftingOptions: [], buildFunc: buildFunc)
 }
 
 func shouldRunCompilerTests() -> Bool {

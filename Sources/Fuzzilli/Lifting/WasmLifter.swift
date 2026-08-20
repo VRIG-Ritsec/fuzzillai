@@ -696,8 +696,9 @@ public class WasmLifter {
 
     private func encodeHeapType(_ refKind: WasmReferenceType.Kind) throws -> Data {
         switch refKind {
-        case .Index(let description, _):
-            return try encodeWasmGCType(description.get())
+        case .Index(let description, let isExact):
+            let typeIndexData = try encodeWasmGCType(description.get())
+            return isExact ? Data([0x62]) + typeIndexData : typeIndexData
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
         }
@@ -718,8 +719,10 @@ public class WasmLifter {
         switch refType.kind {
         case .Abstract(let heapTypeInfo):
             return encodeAbstractHeapType(heapTypeInfo)
-        case .Index:
-            return try encodeWasmGCType(typer.getTypeDescription(of: instr.input(typeInput)))
+        case .Index(_, let isExact):
+            let encodedTypeIndex = try encodeWasmGCType(
+                typer.getTypeDescription(of: instr.input(typeInput)))
+            return isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
         }
     }
 
@@ -1285,17 +1288,25 @@ public class WasmLifter {
         // TODO: in the future this should maybe be a context that allows instructions? Such that we can fuzz this expression as well?
         for case .global(let instruction) in self.exports {
             if let definition = instruction!.op as? WasmDefineGlobal {
-                if case .indexRef = definition.wasmGlobal {
+                let isExact: Bool? =
+                    switch definition.wasmGlobal {
+                    case .indexExactRef: true
+                    case .indexRef: false
+                    default: nil
+                    }
+
+                if let isExact = isExact {
                     let typeVar = instruction!.input(0)
                     let typeDesc = typer.getTypeDescription(of: typeVar)
                     let typeIndexData = try encodeWasmGCType(typeDesc)
+                    let exactByte = isExact ? Data([0x62]) : Data()
 
-                    // Type: (ref null $typeIndex). 0x63 is nullable ref.
-                    temp += Data([0x63]) + typeIndexData
+                    // Type: (ref null [exact] $typeIndex). 0x63 is nullable ref, 0x62 is exact
+                    temp += Data([0x63]) + exactByte + typeIndexData
                     temp += Data([definition.isMutable ? 0x1 : 0x0])
 
-                    // Init expr: ref.null $typeIndex, then end (0x0B)
-                    temp += Data([0xD0]) + typeIndexData + Data([0x0B])
+                    // Init expr: ref.null [exact] $typeIndex, then end (0x0B)
+                    temp += Data([0xD0]) + exactByte + typeIndexData + Data([0x0B])
                 } else {
                     let global = definition.wasmGlobal
                     temp += try encodeType(global.toType())
@@ -1323,7 +1334,8 @@ public class WasmLifter {
                         continue
                     case .refFunc(_),
                         .imported(_),
-                        .indexRef:
+                        .indexRef,
+                        .indexExactRef:
                         fatalError("unreachable")
                     }
                     temp += try lift(temporaryInstruction!)

@@ -2534,7 +2534,11 @@ public class JavaScriptLifter: Lifter {
         }
     }
 
-    // TODO(rherouart): Missing accessors to private properties, and more?
+    // Note: private property accesses (.getPrivateProperty) and many other guarded opcodes
+    // are intentionally NOT included here. While optional chaining (?.#) protects against
+    // null/undefined receivers, it does NOT protect against type errors.
+    // Ex: If the fuzzer provides an object that is not an instance of the declaring class, a
+    // runtime TypeError is thrown for private property access. Thus they still require try-catch wrapping.
     private func haveSpecialHandlingForGuardedOp(_ op: Operation) -> Bool {
         switch op.opcode {
         // We handle guarded property loads by emitting an optional chain, so no try-catch is necessary.

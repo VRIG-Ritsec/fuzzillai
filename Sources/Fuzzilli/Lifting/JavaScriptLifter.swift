@@ -275,7 +275,7 @@ public class JavaScriptLifter: Lifter {
             // Handling of guarded operations, part 1: unless we have special handling (e.g. for guarded property loads we use `o?.foo`),
             // we emit a try-catch around guarded operations so prepare for that.
             var guarding = false
-            if instr.isGuarded && !haveSpecialHandlingForGuardedOp(instr.op) {
+            if instr.isGuarded && !Self.haveSpecialHandlingForGuardedOp(instr.op) {
                 assert(!instr.isBlock, "Cannot wrap block headers/footers in try-catch")
                 guarding = true
 
@@ -2539,7 +2539,7 @@ public class JavaScriptLifter: Lifter {
     // null/undefined receivers, it does NOT protect against type errors.
     // Ex: If the fuzzer provides an object that is not an instance of the declaring class, a
     // runtime TypeError is thrown for private property access. Thus they still require try-catch wrapping.
-    private func haveSpecialHandlingForGuardedOp(_ op: Operation) -> Bool {
+    static func haveSpecialHandlingForGuardedOp(_ op: Operation) -> Bool {
         switch op.opcode {
         // We handle guarded property loads by emitting an optional chain, so no try-catch is necessary.
         case .getProperty,

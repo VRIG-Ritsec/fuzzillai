@@ -290,8 +290,6 @@ public class OperationMutator: BaseInstructionMutator {
             assert(!spreads.isEmpty)
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
-            // TODO(rherouart): Randomly mutate the `isGuarded` flag (e.g. flipping it) here
-            // and in other instructions to better explore optional chaining behavior.
             newOp = CallComputedMethodWithSpread(
                 numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
         case .unaryOperation(_):
@@ -954,7 +952,15 @@ public class OperationMutator: BaseInstructionMutator {
         // This assert is here to prevent subtle bugs if we ever decide to add flags that are "alive" during program building / mutation.
         // If we add flags, remove this assert and change the code below.
         assert(instr.flags == .empty)
-        return Instruction(newOp, inouts: inouts)
+
+        var modifiedOp = newOp
+        if let guardableOp = modifiedOp as? GuardableOperation,
+            JavaScriptLifter.haveSpecialHandlingForGuardedOp(modifiedOp), probability(0.1)
+        {
+            modifiedOp = guardableOp.withGuardedState(!guardableOp.isGuarded)
+        }
+
+        return Instruction(modifiedOp, inouts: inouts)
     }
 
     private func extendVariadicOperation(_ instr: Instruction, _ b: ProgramBuilder) -> Instruction {

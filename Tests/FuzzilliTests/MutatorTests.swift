@@ -165,6 +165,69 @@ struct MutatorTests {
         }
     }
 
+    @Test func testCodeGenMutatorNamedIntegers() {
+        // A generator that deterministically generates a different value each time.
+        var called = false
+        func generateInteger() -> Int64 {
+            if called {
+                return 42
+            } else {
+                called = true
+                return 301
+            }
+        }
+        let mockNamedInteger = ILType.namedInteger(ofName: "NamedInteger")
+
+        let env = JavaScriptEnvironment()
+        env.addNamedIntegerGenerator(forType: mockNamedInteger, with: generateInteger)
+
+        let config = Configuration(logLevel: .error)
+        let fuzzer = makeMockFuzzer(config: config, environment: env)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // We need a minimum number of visible variables for codeGeneration.
+            b.loadString("a")
+            b.loadString("b")
+
+            let _ = b.findOrGenerateType(mockNamedInteger)
+            #expect(called)
+
+            let prog = b.finalize()
+
+            let originalLoadInstruction = prog.code.filter { instr in
+                instr.op is LoadInteger
+            }
+
+            #expect(originalLoadInstruction.count == 1)
+            let originalLoad = originalLoadInstruction[0].op as! LoadInteger
+            #expect(originalLoad.value == 301)
+
+            // Mutator is probabalistic, try 10 times to ensure we are very likely
+            // to hit the generateInteger call.
+            let mutator = OperationMutator()
+            for _ in 1...10 {
+                let newBuilder = fuzzer.makeBuilder()
+                newBuilder.adopting {
+                    mutator.mutate(originalLoadInstruction[0], newBuilder)
+                }
+
+                let mutatedProg = newBuilder.finalize()
+
+                let newLoadInstruction = mutatedProg.code.filter { instr in
+                    instr.op is LoadInteger
+                }
+
+                #expect(newLoadInstruction.count == 1)
+                let newLoad = newLoadInstruction[0].op as! LoadInteger
+                if newLoad.value == 42 {
+                    return
+                }
+            }
+            Issue.record("Mutator ran 10 times without rerunning custom integer generator")
+        }
+    }
+
     @Test func testConcatMutatorBundleHostWithBundleCorpus() {
         let env = JavaScriptEnvironment()
         let config = Configuration(logLevel: .error, generateBundle: true)

@@ -829,7 +829,18 @@ public class ProgramBuilder {
         // TODO: Not sure how we should handle merge types, e.g. .string + .object(...).
         let typeGenerators: [ILType: () -> Variable] = [
             .integer:
-                { type.isEnumeration ? self.loadEnum(type) : self.loadInt(self.randomInt()) },
+                {
+                    if type.isEnumeration {
+                        return self.loadEnum(type)
+                    }
+                    if let typeName = type.group,
+                        let customIntGen = self.fuzzer.environment.getNamedIntegerGenerator(
+                            ofName: typeName)
+                    {
+                        return self.loadInt(customIntGen(), customName: typeName)
+                    }
+                    return self.loadInt(self.randomInt())
+                },
             .string:
                 {
                     if type.isEnumeration {

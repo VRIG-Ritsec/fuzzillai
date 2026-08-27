@@ -2078,8 +2078,15 @@ public struct JSTyper: Analyzer {
 
         switch instr.op.opcode {
         case .loadInteger(let op):
-            // Set to enum type if en enum for `op.customName` is registered.
-            set(instr.output, op.customName.flatMap(environment.getEnum) ?? .integer)
+            if let customName = op.customName {
+                if let enumTy = environment.getEnum(ofName: customName) {
+                    set(instr.output, enumTy)
+                } else {
+                    set(instr.output, .namedInteger(ofName: customName))
+                }
+            } else {
+                set(instr.output, .integer)
+            }
 
         case .loadBigInt:
             set(instr.output, .bigint)

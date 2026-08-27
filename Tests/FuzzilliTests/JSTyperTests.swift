@@ -2655,6 +2655,12 @@ struct JSTyperTests {
             return "mockStringValue"
         }
 
+        let mockNamedInteger = ILType.namedInteger(ofName: "NamedInteger")
+        func generateInteger() -> Int64 {
+            callCount += 1
+            return 42
+        }
+
         let fuzzer = makeMockFuzzer()
         fuzzer.sync {
             fuzzer.environment.registerObjectGroup(mockObject)
@@ -2663,6 +2669,8 @@ struct JSTyperTests {
                 forType: mockObject.instanceType, with: generateObject)
             fuzzer.environment.addNamedStringGenerator(
                 forType: mockNamedString, with: generateString)
+            fuzzer.environment.addNamedIntegerGenerator(
+                forType: mockNamedInteger, with: generateInteger)
             let b = fuzzer.makeBuilder()
             b.buildPrefix()
 
@@ -2681,6 +2689,15 @@ struct JSTyperTests {
             // Test that the returned variable gets typed correctly
             #expect(b.type(of: variable2).Is(mockNamedString))
             #expect(b.type(of: variable2).group == "NamedString")
+
+            // Try to get it to invoke the integer generator
+            let variable3 = b.findOrGenerateType(mockNamedInteger)
+            // Test that the generator was invoked
+            #expect(callCount == 3)
+
+            // Test that the returned variable gets typed correctly
+            #expect(b.type(of: variable3).Is(mockNamedInteger))
+            #expect(b.type(of: variable3).group == "NamedInteger")
 
             // We already generated a mockEnum, look for it.
             let foundEnum = b.randomVariable(ofType: mockEnum)!

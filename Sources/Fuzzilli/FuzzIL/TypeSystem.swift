@@ -224,6 +224,16 @@ public struct ILType: Hashable {
         return ILType(definiteType: .string, ext: ext)
     }
 
+    /// Constructs a named integer: this is an integer that typically has some specific range or format.
+    ///
+    /// Most code will treat these as integers, but the JavaScriptEnvironment can register
+    /// namedIntegerGenerators for them so they can be generated more intelligently.
+    public static func namedInteger(ofName name: String) -> ILType {
+        let ext = TypeExtension(
+            group: name, properties: Set(), methods: Set(), signature: nil, wasmExt: nil)
+        return ILType(definiteType: .integer, ext: ext)
+    }
+
     /// An object for which it is not known what properties or methods it has, if any.
     public static let unknownObject: ILType = .object()
 

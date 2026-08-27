@@ -1388,6 +1388,17 @@ struct TypeSystemTests {
     }
 
     @Test
+    func testNamedIntegers() {
+        let namedA = ILType.namedInteger(ofName: "A")
+        #expect(namedA.Is(.integer))
+        let namedB = ILType.namedInteger(ofName: "B")
+        #expect(namedA | namedB == .integer)
+        #expect(namedA & namedB == .nothing)
+        let objectA = ILType.object(ofGroup: "A", withProperties: ["a"])
+        #expect(namedA & objectA == .nothing)
+    }
+
+    @Test
     func testTypeDescriptions() {
         // Test primitive types
         #expect(ILType.undefined.description == ".undefined")

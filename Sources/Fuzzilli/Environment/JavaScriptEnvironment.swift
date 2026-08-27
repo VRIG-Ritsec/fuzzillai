@@ -331,6 +331,8 @@ public class JavaScriptEnvironment: ComponentBase {
         [String: (generator: EnvironmentValueGenerator, probability: Double)] = [:]
     // Named string generators, keyed on `type.group`
     private var namedStringGenerators: [String: () -> String] = [:]
+    // Named integer generators, keyed on `type.group`
+    private var namedIntegerGenerators: [String: () -> Int64] = [:]
     private var producingMethods: [ILType: [(group: String, method: String)]] = [:]
     private var producingProperties: [ILType: [(group: String, property: String)]] = [:]
     private var subtypes: [ILType: [ILType]] = [:]
@@ -676,6 +678,17 @@ public class JavaScriptEnvironment: ComponentBase {
             forType: .jsIntlVariantString, with: { ProgramBuilder.constructIntlVariantString() })
         addNamedStringGenerator(
             forType: .jsIntlUnitString, with: { ProgramBuilder.constructIntlUnit() })
+        addNamedIntegerGenerator(
+            forType: .jsUint8, with: { Int64(UInt8.random(in: .min ... .max)) })
+        addNamedIntegerGenerator(forType: .jsInt8, with: { Int64(Int8.random(in: .min ... .max)) })
+        addNamedIntegerGenerator(
+            forType: .jsUint16, with: { Int64(UInt16.random(in: .min ... .max)) })
+        addNamedIntegerGenerator(
+            forType: .jsInt16, with: { Int64(Int16.random(in: .min ... .max)) })
+        addNamedIntegerGenerator(
+            forType: .jsUint32, with: { Int64(UInt32.random(in: .min ... .max)) })
+        addNamedIntegerGenerator(
+            forType: .jsInt32, with: { Int64(Int32.random(in: .min ... .max)) })
 
         // Temporal types are produced by a large number of methods; which means findOrGenerateType(), when asked to produce
         // a Temporal type, will tend towards trying to call a method on another Temporal type, which needs more Temporal types,
@@ -873,6 +886,16 @@ public class JavaScriptEnvironment: ComponentBase {
             type.Is(.string),
             "Named string generators can only be registered for strings, found \(type)")
         namedStringGenerators[type.group!] = generator
+    }
+
+    // Register a generator for a custom named integer.
+    public func addNamedIntegerGenerator(
+        forType type: ILType, with generator: @escaping () -> Int64
+    ) {
+        assert(
+            type.Is(.integer),
+            "Named integer generators can only be registered for integers, found \(type)")
+        namedIntegerGenerators[type.group!] = generator
     }
 
     private func addProducingMethod(forType type: ILType, by method: String, on group: String) {
@@ -1111,6 +1134,12 @@ public class JavaScriptEnvironment: ComponentBase {
         namedStringGenerators[name]
     }
 
+    // For named integers, get a generator that is registered as being able to produce this
+    // named integer.
+    public func getNamedIntegerGenerator(ofName name: String) -> (() -> Int64)? {
+        namedIntegerGenerators[name]
+    }
+
     // If the object group refers to a constructor, get its path.
     public func getPathIfConstructor(ofGroup groupName: String) -> [String]? {
         guard let group = getGroup(groupName) else {
@@ -1321,6 +1350,14 @@ extension ILType {
     public static func jsSymbol(ofGroup group: String) -> ILType {
         return ILType.object(ofGroup: group, withProperties: ["description"])
     }
+
+    /// Type of numbers bound by integer constraints.
+    public static let jsUint8 = ILType.namedInteger(ofName: "Uint8")
+    public static let jsInt8 = ILType.namedInteger(ofName: "Int8")
+    public static let jsUint16 = ILType.namedInteger(ofName: "Uint16")
+    public static let jsInt16 = ILType.namedInteger(ofName: "Int16")
+    public static let jsUint32 = ILType.namedInteger(ofName: "Uint32")
+    public static let jsInt32 = ILType.namedInteger(ofName: "Int32")
 
     /// Type of a JavaScript array.
     public static let jsArray = createJsArrayType()

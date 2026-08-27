@@ -63,14 +63,20 @@ public class OperationMutator: BaseInstructionMutator {
         var inouts = instr.inouts
         switch instr.op.opcode {
         case .loadInteger(let op):
-            // Half the time we want to just hit the regular path
-            if Bool.random(),
-                let customName = op.customName,
-                let type = b.fuzzer.environment.getEnum(ofName: customName)
-            {
-                let value = Int64(chooseUniform(from: type.enumValues))!
-                newOp = LoadInteger(value: value, customName: customName)
-                break
+            if let customName = op.customName {
+                // Half the time we want to just hit the regular path
+                if Bool.random() {
+                    if let type = b.fuzzer.environment.getEnum(ofName: customName) {
+                        let value = Int64(chooseUniform(from: type.enumValues))!
+                        newOp = LoadInteger(value: value, customName: customName)
+                        break
+                    } else if let gen = b.fuzzer.environment.getNamedIntegerGenerator(
+                        ofName: customName)
+                    {
+                        newOp = LoadInteger(value: gen(), customName: customName)
+                        break
+                    }
+                }
             }
             newOp = LoadInteger(value: b.randomInt())
         case .loadBigInt(_):

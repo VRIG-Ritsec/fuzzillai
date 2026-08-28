@@ -204,7 +204,7 @@ struct LiveTests {
         }
 
         // For now, we expect a maximum of 10% of Wasm compilation attempts to fail.
-        checkFailureRate(testResults: results, maxFailureRate: 0.25)
+        checkFailureRate(testResults: results, maxFailureRate: 0.1)
     }
 
     @Test(.enabled(if: findWasmOptInPath() != nil, "skipped due to missing wasm-opt"))
@@ -289,7 +289,7 @@ struct LiveTests {
             b.append(mutatedProgram)
         }
 
-        checkFailureRate(testResults: results, maxFailureRate: 0.7)
+        checkFailureRate(testResults: results, maxFailureRate: 0.65)
     }
 
     // The closure can use the ProgramBuilder to emit a program of a specific

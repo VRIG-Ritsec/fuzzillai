@@ -30,6 +30,8 @@ if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 
             --profile=name               : Select one of several preconfigured profiles.
                                            Available profiles: \(profiles.keys).
             --jobs=n                     : Total number of fuzzing jobs. This will start a main instance and n-1 worker instances.
+            --workerDelay=n              : The delay in seconds between starting worker instances. If not specified, a random
+                                           delay between 1 and 10 minutes is used for each worker (default: random).
             --engine=name                : The fuzzing engine to use. Available engines: "mutation" (default), "hybrid", "multi".
                                            Only the mutation engine should be regarded stable at this point.
             --corpus=name                : The corpus scheduler to use. Available schedulers: "basic" (default), "markov"
@@ -137,6 +139,7 @@ if profile == nil || profileName == nil {
 }
 
 let numJobs = args.int(for: "--jobs") ?? 1
+let workerDelay = args.int(for: "--workerDelay")
 let logLevelName = args["--logLevel"] ?? "info"
 let engineName = args["--engine"] ?? "mutation"
 let corpusName = args["--corpus"] ?? "basic"
@@ -899,8 +902,15 @@ for i in 1..<numJobs {
     // Wait some time between starting workers to reduce the load on the main instance.
     // If we start the workers right away, they will all very quickly find new coverage
     // and send lots of (probably redundant) programs to the main instance.
-    let minDelay = 1 * Minutes
-    let maxDelay = 10 * Minutes
+    let minDelay: Double
+    let maxDelay: Double
+    if let delay = workerDelay {
+        minDelay = Double(delay) * Seconds
+        maxDelay = Double(delay) * Seconds
+    } else {
+        minDelay = 1 * Minutes
+        maxDelay = 10 * Minutes
+    }
     let delay = Double.random(in: minDelay...maxDelay)
     DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
         worker.async {

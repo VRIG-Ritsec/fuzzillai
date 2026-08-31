@@ -30,8 +30,9 @@ if args["-h"] != nil || args["--help"] != nil || args.numPositionalArguments != 
             --profile=name               : Select one of several preconfigured profiles.
                                            Available profiles: \(profiles.keys).
             --jobs=n                     : Total number of fuzzing jobs. This will start a main instance and n-1 worker instances.
-            --workerDelay=n              : The delay in seconds between starting worker instances. If not specified, a random
-                                           delay between 1 and 10 minutes is used for each worker (default: random).
+            --workerDelay=n              : The delay in seconds before starting the worker instances. If not specified, a random
+                                           delay between 1 and 10 minutes is used for each worker (default: random), otherwise all workers
+                                           are started at the same time.
             --engine=name                : The fuzzing engine to use. Available engines: "mutation" (default), "hybrid", "multi".
                                            Only the mutation engine should be regarded stable at this point.
             --corpus=name                : The corpus scheduler to use. Available schedulers: "basic" (default), "markov"

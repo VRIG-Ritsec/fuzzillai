@@ -272,10 +272,9 @@ public class JavaScriptLifter: Lifter {
                 continue
             }
 
-            // Handling of guarded operations, part 1: unless we have special handling (e.g. for guarded property loads we use `o?.foo`),
-            // we emit a try-catch around guarded operations so prepare for that.
+            // Handling of guarded operations, part 1: we emit a try-catch around guarded operations so prepare for that.
             var guarding = false
-            if instr.isGuarded && !Self.haveSpecialHandlingForGuardedOp(instr.op) {
+            if instr.isGuarded {
                 assert(!instr.isBlock, "Cannot wrap block headers/footers in try-catch")
                 guarding = true
 
@@ -812,7 +811,7 @@ public class JavaScriptLifter: Lifter {
                 let obj = input(0)
                 let expr =
                     MemberExpression.new() + obj
-                    + (liftMemberAccess(op.propertyName, isGuarded: op.isGuarded))
+                    + (liftMemberAccess(op.propertyName, isOptional: op.isOptional))
                 w.assign(expr, to: instr.output)
 
             case .setProperty(let op):
@@ -834,7 +833,7 @@ public class JavaScriptLifter: Lifter {
                 let obj = inputAsIdentifier(0)
                 let target =
                     MemberExpression.new() + obj
-                    + (liftMemberAccess(op.propertyName, isGuarded: op.isGuarded))
+                    + (liftMemberAccess(op.propertyName, isOptional: op.isOptional))
                 let expr = UnaryExpression.new() + "delete " + target
                 w.assign(expr, to: instr.output)
 
@@ -847,7 +846,7 @@ public class JavaScriptLifter: Lifter {
 
             case .getElement(let op):
                 let obj = input(0)
-                let accessOperator = op.isGuarded ? "?.[" : "["
+                let accessOperator = op.isOptional ? "?.[" : "["
                 let expr = MemberExpression.new() + obj + accessOperator + op.index + "]"
                 w.assign(expr, to: instr.output)
 
@@ -868,7 +867,7 @@ public class JavaScriptLifter: Lifter {
             case .deleteElement(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of an element deletion, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let accessOperator = op.isGuarded ? "?.[" : "["
+                let accessOperator = op.isOptional ? "?.[" : "["
                 let target = MemberExpression.new() + obj + accessOperator + op.index + "]"
                 let expr = UnaryExpression.new() + "delete " + target
                 w.assign(expr, to: instr.output)
@@ -882,7 +881,7 @@ public class JavaScriptLifter: Lifter {
 
             case .getComputedProperty(let op):
                 let obj = input(0)
-                let accessOperator = op.isGuarded ? "?.[" : "["
+                let accessOperator = op.isOptional ? "?.[" : "["
                 let expr = MemberExpression.new() + obj + accessOperator + input(1).text + "]"
                 w.assign(expr, to: instr.output)
 
@@ -903,7 +902,7 @@ public class JavaScriptLifter: Lifter {
             case .deleteComputedProperty(let op):
                 // For aesthetic reasons, we don't want to inline the lhs of a property deletion, so force it to be stored in a variable.
                 let obj = inputAsIdentifier(0)
-                let accessOperator = op.isGuarded ? "?.[" : "["
+                let accessOperator = op.isOptional ? "?.[" : "["
                 let target = MemberExpression.new() + obj + accessOperator + input(1).text + "]"
                 let expr = UnaryExpression.new() + "delete " + target
                 w.assign(expr, to: instr.output)
@@ -1059,19 +1058,22 @@ public class JavaScriptLifter: Lifter {
                 let expr = UnaryExpression.new() + "await " + input(0)
                 w.assign(expr, to: instr.output)
 
-            case .callFunction:
+            case .callFunction(let op):
                 // Avoid inlining of the function expression. This is mostly for aesthetic reasons, but is also required if the expression for
                 // the function is a MemberExpression since it would otherwise be interpreted as a method call, not a function call.
                 let f = inputAsIdentifier(0)
                 let args = inputs.dropFirst()
-                let expr = CallExpression.new() + f + "(" + liftCallArguments(args) + ")"
+                let expr =
+                    CallExpression.new() + f + (op.isOptional ? "?.(" : "(")
+                    + liftCallArguments(args) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callFunctionWithSpread(let op):
                 let f = inputAsIdentifier(0)
                 let args = inputs.dropFirst()
                 let expr =
-                    CallExpression.new() + f + "(" + liftCallArguments(args, spreading: op.spreads)
+                    CallExpression.new() + f + (op.isOptional ? "?.(" : "(")
+                    + liftCallArguments(args, spreading: op.spreads)
                     + ")"
                 w.assign(expr, to: instr.output)
 
@@ -1091,35 +1093,47 @@ public class JavaScriptLifter: Lifter {
                 // For aesthetic reasons we disallow inlining "new" expressions so that their result is always assigned to a new variable.
                 w.assign(expr, to: instr.output, allowInlining: false)
 
+            // TODO(rherouart): Currently, isOptional causes both the property access and call to be optional (o?.m?.()).
+            // If FuzzIL is extended to distinguish receiver optionality from call optionality, lift them independently here.
             case .callMethod(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + (liftMemberAccess(op.methodName))
+                let method =
+                    MemberExpression.new() + obj
+                    + (liftMemberAccess(op.methodName, isOptional: op.isOptional))
                 let args = inputs.dropFirst()
-                let expr = CallExpression.new() + method + "(" + liftCallArguments(args) + ")"
+                let expr =
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
+                    + liftCallArguments(args) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callMethodWithSpread(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + (liftMemberAccess(op.methodName))
+                let method =
+                    MemberExpression.new() + obj
+                    + (liftMemberAccess(op.methodName, isOptional: op.isOptional))
                 let args = inputs.dropFirst()
                 let expr =
-                    CallExpression.new() + method + "("
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
                     + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
-            case .callComputedMethod:
+            case .callComputedMethod(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + "[" + input(1).text + "]"
+                let accessOperator = op.isOptional ? "?.[" : "["
+                let method = MemberExpression.new() + obj + accessOperator + input(1).text + "]"
                 let args = inputs.dropFirst(2)
-                let expr = CallExpression.new() + method + "(" + liftCallArguments(args) + ")"
+                let expr =
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
+                    + liftCallArguments(args) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callComputedMethodWithSpread(let op):
                 let obj = input(0)
-                let method = MemberExpression.new() + obj + "[" + input(1).text + "]"
+                let accessOperator = op.isOptional ? "?.[" : "["
+                let method = MemberExpression.new() + obj + accessOperator + input(1).text + "]"
                 let args = inputs.dropFirst(2)
                 let expr =
-                    CallExpression.new() + method + "("
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
                     + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
@@ -1275,7 +1289,7 @@ public class JavaScriptLifter: Lifter {
 
             case .getPrivateProperty(let op):
                 let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
+                let opToken = op.isOptional ? "?.#" : ".#"
                 let expr = MemberExpression.new() + obj + opToken + op.propertyName
                 w.assign(expr, to: instr.output)
 
@@ -1295,19 +1309,21 @@ public class JavaScriptLifter: Lifter {
 
             case .callPrivateMethod(let op):
                 let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
+                let opToken = op.isOptional ? "?.#" : ".#"
                 let method = MemberExpression.new() + obj + opToken + op.methodName
                 let args = inputs.dropFirst()
-                let expr = CallExpression.new() + method + "(" + liftCallArguments(args) + ")"
+                let expr =
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
+                    + liftCallArguments(args) + ")"
                 w.assign(expr, to: instr.output)
 
             case .callPrivateMethodWithSpread(let op):
                 let obj = input(0)
-                let opToken = op.isGuarded ? "?.#" : ".#"
+                let opToken = op.isOptional ? "?.#" : ".#"
                 let method = MemberExpression.new() + obj + opToken + op.methodName
                 let args = inputs.dropFirst()
                 let expr =
-                    CallExpression.new() + method + "("
+                    CallExpression.new() + method + (op.isOptional ? "?.(" : "(")
                     + liftCallArguments(args, spreading: op.spreads) + ")"
                 w.assign(expr, to: instr.output)
 
@@ -2224,12 +2240,12 @@ public class JavaScriptLifter: Lifter {
         return "\"\(name)\""
     }
 
-    private func liftMemberAccess(_ name: String, isGuarded: Bool = false) -> String {
+    private func liftMemberAccess(_ name: String, isOptional: Bool = false) -> String {
         if environment.isValidDotNotationName(name) {
-            return (isGuarded ? "?." : ".") + name
+            return (isOptional ? "?." : ".") + name
         }
         let safeName = environment.isValidPropertyIndex(name) ? name : "\"\(name)\""
-        return (isGuarded ? "?." : "") + "[" + safeName + "]"
+        return (isOptional ? "?." : "") + "[" + safeName + "]"
     }
 
     private func liftParameterDestructuringPattern<Iter: IteratorProtocol>(
@@ -2531,26 +2547,6 @@ public class JavaScriptLifter: Lifter {
             return NegativeNumberLiteral.new(String(value))
         } else {
             return NumberLiteral.new(String(value))
-        }
-    }
-
-    // Note: private property accesses (.getPrivateProperty) and many other guarded opcodes
-    // are intentionally NOT included here. While optional chaining (?.#) protects against
-    // null/undefined receivers, it does NOT protect against type errors.
-    // Ex: If the fuzzer provides an object that is not an instance of the declaring class, a
-    // runtime TypeError is thrown for private property access. Thus they still require try-catch wrapping.
-    static func haveSpecialHandlingForGuardedOp(_ op: Operation) -> Bool {
-        switch op.opcode {
-        // We handle guarded property loads by emitting an optional chain, so no try-catch is necessary.
-        case .getProperty,
-            .getElement,
-            .getComputedProperty,
-            .deleteProperty,
-            .deleteElement,
-            .deleteComputedProperty:
-            return true
-        default:
-            return false
         }
     }
 

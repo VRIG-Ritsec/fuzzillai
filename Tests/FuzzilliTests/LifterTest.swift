@@ -1067,7 +1067,7 @@ struct LifterTests {
                             methodName: "im", numArguments: 2, spreads: [true, false],
                             isGuarded: false), withInputs: [this, args[1], args[1]])
                     let _ = b.emit(
-                        GetPrivateProperty(propertyName: "ifoo", isGuarded: true),
+                        GetPrivateProperty(propertyName: "ifoo", isGuarded: true, isOptional: true),
                         withInputs: [this])
                     b.updatePrivateProperty("ibar", of: this, with: args[1], using: .Add)
                 }
@@ -2343,42 +2343,88 @@ struct LifterTests {
             let b = fuzzer.makeBuilder()
 
             let o = b.createNamedVariable(forBuiltin: "o")
-            let a = b.getProperty("a", of: o, guard: true)
-            b.getProperty("b", of: a, guard: true)
-            b.getElement(0, of: o, guard: true)
-            b.getComputedProperty(b.loadString("bar"), of: o, guard: true)
-            b.deleteProperty("unfoo", of: o, guard: true)
-            b.deleteElement(1, of: o, guard: true)
-            b.deleteComputedProperty(b.loadString("unbar"), of: o, guard: true)
+            // 1. optional only
+            let a = b.getProperty("a", of: o, optional: true)
+            // 2. optional
+            let _ = b.getProperty("b", of: a, optional: true)
+            // 3. basic load
+            let _ = b.getElement(0, of: o)
 
-            // Stores must never use the optional chaining operator on the left-hand side.
+            // Updates (only have guarded, not optional)
+            b.updateProperty("foo", of: o, with: b.loadInt(1), using: .Add, guard: true)
+            b.updateElement(0, of: o, with: b.loadInt(2), using: .Add, guard: true)
+            b.updateComputedProperty(
+                b.loadString("baz"), of: o, with: b.loadInt(3), using: .Add, guard: true)
+
+            // Stores (only have guarded, not optional)
             let v = b.loadInt(42)
-            let t1 = b.getProperty("t1", of: o, guard: true)
-            b.setProperty("foo", of: t1, to: v)
-            let t2 = b.getProperty("t2", of: o, guard: true)
-            b.setElement(0, of: t2, to: v)
-            let t3 = b.getProperty("t3", of: o, guard: true)
-            b.setComputedProperty(b.loadString("baz"), of: t3, to: v)
+            b.setProperty("bar", of: o, to: v, guard: true)
+            b.setElement(0, of: o, to: v, guard: true)
+            b.setComputedProperty(b.loadString("bar"), of: o, to: v, guard: true)
+
+            // Calls
+            let _ = b.callMethod("sayHi", on: o, guard: true, optional: true)
+            let _ = b.callMethod("sayBye", on: o, guard: true)
+            let _ = b.callMethod("sayNothing", on: o, optional: true)
+            let _ = b.callComputedMethod(b.loadString("compMethod"), on: o, optional: true)
+
+            // Double chaining (pure optional, no guards to prevent inlining)
+            let a2 = b.getProperty("a2", of: o, optional: true)
+            let _ = b.getProperty("b2", of: a2, optional: true)
+
+            // Exhaustive computed / optional reads and deletes
+            b.getComputedProperty(b.loadString("bar"), of: o, optional: true)
+            b.deleteProperty("unfoo", of: o, optional: true)
+            b.deleteElement(1, of: o, optional: true)
+            b.deleteComputedProperty(b.loadString("unbar"), of: o, optional: true)
 
             let program = b.finalize()
-
             let actual = fuzzer.lifter.lift(program)
+
             let expected = """
                 o?.a?.b;
-                o?.[0];
+                o[0];
+                try { o.foo += 1; } catch (e) {}
+                try { o[0] += 2; } catch (e) {}
+                try { o["baz"] += 3; } catch (e) {}
+                try { o.bar = 42; } catch (e) {}
+                try { o[0] = 42; } catch (e) {}
+                try { o["bar"] = 42; } catch (e) {}
+                try { o?.sayHi?.(); } catch (e) {}
+                try { o.sayBye(); } catch (e) {}
+                o?.sayNothing?.();
+                o?.["compMethod"]?.();
+                o?.a2?.b2;
                 o?.["bar"];
                 delete o?.unfoo;
                 delete o?.[1];
                 delete o?.["unbar"];
-                const t0 = o?.t1;
-                t0.foo = 42;
-                const t8 = o?.t2;
-                t8[0] = 42;
-                const t10 = o?.t3;
-                t10["baz"] = 42;
 
                 """
 
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func testUnboundFunctionCallAndApplyLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let f = b.createNamedVariable(forBuiltin: "f")
+            let receiver = b.createNamedVariable(forBuiltin: "receiver")
+            let arg = b.loadInt(42)
+
+            b.callMethod("call", on: f, withArgs: [receiver, arg], optional: true)
+            b.callMethod(
+                "apply", on: f, withArgs: [receiver, b.createArray(with: [arg])], optional: true)
+
+            let program = b.finalize()
+            let actual = fuzzer.lifter.lift(program)
+            let expected = """
+                f?.call?.(receiver, 42);
+                f?.apply?.(receiver, [42]);
+
+                """
             #expect(actual == expected)
         }
     }
@@ -2837,7 +2883,7 @@ struct LifterTests {
             for name in ["???", "0", "01", "1", "0.1", "-1", "$valid_id_42", "42_invalid_id"] {
                 b.setProperty(name, of: obj, to: b.getProperty(name, of: obj))
                 b.updateProperty(
-                    name, of: obj, with: b.getProperty(name, of: obj, guard: true), using: .Add)
+                    name, of: obj, with: b.getProperty(name, of: obj, optional: true), using: .Add)
                 b.deleteProperty(name, of: obj)
             }
 

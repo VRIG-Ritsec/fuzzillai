@@ -444,10 +444,10 @@ extension RuntimeAssistedMutator.Action {
             let c: Variable
             switch try getInput(1) {
             case .string(let member):
-                c = b.getProperty(member, of: o, guard: isGuarded)
+                c = b.getProperty(member, of: o)
             default:
                 let member = try translateInput(1)
-                c = b.getComputedProperty(member, of: o, guard: isGuarded)
+                c = b.getComputedProperty(member, of: o)
             }
             let args = try translateInputs(2...)
             b.construct(c, withArgs: args, guard: isGuarded)
@@ -455,12 +455,12 @@ extension RuntimeAssistedMutator.Action {
             let o = try translateInput(0)
             switch try getInput(1) {
             case .string(let propertyName):
-                b.getProperty(propertyName, of: o, guard: isGuarded)
+                b.getProperty(propertyName, of: o)
             case .int(let index):
-                b.getElement(index, of: o, guard: isGuarded)
+                b.getElement(index, of: o)
             default:
                 let property = try translateInput(1)
-                b.getComputedProperty(property, of: o, guard: isGuarded)
+                b.getComputedProperty(property, of: o)
             }
         case .SetProperty:
             let o = try translateInput(0)
@@ -469,21 +469,21 @@ extension RuntimeAssistedMutator.Action {
             case .string(let propertyName):
                 b.setProperty(propertyName, of: o, to: v, guard: isGuarded)
             case .int(let index):
-                b.setElement(index, of: o, to: v)
+                b.setElement(index, of: o, to: v, guard: isGuarded)
             default:
                 let property = try translateInput(1)
-                b.setComputedProperty(property, of: o, to: v)
+                b.setComputedProperty(property, of: o, to: v, guard: isGuarded)
             }
         case .DeleteProperty:
             let o = try translateInput(0)
             switch try getInput(1) {
             case .string(let propertyName):
-                b.deleteProperty(propertyName, of: o, guard: isGuarded)
+                b.deleteProperty(propertyName, of: o)
             case .int(let index):
-                b.deleteElement(index, of: o, guard: isGuarded)
+                b.deleteElement(index, of: o)
             default:
                 let property = try translateInput(1)
-                b.deleteComputedProperty(property, of: o, guard: isGuarded)
+                b.deleteComputedProperty(property, of: o)
             }
         case .Add:
             try translateBinaryOperation(.Add)

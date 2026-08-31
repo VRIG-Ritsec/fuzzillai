@@ -418,7 +418,7 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- CreateTemplateString [\(parts)], [\(values)]")
 
         case .getProperty(let op):
-            let opcode = op.isGuarded ? "GetProperty (guarded)" : "GetProperty"
+            let opcode = op.isOptional ? "GetProperty (optional)" : "GetProperty"
             w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
 
         case .setProperty(let op):
@@ -429,7 +429,7 @@ public class FuzzILLifter: Lifter {
             w.emit("UpdateProperty \(input(0)), '\(op.op.token)', \(input(1))")
 
         case .deleteProperty(let op):
-            let opcode = op.isGuarded ? "DeleteProperty (guarded)" : "DeleteProperty"
+            let opcode = op.isOptional ? "DeleteProperty (optional)" : "DeleteProperty"
             w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
 
         case .configureProperty(let op):
@@ -438,17 +438,18 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getElement(let op):
-            let opcode = op.isGuarded ? "GetElement (guarded)" : "GetElement"
+            let opcode = op.isOptional ? "GetElement (optional)" : "GetElement"
             w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
 
         case .setElement(let op):
-            w.emit("SetElement \(input(0)), '\(op.index)', \(input(1))")
+            let opcode = op.isGuarded ? "SetElement (guarded)" : "SetElement"
+            w.emit("\(opcode) \(input(0)), '\(op.index)', \(input(1))")
 
         case .updateElement(let op):
             w.emit("UpdateElement \(instr.input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
 
         case .deleteElement(let op):
-            let opcode = op.isGuarded ? "DeleteElement (guarded)" : "DeleteElement"
+            let opcode = op.isOptional ? "DeleteElement (optional)" : "DeleteElement"
             w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
 
         case .configureElement(let op):
@@ -457,18 +458,19 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getComputedProperty(let op):
-            let opcode = op.isGuarded ? "GetComputedProperty (guarded)" : "GetComputedProperty"
+            let opcode = op.isOptional ? "GetComputedProperty (optional)" : "GetComputedProperty"
             w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
 
-        case .setComputedProperty:
-            w.emit("SetComputedProperty \(input(0)), \(input(1)), \(input(2))")
+        case .setComputedProperty(let op):
+            let opcode = op.isGuarded ? "SetComputedProperty (guarded)" : "SetComputedProperty"
+            w.emit("\(opcode) \(input(0)), \(input(1)), \(input(2))")
 
         case .updateComputedProperty(let op):
             w.emit("UpdateComputedProperty \(input(0)), \(input(1)), '\(op.op.token)',\(input(2))")
 
         case .deleteComputedProperty(let op):
             let opcode =
-                op.isGuarded ? "DeleteComputedProperty (guarded)" : "DeleteComputedProperty"
+                op.isOptional ? "DeleteComputedProperty (optional)" : "DeleteComputedProperty"
             w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
 
         case .configureComputedProperty(let op):

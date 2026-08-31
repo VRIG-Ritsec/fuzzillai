@@ -52,6 +52,11 @@ class JsOperation: Operation {
 /// because we know that the following code will not make any specific
 /// assumptions about the type of the outputs.
 /// TODO(rherouart): There are many operations still adding both a try-catch and .? (optional chaining)
+protocol OptionalOperation: JsOperation {
+    var isOptional: Bool { get }
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation
+}
+
 protocol GuardableOperation: JsOperation {
     var isGuarded: Bool { get }
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation
@@ -1061,21 +1066,20 @@ final class CreateTemplateString: JsOperation {
     }
 }
 
-final class GetProperty: JsOperation, GuardableOperation {
+final class GetProperty: JsOperation, OptionalOperation {
     override var opcode: Opcode { .getProperty(self) }
 
-    let isGuarded: Bool
-
     let propertyName: String
+    let isOptional: Bool
 
-    init(propertyName: String, isGuarded: Bool) {
+    init(propertyName: String, isOptional: Bool = false) {
         self.propertyName = propertyName
-        self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return GetProperty(propertyName: propertyName, isGuarded: isGuarded)
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return GetProperty(propertyName: propertyName, isOptional: isOptional)
     }
 }
 
@@ -1097,34 +1101,39 @@ final class SetProperty: JsOperation, GuardableOperation {
     }
 }
 
-final class UpdateProperty: JsOperation {
+final class UpdateProperty: JsOperation, GuardableOperation {
     override var opcode: Opcode { .updateProperty(self) }
 
     let propertyName: String
     let op: BinaryOperator
-
-    init(propertyName: String, operator op: BinaryOperator) {
-        self.propertyName = propertyName
-        self.op = op
-        super.init(numInputs: 2, attributes: .isMutable)
-    }
-}
-
-final class DeleteProperty: JsOperation, GuardableOperation {
-    override var opcode: Opcode { .deleteProperty(self) }
-
     let isGuarded: Bool
 
-    let propertyName: String
-
-    init(propertyName: String, isGuarded: Bool) {
+    init(propertyName: String, operator op: BinaryOperator, isGuarded: Bool = false) {
         self.propertyName = propertyName
+        self.op = op
         self.isGuarded = isGuarded
-        super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
+        super.init(numInputs: 2, attributes: .isMutable)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return DeleteProperty(propertyName: propertyName, isGuarded: isGuarded)
+        return UpdateProperty(propertyName: propertyName, operator: op, isGuarded: isGuarded)
+    }
+}
+
+final class DeleteProperty: JsOperation, OptionalOperation {
+    override var opcode: Opcode { .deleteProperty(self) }
+
+    let propertyName: String
+    let isOptional: Bool
+
+    init(propertyName: String, isOptional: Bool = false) {
+        self.propertyName = propertyName
+        self.isOptional = isOptional
+        super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
+    }
+
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return DeleteProperty(propertyName: propertyName, isOptional: isOptional)
     }
 }
 
@@ -1170,63 +1179,73 @@ final class ConfigureProperty: JsOperation {
     }
 }
 
-final class GetElement: JsOperation, GuardableOperation {
+final class GetElement: JsOperation, OptionalOperation {
     override var opcode: Opcode { .getElement(self) }
 
-    let isGuarded: Bool
-
     let index: Int64
+    let isOptional: Bool
 
-    init(index: Int64, isGuarded: Bool) {
+    init(index: Int64, isOptional: Bool = false) {
         self.index = index
-        self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return GetElement(index: index, isGuarded: isGuarded)
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return GetElement(index: index, isOptional: isOptional)
     }
 }
 
-final class SetElement: JsOperation {
+final class SetElement: JsOperation, GuardableOperation {
     override var opcode: Opcode { .setElement(self) }
 
     let index: Int64
+    let isGuarded: Bool
 
-    init(index: Int64) {
+    init(index: Int64, isGuarded: Bool = false) {
         self.index = index
+        self.isGuarded = isGuarded
         super.init(numInputs: 2, attributes: .isMutable)
+    }
+
+    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
+        return SetElement(index: index, isGuarded: isGuarded)
     }
 }
 
-final class UpdateElement: JsOperation {
+final class UpdateElement: JsOperation, GuardableOperation {
     override var opcode: Opcode { .updateElement(self) }
 
     let index: Int64
     let op: BinaryOperator
-
-    init(index: Int64, operator op: BinaryOperator) {
-        self.index = index
-        self.op = op
-        super.init(numInputs: 2, attributes: .isMutable)
-    }
-}
-
-final class DeleteElement: JsOperation, GuardableOperation {
-    override var opcode: Opcode { .deleteElement(self) }
-
     let isGuarded: Bool
 
-    let index: Int64
-
-    init(index: Int64, isGuarded: Bool) {
+    init(index: Int64, operator op: BinaryOperator, isGuarded: Bool = false) {
         self.index = index
+        self.op = op
         self.isGuarded = isGuarded
-        super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
+        super.init(numInputs: 2, attributes: .isMutable)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return DeleteElement(index: index, isGuarded: isGuarded)
+        return UpdateElement(index: index, operator: op, isGuarded: isGuarded)
+    }
+}
+
+final class DeleteElement: JsOperation, OptionalOperation {
+    override var opcode: Opcode { .deleteElement(self) }
+
+    let index: Int64
+    let isOptional: Bool
+
+    init(index: Int64, isOptional: Bool = false) {
+        self.index = index
+        self.isOptional = isOptional
+        super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
+    }
+
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return DeleteElement(index: index, isOptional: isOptional)
     }
 }
 
@@ -1245,52 +1264,65 @@ final class ConfigureElement: JsOperation {
     }
 }
 
-final class GetComputedProperty: JsOperation, GuardableOperation {
+final class GetComputedProperty: JsOperation, OptionalOperation {
     override var opcode: Opcode { .getComputedProperty(self) }
 
-    let isGuarded: Bool
+    let isOptional: Bool
 
-    init(isGuarded: Bool) {
-        self.isGuarded = isGuarded
+    init(isOptional: Bool = false) {
+        self.isOptional = isOptional
         super.init(numInputs: 2, numOutputs: 1)
     }
 
-    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return GetComputedProperty(isGuarded: isGuarded)
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return GetComputedProperty(isOptional: isOptional)
     }
 }
 
-final class SetComputedProperty: JsOperation {
+final class SetComputedProperty: JsOperation, GuardableOperation {
     override var opcode: Opcode { .setComputedProperty(self) }
 
-    init() {
+    let isGuarded: Bool
+
+    init(isGuarded: Bool = false) {
+        self.isGuarded = isGuarded
         super.init(numInputs: 3, numOutputs: 0)
+    }
+
+    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
+        return SetComputedProperty(isGuarded: isGuarded)
     }
 }
 
-final class UpdateComputedProperty: JsOperation {
+final class UpdateComputedProperty: JsOperation, GuardableOperation {
     override var opcode: Opcode { .updateComputedProperty(self) }
 
     let op: BinaryOperator
-
-    init(operator op: BinaryOperator) {
-        self.op = op
-        super.init(numInputs: 3, numOutputs: 0)
-    }
-}
-
-final class DeleteComputedProperty: JsOperation, GuardableOperation {
-    override var opcode: Opcode { .deleteComputedProperty(self) }
-
     let isGuarded: Bool
 
-    init(isGuarded: Bool) {
+    init(operator op: BinaryOperator, isGuarded: Bool = false) {
+        self.op = op
         self.isGuarded = isGuarded
-        super.init(numInputs: 2, numOutputs: 1)
+        super.init(numInputs: 3, numOutputs: 0)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return DeleteComputedProperty(isGuarded: isGuarded)
+        return UpdateComputedProperty(operator: op, isGuarded: isGuarded)
+    }
+}
+
+final class DeleteComputedProperty: JsOperation, OptionalOperation {
+    override var opcode: Opcode { .deleteComputedProperty(self) }
+
+    let isOptional: Bool
+
+    init(isOptional: Bool = false) {
+        self.isOptional = isOptional
+        super.init(numInputs: 2, numOutputs: 1)
+    }
+
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return DeleteComputedProperty(isOptional: isOptional)
     }
 }
 
@@ -1634,32 +1666,41 @@ final class Await: JsOperation {
     }
 }
 
-final class CallFunction: JsOperation, GuardableOperation {
+final class CallFunction: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callFunction(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     var numArguments: Int {
         return numInputs - 1
     }
 
-    init(numArguments: Int, isGuarded: Bool) {
+    init(numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
         // The called function is the first input.
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallFunction(
+            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return CallFunction(numArguments: numArguments, isGuarded: isGuarded)
+        return CallFunction(
+            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
     }
 }
 
-final class CallFunctionWithSpread: JsOperation, GuardableOperation {
+final class CallFunctionWithSpread: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callFunctionWithSpread(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let spreads: [Bool]
 
@@ -1667,20 +1708,28 @@ final class CallFunctionWithSpread: JsOperation, GuardableOperation {
         return numInputs - 1
     }
 
-    init(numArguments: Int, spreads: [Bool], isGuarded: Bool) {
+    init(numArguments: Int, spreads: [Bool], isGuarded: Bool, isOptional: Bool = false) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The called function is the first input.
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallFunctionWithSpread(
+            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
+            isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallFunctionWithSpread(
-            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded)
+            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
+            isOptional: isOptional)
     }
 }
 
@@ -1734,10 +1783,11 @@ final class ConstructWithSpread: JsOperation, GuardableOperation {
     }
 }
 
-final class CallMethod: JsOperation, GuardableOperation {
+final class CallMethod: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callMethod(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let methodName: String
 
@@ -1745,24 +1795,34 @@ final class CallMethod: JsOperation, GuardableOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, isGuarded: Bool) {
+    init(methodName: String, numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
         self.methodName = methodName
         // The reference object is the first input
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isMutable, .isVariadic, .isCall])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return CallMethod(methodName: methodName, numArguments: numArguments, isGuarded: isGuarded)
+        return CallMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isOptional: isOptional)
     }
 }
 
-final class CallMethodWithSpread: JsOperation, GuardableOperation {
+final class CallMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callMethodWithSpread(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let methodName: String
     let spreads: [Bool]
@@ -1771,51 +1831,70 @@ final class CallMethodWithSpread: JsOperation, GuardableOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool) {
+    init(
+        methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool,
+        isOptional: Bool = false
+    ) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
         self.methodName = methodName
         self.spreads = spreads
         // The reference object is the first input
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isMutable, .isVariadic, .isCall])
+    }
+
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallMethodWithSpread(
+            methodName: methodName, numArguments: numArguments, spreads: spreads,
+            isGuarded: isGuarded, isOptional: isOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded)
+            isGuarded: isGuarded, isOptional: isOptional)
     }
 }
 
-final class CallComputedMethod: JsOperation, GuardableOperation {
+final class CallComputedMethod: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callComputedMethod(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     var numArguments: Int {
         return numInputs - 2
     }
 
-    init(numArguments: Int, isGuarded: Bool) {
+    init(numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
         // The reference object is the first input and the method name is the second input
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
             attributes: [.isVariadic, .isCall])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallComputedMethod(
+            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return CallComputedMethod(numArguments: numArguments, isGuarded: isGuarded)
+        return CallComputedMethod(
+            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
     }
 }
 
-final class CallComputedMethodWithSpread: JsOperation, GuardableOperation {
+final class CallComputedMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callComputedMethodWithSpread(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let spreads: [Bool]
 
@@ -1823,20 +1902,28 @@ final class CallComputedMethodWithSpread: JsOperation, GuardableOperation {
         return numInputs - 2
     }
 
-    init(numArguments: Int, spreads: [Bool], isGuarded: Bool) {
+    init(numArguments: Int, spreads: [Bool], isGuarded: Bool, isOptional: Bool = false) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The reference object is the first input and the method name is the second input
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
             attributes: [.isMutable, .isVariadic, .isCall])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallComputedMethodWithSpread(
+            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
+            isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallComputedMethodWithSpread(
-            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded)
+            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
+            isOptional: isOptional)
     }
 }
 
@@ -2041,25 +2128,33 @@ final class CallSuperMethod: JsOperation {
     }
 }
 
-final class GetPrivateProperty: JsOperation, GuardableOperation {
+final class GetPrivateProperty: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .getPrivateProperty(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let propertyName: String
 
-    init(propertyName: String, isGuarded: Bool) {
+    init(propertyName: String, isGuarded: Bool, isOptional: Bool = false) {
         self.propertyName = propertyName
         // To ensure validity, OperationMutator only uses private properties/methods
         // that are both present on the receiver type and declared in the surrounding class definition.
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: 1, numOutputs: 1, attributes: [.isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return GetPrivateProperty(
+            propertyName: propertyName, isGuarded: isGuarded, isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
-        return GetPrivateProperty(propertyName: propertyName, isGuarded: isGuarded)
+        return GetPrivateProperty(
+            propertyName: propertyName, isGuarded: isGuarded, isOptional: isOptional)
     }
 }
 
@@ -2083,25 +2178,32 @@ final class SetPrivateProperty: JsOperation, GuardableOperation {
     }
 }
 
-final class UpdatePrivateProperty: JsOperation {
+final class UpdatePrivateProperty: JsOperation, GuardableOperation {
     override var opcode: Opcode { .updatePrivateProperty(self) }
 
     let propertyName: String
     let op: BinaryOperator
+    let isGuarded: Bool
 
-    init(propertyName: String, operator op: BinaryOperator) {
+    init(propertyName: String, operator op: BinaryOperator, isGuarded: Bool = false) {
         self.propertyName = propertyName
         self.op = op
+        self.isGuarded = isGuarded
         super.init(
             numInputs: 2, attributes: [.isMutable],
             requiredContext: [.javascript, .classMethod])
     }
+
+    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
+        return UpdatePrivateProperty(propertyName: propertyName, operator: op, isGuarded: isGuarded)
+    }
 }
 
-final class CallPrivateMethod: JsOperation, GuardableOperation {
+final class CallPrivateMethod: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callPrivateMethod(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let methodName: String
 
@@ -2109,26 +2211,35 @@ final class CallPrivateMethod: JsOperation, GuardableOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, isGuarded: Bool) {
+    init(methodName: String, numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
         self.methodName = methodName
         // The reference object is the first input.
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallPrivateMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallPrivateMethod(
-            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded)
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isOptional: isOptional)
     }
 }
 
-final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation {
+final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
     override var opcode: Opcode { .callPrivateMethodWithSpread(self) }
 
     let isGuarded: Bool
+    let isOptional: Bool
 
     let methodName: String
     let spreads: [Bool]
@@ -2137,21 +2248,31 @@ final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool) {
+    init(
+        methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool,
+        isOptional: Bool = false
+    ) {
         assert(spreads.count == numArguments)
         self.methodName = methodName
         self.spreads = spreads
         self.isGuarded = isGuarded
+        self.isOptional = isOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
+    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+        return CallPrivateMethodWithSpread(
+            methodName: methodName, numArguments: numArguments, spreads: spreads,
+            isGuarded: isGuarded, isOptional: isOptional)
+    }
+
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallPrivateMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded)
+            isGuarded: isGuarded, isOptional: isOptional)
     }
 }
 

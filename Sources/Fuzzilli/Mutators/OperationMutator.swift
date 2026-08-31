@@ -173,7 +173,7 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CreateArrayWithSpread(spreads: spreads)
         case .getProperty(let op):
-            newOp = GetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            newOp = GetProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
         case .setProperty(let op):
             newOp = SetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
         case .updateProperty(_):
@@ -182,11 +182,12 @@ public class OperationMutator: BaseInstructionMutator {
                 operator: chooseUniform(from: BinaryOperator.allCases))
         case .getPrivateProperty(let op):
             if probability(0.25) || !b.hasVisibleClassDefinition {
-                newOp = GetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+                newOp = GetProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
             } else {
                 let prop = selectAvailablePrivateProperty(
                     in: b, fallback: op.propertyName)
-                newOp = GetPrivateProperty(propertyName: prop, isGuarded: op.isGuarded)
+                newOp = GetPrivateProperty(
+                    propertyName: prop, isGuarded: op.isGuarded, isOptional: op.isOptional)
             }
         case .setPrivateProperty(let op):
             if probability(0.25) || !b.hasVisibleClassDefinition {
@@ -209,7 +210,7 @@ public class OperationMutator: BaseInstructionMutator {
                     operator: chooseUniform(from: BinaryOperator.allCases))
             }
         case .deleteProperty(let op):
-            newOp = DeleteProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
+            newOp = DeleteProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
         case .configureProperty(let op):
             // Change the flags or the property name, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -220,7 +221,7 @@ public class OperationMutator: BaseInstructionMutator {
                     propertyName: op.propertyName, flags: PropertyFlags.random(), type: op.type)
             }
         case .getElement(let op):
-            newOp = GetElement(index: b.randomIndex(), isGuarded: op.isGuarded)
+            newOp = GetElement(index: b.randomIndex(), isOptional: op.isOptional)
         case .setElement(_):
             newOp = SetElement(index: b.randomIndex())
         case .updateElement(_):
@@ -229,7 +230,7 @@ public class OperationMutator: BaseInstructionMutator {
         case .updateComputedProperty(_):
             newOp = UpdateComputedProperty(operator: chooseUniform(from: BinaryOperator.allCases))
         case .deleteElement(let op):
-            newOp = DeleteElement(index: b.randomIndex(), isGuarded: op.isGuarded)
+            newOp = DeleteElement(index: b.randomIndex(), isOptional: op.isOptional)
         case .configureElement(let op):
             // Change the flags or the element index, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -960,10 +961,8 @@ public class OperationMutator: BaseInstructionMutator {
         assert(instr.flags == .empty)
 
         var modifiedOp = newOp
-        if let guardableOp = modifiedOp as? GuardableOperation,
-            JavaScriptLifter.haveSpecialHandlingForGuardedOp(modifiedOp), probability(0.1)
-        {
-            modifiedOp = guardableOp.withGuardedState(!guardableOp.isGuarded)
+        if let optionalOp = modifiedOp as? OptionalOperation, probability(0.1) {
+            modifiedOp = optionalOp.withOptionalState(!optionalOp.isOptional)
         }
 
         return Instruction(modifiedOp, inouts: inouts)

@@ -172,12 +172,12 @@ public class FixupMutator: RuntimeAssistedMutator {
             // loads of non-existent properties) will not raise an exception.
             case .getProperty(let op):
                 maybeFixup(
-                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    instr, performing: .GetProperty, guarded: false,
                     withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
 
             case .deleteProperty(let op):
                 maybeFixup(
-                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    instr, performing: .DeleteProperty, guarded: false,
                     withInputs: [.argument(index: 0), .string(value: op.propertyName)], with: b)
 
             case .setProperty(let op):
@@ -189,27 +189,32 @@ public class FixupMutator: RuntimeAssistedMutator {
 
             case .getElement(let op):
                 maybeFixup(
-                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    instr, performing: .GetProperty, guarded: false,
                     withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
 
             case .deleteElement(let op):
                 maybeFixup(
-                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    instr, performing: .DeleteProperty, guarded: false,
                     withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
 
-            case .getComputedProperty(let op):
+            case .getComputedProperty:
                 maybeFixup(
-                    instr, performing: .GetProperty, guarded: op.isGuarded,
+                    instr, performing: .GetProperty, guarded: false,
                     withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
-            case .deleteComputedProperty(let op):
+            case .deleteComputedProperty:
                 maybeFixup(
-                    instr, performing: .DeleteProperty, guarded: op.isGuarded,
+                    instr, performing: .DeleteProperty, guarded: false,
                     withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
             // Private properties/methods cannot be dynamically accessed via JS Actions outside class scope.
-            // TODO(rherouart): FixupMutator should be improved to support these
-            case .getPrivateProperty,
+            // TODO(rherouart): FixupMutator should be improved to support these guardable operations, as well as handling for OptionalOperations.
+            case .setElement,
+                .setComputedProperty,
+                .updateProperty,
+                .updateElement,
+                .updateComputedProperty,
+                .getPrivateProperty,
                 .setPrivateProperty,
                 .callPrivateMethod,
                 .callPrivateMethodWithSpread:

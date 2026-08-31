@@ -282,7 +282,7 @@ message CreateArrayWithSpread {
 
 message GetProperty {
     string propertyName = 1;
-    bool isGuarded = 2;
+    bool isOptional = 2;
 }
 
 message SetProperty {
@@ -293,11 +293,12 @@ message SetProperty {
 message UpdateProperty {
     string propertyName = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message DeleteProperty {
     string propertyName = 1;
-    bool isGuarded = 2;
+    bool isOptional = 2;
 }
 
 enum PropertyType {
@@ -317,21 +318,23 @@ message ConfigureProperty {
 
 message GetElement {
     int64 index = 1;
-    bool isGuarded = 2;
+    bool isOptional = 2;
 }
 
 message SetElement {
     int64 index = 1;
+    bool isGuarded = 2;
 }
 
 message UpdateElement {
     int64 index = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message DeleteElement {
     int64 index = 1;
-    bool isGuarded = 2;
+    bool isOptional = 2;
 }
 
 message ConfigureElement {
@@ -343,18 +346,20 @@ message ConfigureElement {
 }
 
 message GetComputedProperty {
-    bool isGuarded = 1;
+    bool isOptional = 1;
 }
 
 message SetComputedProperty {
+    bool isGuarded = 1;
 }
 
 message UpdateComputedProperty {
     BinaryOperator op = 1;
+    bool isGuarded = 2;
 }
 
 message DeleteComputedProperty {
-    bool isGuarded = 1;
+    bool isOptional = 1;
 }
 
 message ConfigureComputedProperty {
@@ -460,11 +465,13 @@ message Await {
 
 message CallFunction {
     bool isGuarded = 1;
+    bool isOptional = 2;
 }
 
 message CallFunctionWithSpread {
     repeated bool spreads = 1;
     bool isGuarded = 2;
+    bool isOptional = 3;
 }
 
 message Construct {
@@ -479,21 +486,25 @@ message ConstructWithSpread {
 message CallMethod {
     string methodName = 1;
     bool isGuarded = 2;
+    bool isOptional = 3;
 }
 
 message CallMethodWithSpread {
     string methodName = 1;
     repeated bool spreads = 2;
     bool isGuarded = 3;
+    bool isOptional = 4;
 }
 
 message CallComputedMethod {
     bool isGuarded = 1;
+    bool isOptional = 2;
 }
 
 message CallComputedMethodWithSpread {
     repeated bool spreads = 1;
     bool isGuarded = 2;
+    bool isOptional = 3;
 }
 
 enum UnaryOperator {
@@ -637,6 +648,7 @@ message CallSuperConstructor {
     repeated bool spreads = 1;
 }
 
+// TODO(rherouart): Make this guardable.
 message CallSuperMethod {
     string methodName = 1;
 }
@@ -644,6 +656,7 @@ message CallSuperMethod {
 message GetPrivateProperty {
     string propertyName = 1;
     bool isGuarded = 2;
+    bool isOptional = 3;
 }
 
 message SetPrivateProperty {
@@ -654,17 +667,20 @@ message SetPrivateProperty {
 message UpdatePrivateProperty {
     string propertyName = 1;
     BinaryOperator op = 2;
+    bool isGuarded = 3;
 }
 
 message CallPrivateMethod {
     string methodName = 1;
     bool isGuarded = 2;
+    bool isOptional = 3;
 }
 
 message CallPrivateMethodWithSpread {
     string methodName = 1;
     repeated bool spreads = 2;
     bool isGuarded = 3;
+    bool isOptional = 4;
 }
 
 message GetSuperProperty {

@@ -1831,15 +1831,20 @@ struct MinimizerTests {
             // Build input program to be minimized.
             let o = b.createNamedVariable(forBuiltin: "o")
             let f = b.createNamedVariable(forBuiltin: "f")
-            b.getProperty("p1", of: o, guard: true)
-            b.getElement(2, of: o, guard: true)
-            b.getComputedProperty(b.loadString("p3"), of: o, guard: true)
+            let v = b.loadInt(42)
+            b.setProperty("p1", of: o, to: v, guard: true)
+            b.setElement(1, of: o, to: v, guard: true)
+            b.setComputedProperty(b.loadString("p2"), of: o, to: v, guard: true)
+            b.updateElement(2, of: o, with: v, using: .Add, guard: true)
+            b.updateComputedProperty(b.loadString("p3"), of: o, with: v, using: .Add, guard: true)
             b.callFunction(f, guard: true)
             b.callMethod("m", on: o, guard: true)
 
             // Make sure that none of the operations are removed.
             evaluator.operationsAreImportant([
-                GetProperty.self, GetElement.self, GetComputedProperty.self, CallFunction.self,
+                SetProperty.self, SetElement.self, SetComputedProperty.self,
+                UpdateElement.self, UpdateComputedProperty.self,
+                CallFunction.self,
                 CallMethod.self,
             ])
 
@@ -1864,8 +1869,55 @@ struct MinimizerTests {
 
             let numGuardedOperationsBefore = originalProgram.code.filter({ $0.isGuarded }).count
             let numGuardedOperationsAfter = minimizedProgram.code.filter({ $0.isGuarded }).count
-            #expect(numGuardedOperationsBefore == 5)
+            #expect(numGuardedOperationsBefore == 7)
             #expect(numGuardedOperationsAfter == 0)
+        }
+    }
+
+    @Test func testOptionalOperationSimplification() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+
+            // Build input program to be minimized.
+            let o = b.createNamedVariable(forBuiltin: "o")
+            let f = b.createNamedVariable(forBuiltin: "f")
+            b.getProperty("p1", of: o, optional: true)
+            b.getElement(2, of: o, optional: true)
+            b.getComputedProperty(b.loadString("p3"), of: o, optional: true)
+            b.deleteProperty("p4", of: o, optional: true)
+            b.deleteElement(5, of: o, optional: true)
+            b.deleteComputedProperty(b.loadString("p6"), of: o, optional: true)
+            b.callFunction(f, optional: true)
+            b.callMethod("m", on: o, optional: true)
+
+            // Make sure that none of the operations are removed.
+            evaluator.operationsAreImportant([
+                GetProperty.self, GetElement.self, GetComputedProperty.self,
+                DeleteProperty.self, DeleteElement.self, DeleteComputedProperty.self,
+                CallFunction.self, CallMethod.self,
+            ])
+
+            let originalProgram = b.finalize()
+
+            // Perform minimization.
+            // We then expect to have the same types of operations, but no optional ones.
+            let minimizedProgram = minimize(originalProgram, with: fuzzer)
+            #expect(originalProgram.size == minimizedProgram.size)
+
+            let numOptionalOperationsBefore = originalProgram.code.filter({
+                ($0.op as? OptionalOperation)?.isOptional == true
+            }).count
+            let numOptionalOperationsAfter = minimizedProgram.code.filter({
+                ($0.op as? OptionalOperation)?.isOptional == true
+            }).count
+            #expect(numOptionalOperationsBefore == 8)
+            #expect(numOptionalOperationsAfter == 0)
+
+            let operationTypesBefore = originalProgram.code.map({ $0.op.name })
+            let operationTypesAfter = minimizedProgram.code.map({ $0.op.name })
+            #expect(operationTypesBefore == operationTypesAfter)
         }
     }
 

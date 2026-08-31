@@ -977,7 +977,7 @@ public class JavaScriptCompiler {
                         UpdateProperty(propertyName: name, operator: op), withInputs: [object, rhs])
                 } else {
                     emit(
-                        SetProperty(propertyName: name, isGuarded: memberExpression.isOptional),
+                        SetProperty(propertyName: name, isGuarded: false),
                         withInputs: [object, rhs])
                 }
             case .privateName(let name):
@@ -988,7 +988,7 @@ public class JavaScriptCompiler {
                 } else {
                     emit(
                         SetPrivateProperty(
-                            propertyName: name, isGuarded: memberExpression.isOptional),
+                            propertyName: name, isGuarded: false),
                         withInputs: [object, rhs])
                 }
             case .expression(let expr):
@@ -1499,17 +1499,28 @@ public class JavaScriptCompiler {
                     throw CompilerError.invalidNodeError(
                         "missing property in member expression in call expression")
                 }
+                // TODO(rherouart): Distinguish receiver optionality (obj?.method()) from method invocation optionality (obj.method?.()).
+                // Currently, FuzzIL represents both with a single `isOptional` flag on CallMethod/CallComputedMethod,
+                // which re-lifts to `obj?.method?.()`.
+                // Note: This causes semantic divergence in round-trip testing if an error was expected:
+                // Original JS:
+                //   let obj = {};
+                //   try { obj?.m(); } catch (e) { print("caught"); } // Throws TypeError, prints "caught"
+                // Re-lifted JS:
+                //   let obj = {};
+                //   try { obj?.m?.(); } catch (e) { print("caught"); } // Short-circuits, prints nothing
                 switch property {
                 case .name(let name):
                     let operation: Operation
                     if isSpreading {
                         operation = CallMethodWithSpread(
                             methodName: name, numArguments: arguments.count,
-                            spreads: spreads, isGuarded: callExpression.isOptional)
+                            spreads: spreads, isGuarded: false,
+                            isOptional: callExpression.isOptional)
                     } else {
                         operation = CallMethod(
                             methodName: name, numArguments: arguments.count,
-                            isGuarded: callExpression.isOptional)
+                            isGuarded: false, isOptional: callExpression.isOptional)
                     }
                     return emit(operation, withInputs: [object] + arguments).output
                 case .privateName(let name):
@@ -1517,11 +1528,12 @@ public class JavaScriptCompiler {
                     if isSpreading {
                         operation = CallPrivateMethodWithSpread(
                             methodName: name, numArguments: arguments.count,
-                            spreads: spreads, isGuarded: callExpression.isOptional)
+                            spreads: spreads, isGuarded: false,
+                            isOptional: callExpression.isOptional)
                     } else {
                         operation = CallPrivateMethod(
                             methodName: name, numArguments: arguments.count,
-                            isGuarded: callExpression.isOptional)
+                            isGuarded: false, isOptional: callExpression.isOptional)
                     }
                     return emit(operation, withInputs: [object] + arguments).output
                 case .expression(let expr):
@@ -1530,13 +1542,14 @@ public class JavaScriptCompiler {
                         return emit(
                             CallComputedMethodWithSpread(
                                 numArguments: arguments.count, spreads: spreads,
-                                isGuarded: callExpression.isOptional),
+                                isGuarded: false, isOptional: callExpression.isOptional),
                             withInputs: [object, method] + arguments
                         ).output
                     } else {
                         return emit(
                             CallComputedMethod(
-                                numArguments: arguments.count, isGuarded: callExpression.isOptional),
+                                numArguments: arguments.count, isGuarded: false,
+                                isOptional: callExpression.isOptional),
                             withInputs: [object, method] + arguments
                         ).output
                     }
@@ -1578,20 +1591,19 @@ public class JavaScriptCompiler {
                 ).output
                 // Otherwise it's a regular function call
             } else {
-                guard !callExpression.isOptional else {
-                    throw CompilerError.unsupportedFeatureError(
-                        "Not currently supporting optional chaining with function calls")
-                }
                 let callee = try compileExpression(callExpression.callee)
                 if isSpreading {
                     return emit(
                         CallFunctionWithSpread(
-                            numArguments: arguments.count, spreads: spreads, isGuarded: false),
+                            numArguments: arguments.count, spreads: spreads, isGuarded: false,
+                            isOptional: callExpression.isOptional),
                         withInputs: [callee] + arguments
                     ).output
                 } else {
                     return emit(
-                        CallFunction(numArguments: arguments.count, isGuarded: false),
+                        CallFunction(
+                            numArguments: arguments.count, isGuarded: false,
+                            isOptional: callExpression.isOptional),
                         withInputs: [callee] + arguments
                     ).output
                 }
@@ -1638,12 +1650,16 @@ public class JavaScriptCompiler {
             switch property {
             case .name(let name):
                 return emit(
-                    GetProperty(propertyName: name, isGuarded: memberExpression.isOptional),
+                    GetProperty(
+                        propertyName: name,
+                        isOptional: memberExpression.isOptional),
                     withInputs: [object]
                 ).output
             case .privateName(let name):
                 return emit(
-                    GetPrivateProperty(propertyName: name, isGuarded: memberExpression.isOptional),
+                    GetPrivateProperty(
+                        propertyName: name, isGuarded: false,
+                        isOptional: memberExpression.isOptional),
                     withInputs: [object]
                 ).output
             case .expression(let expr):
@@ -1651,13 +1667,14 @@ public class JavaScriptCompiler {
                     let index = Int64(exactly: literal.value)
                 {
                     return emit(
-                        GetElement(index: index, isGuarded: memberExpression.isOptional),
+                        GetElement(
+                            index: index, isOptional: memberExpression.isOptional),
                         withInputs: [object]
                     ).output
                 } else {
                     let property = try compileExpression(expr)
                     return emit(
-                        GetComputedProperty(isGuarded: memberExpression.isOptional),
+                        GetComputedProperty(isOptional: memberExpression.isOptional),
                         withInputs: [object, property]
                     ).output
                 }
@@ -1711,13 +1728,14 @@ public class JavaScriptCompiler {
 
                 let obj = try compileExpression(memberExpression.object)
                 // isGuarded is true if the member expression is optional (e.g., obj?.prop)
-                let isGuarded = memberExpression.isOptional
+                let isOptional = memberExpression.isOptional
 
                 if !memberExpression.name.isEmpty {
                     // Deleting a non-computed property (e.g., delete obj.prop)
                     let propertyName = memberExpression.name
                     let instr = emit(
-                        DeleteProperty(propertyName: propertyName, isGuarded: isGuarded),
+                        DeleteProperty(
+                            propertyName: propertyName, isOptional: isOptional),
                         withInputs: [obj]
                     )
                     return instr.output
@@ -1732,14 +1750,14 @@ public class JavaScriptCompiler {
                     {
                         // Delete an element (e.g., delete arr[42])
                         let instr = emit(
-                            DeleteElement(index: index, isGuarded: isGuarded),
+                            DeleteElement(index: index, isOptional: isOptional),
                             withInputs: [obj]
                         )
                         return instr.output
                     } else {
                         // Use DeleteComputedProperty for other computed properties (e.g., delete obj["key"])
                         let instr = emit(
-                            DeleteComputedProperty(isGuarded: isGuarded),
+                            DeleteComputedProperty(isOptional: isOptional),
                             withInputs: [obj, property]
                         )
                         return instr.output

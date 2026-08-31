@@ -1944,7 +1944,7 @@ public let CodeGenerators: [CodeGenerator] = [
         let propertyName =
             b.type(of: obj).randomProperty() ?? b.randomCustomPropertyName()
         let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty(propertyName, of: obj, guard: needGuard)
+        b.getProperty(propertyName, of: obj, optional: needGuard)
     },
 
     // Tries to return a "method" as a function via a property access.
@@ -1959,7 +1959,7 @@ public let CodeGenerators: [CodeGenerator] = [
         let propertyName =
             type.randomMethod() ?? type.randomProperty() ?? b.randomCustomPropertyName()
         let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty(propertyName, of: obj, guard: needGuard)
+        b.getProperty(propertyName, of: obj, optional: needGuard)
     },
 
     CodeGenerator("PropertyAssignmentGenerator", inputs: .preferred(.object())) { b, obj in
@@ -1993,17 +1993,19 @@ public let CodeGenerators: [CodeGenerator] = [
 
         // TODO: for now we simply look for numbers, since those probably make the most sense for binary operations. But we may also want BigInts or strings sometimes.
         let rhs = b.randomVariable(forUseAs: .number)
+        let needGuard = b.type(of: obj).MayBe(.nullish)
         b.updateProperty(
             propertyName, of: obj, with: rhs,
-            using: chooseUniform(from: BinaryOperator.allCases))
+            using: chooseUniform(from: BinaryOperator.allCases),
+            guard: needGuard)
     },
 
     CodeGenerator("PropertyRemovalGenerator", inputs: .preferred(.object())) {
         b, obj in
         let propertyName =
             b.type(of: obj).randomProperty() ?? b.randomCustomPropertyName()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.deleteProperty(propertyName, of: obj, guard: true)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteProperty(propertyName, of: obj, optional: needOptional)
     },
 
     CodeGenerator(
@@ -2053,15 +2055,16 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator("ElementRetrievalGenerator", inputs: .preferred(.object())) {
         b, obj in
         let index = b.randomIndex()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getElement(index, of: obj, guard: needGuard)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.getElement(index, of: obj, optional: needOptional)
     },
 
     CodeGenerator("ElementAssignmentGenerator", inputs: .preferred(.object())) {
         b, obj in
         let index = b.randomIndex()
         let value = b.randomJsVariable()
-        b.setElement(index, of: obj, to: value)
+        let needGuard = b.type(of: obj).MayBe(.nullish)
+        b.setElement(index, of: obj, to: value, guard: needGuard)
     },
 
     CodeGenerator("ElementUpdateGenerator", inputs: .preferred(.object())) {
@@ -2069,16 +2072,18 @@ public let CodeGenerators: [CodeGenerator] = [
         let index = b.randomIndex()
         // TODO: for now we simply look for numbers, since those probably make the most sense for binary operations. But we may also want BigInts or strings sometimes.
         let rhs = b.randomVariable(forUseAs: .number)
+        let needGuard = b.type(of: obj).MayBe(.nullish)
         b.updateElement(
             index, of: obj, with: rhs,
-            using: chooseUniform(from: BinaryOperator.allCases))
+            using: chooseUniform(from: BinaryOperator.allCases),
+            guard: needGuard)
     },
 
     CodeGenerator("ElementRemovalGenerator", inputs: .preferred(.object())) {
         b, obj in
         let index = b.randomIndex()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.deleteElement(index, of: obj, guard: needGuard)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteElement(index, of: obj, optional: needOptional)
     },
 
     CodeGenerator(
@@ -2120,8 +2125,8 @@ public let CodeGenerators: [CodeGenerator] = [
         "ComputedPropertyRetrievalGenerator", inputs: .preferred(.object())
     ) { b, obj in
         let propertyName = b.randomJsVariable()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getComputedProperty(propertyName, of: obj, guard: needGuard)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.getComputedProperty(propertyName, of: obj, optional: needOptional)
     },
 
     CodeGenerator(
@@ -2129,7 +2134,8 @@ public let CodeGenerators: [CodeGenerator] = [
     ) { b, obj in
         let propertyName = b.randomJsVariable()
         let value = b.randomJsVariable()
-        b.setComputedProperty(propertyName, of: obj, to: value)
+        let needGuard = b.type(of: obj).MayBe(.nullish)
+        b.setComputedProperty(propertyName, of: obj, to: value, guard: needGuard)
     },
 
     CodeGenerator(
@@ -2138,17 +2144,19 @@ public let CodeGenerators: [CodeGenerator] = [
         let propertyName = b.randomJsVariable()
         // TODO: for now we simply look for numbers, since those probably make the most sense for binary operations. But we may also want BigInts or strings sometimes.
         let rhs = b.randomVariable(forUseAs: .number)
+        let needGuard = b.type(of: obj).MayBe(.nullish)
         b.updateComputedProperty(
             propertyName, of: obj, with: rhs,
-            using: chooseUniform(from: BinaryOperator.allCases))
+            using: chooseUniform(from: BinaryOperator.allCases),
+            guard: needGuard)
     },
 
     CodeGenerator(
         "ComputedPropertyRemovalGenerator", inputs: .preferred(.object())
     ) { b, obj in
         let propertyName = b.randomJsVariable()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.deleteComputedProperty(propertyName, of: obj, guard: needGuard)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteComputedProperty(propertyName, of: obj, optional: needOptional)
     },
 
     CodeGenerator(
@@ -2275,7 +2283,10 @@ public let CodeGenerators: [CodeGenerator] = [
         }
         // TODO: here and below, if we aren't finding arguments of compatible types, we probably still need a guard.
         let arguments = b.randomArguments(forCallingMethod: methodName, on: obj)
-        b.callMethod(methodName, on: obj, withArgs: arguments, guard: needGuard)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
+        b.callMethod(
+            methodName, on: obj, withArgs: arguments, guard: needGuard,
+            optional: needOptional)
     },
 
     CodeGenerator(
@@ -2289,9 +2300,10 @@ public let CodeGenerators: [CodeGenerator] = [
         for (arg, spread) in zip(arguments, spreads) where spread == true {
             needGuard = needGuard || b.type(of: arg).MayNotBe(.iterable())
         }
+        let needOptional = b.type(of: obj).MayBe(.nullish)
         b.callMethod(
             methodName, on: obj, withArgs: arguments, spreading: spreads,
-            guard: needGuard)
+            guard: needGuard, optional: needOptional)
     },
 
     CodeGenerator("ComputedMethodCallGenerator", inputs: .preferred(.object())) { b, obj in
@@ -2306,8 +2318,9 @@ public let CodeGenerators: [CodeGenerator] = [
         }
         let method = b.loadString(methodName)
         let arguments = b.randomArguments(forCallingMethod: methodName, on: obj)
+        let needOptional = b.type(of: obj).MayBe(.nullish)
         b.callComputedMethod(
-            method, on: obj, withArgs: arguments, guard: needGuard)
+            method, on: obj, withArgs: arguments, guard: needGuard, optional: needOptional)
     },
 
     CodeGenerator(
@@ -2323,9 +2336,10 @@ public let CodeGenerators: [CodeGenerator] = [
         for (arg, spread) in zip(arguments, spreads) where spread == true {
             needGuard = needGuard || b.type(of: arg).MayNotBe(.iterable())
         }
+        let needOptional = b.type(of: obj).MayBe(.nullish)
         b.callComputedMethod(
             method, on: obj, withArgs: arguments, spreading: spreads,
-            guard: needGuard)
+            guard: needGuard, optional: needOptional)
     },
 
     CodeGenerator("FunctionCallGenerator", inputs: .preferred(.function())) { b, f in
@@ -2375,9 +2389,12 @@ public let CodeGenerators: [CodeGenerator] = [
         let needGuard =
             fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
             || !recMatches
+        let needOptional = fctType.MayBe(.nullish)
         // For simplicity we just hard-code the call function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
-        b.callMethod("call", on: f, withArgs: [receiver] + arguments, guard: needGuard)
+        b.callMethod(
+            "call", on: f, withArgs: [receiver] + arguments, guard: needGuard,
+            optional: needOptional)
     },
 
     CodeGenerator("UnboundFunctionApplyGenerator", inputs: .preferred(.unboundFunction())) { b, f in
@@ -2388,10 +2405,12 @@ public let CodeGenerators: [CodeGenerator] = [
         let needGuard =
             fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
             || !recMatches
+        let needOptional = fctType.MayBe(.nullish)
         // For simplicity we just hard-code the apply function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
         b.callMethod(
-            "apply", on: f, withArgs: [receiver, b.createArray(with: arguments)], guard: needGuard)
+            "apply", on: f, withArgs: [receiver, b.createArray(with: arguments)],
+            guard: needGuard, optional: needOptional)
     },
 
     CodeGenerator("UnboundFunctionBindGenerator", inputs: .required(.unboundFunction())) { b, f in
@@ -3128,7 +3147,7 @@ public let CodeGenerators: [CodeGenerator] = [
         let propertyName = b.createSymbolProperty(
             chooseUniform(from: JavaScriptEnvironment.wellKnownSymbols))
         let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getComputedProperty(propertyName, of: obj, guard: needGuard)
+        b.getComputedProperty(propertyName, of: obj, optional: needGuard)
     },
 
     CodeGenerator(
@@ -3142,7 +3161,7 @@ public let CodeGenerators: [CodeGenerator] = [
 
     CodeGenerator("PrototypeAccessGenerator", inputs: .preferred(.object())) { b, obj in
         let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty("__proto__", of: obj, guard: needGuard)
+        b.getProperty("__proto__", of: obj, optional: needGuard)
     },
 
     CodeGenerator("PrototypeOverwriteGenerator", inputs: .preferred(.object(), .object())) {

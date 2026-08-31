@@ -18,6 +18,7 @@ struct InstructionSimplifier: Reducer {
         simplifyFunctionDefinitions(with: helper)
         simplifyNamedInstructions(with: helper)
         simplifyGuardedInstructions(with: helper)
+        simplifyOptionalInstructions(with: helper)
         simplifySingleInstructions(with: helper)
         simplifyMultiInstructions(with: helper)
         simplifyWasmInstructions(with: helper)
@@ -124,6 +125,18 @@ struct InstructionSimplifier: Reducer {
         }
     }
 
+    func simplifyOptionalInstructions(with helper: MinimizationHelper) {
+        // This will attempt to turn optional operations into non-optional ones.
+        // In the lifted JavaScript code, this would turn something like `o?.foo` into `o.foo`
+        for instr in helper.code {
+            guard let op = instr.op as? OptionalOperation, op.isOptional else { continue }
+            let newOp = op.withOptionalState(false)
+            helper.tryReplacing(
+                instructionAt: instr.index,
+                with: Instruction(newOp, inouts: instr.inouts))
+        }
+    }
+
     /// Simplify instructions that can be replaced by a sequence of simpler instructions.
     func simplifyMultiInstructions(with helper: MinimizationHelper) {
         // This will:
@@ -161,7 +174,7 @@ struct InstructionSimplifier: Reducer {
                         {
                             newCode.append(
                                 Instruction(
-                                    GetProperty(propertyName: propertyName, isGuarded: false),
+                                    GetProperty(propertyName: propertyName),
                                     output: output, inputs: [instr.input(0)]))
                             simplifiedAny = true
                         } else {
@@ -201,7 +214,7 @@ struct InstructionSimplifier: Reducer {
                             let output = outputs.next()!
                             newCode.append(
                                 Instruction(
-                                    GetElement(index: Int64(currentIndex), isGuarded: false),
+                                    GetElement(index: Int64(currentIndex)),
                                     output: output, inputs: [instr.input(0)]))
                             leftOverElements.append(
                                 DestructuringPattern.ArrayElement(target: nil))

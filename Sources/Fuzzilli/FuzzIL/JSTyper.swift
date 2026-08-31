@@ -846,17 +846,25 @@ public struct JSTyper: Analyzer {
                 nullability: nullability, isExact: isExact))
     }
 
-    func getTypeDescription(of type: ILType) -> WasmTypeDescription {
+    func tryGetTypeDescription(of type: ILType) -> WasmTypeDescription? {
         if case .Index(let desc, _) = type.wasmReferenceType?.kind {
-            return desc.get()!
+            return desc.get()
         }
-        return type.wasmTypeDefinition!.description!
+        return type.wasmTypeDefinition?.description
+    }
+
+    func tryGetTypeDescription(of variable: Variable) -> WasmTypeDescription? {
+        return tryGetTypeDescription(of: type(of: variable))
+    }
+
+    func getTypeDescription(of type: ILType) -> WasmTypeDescription {
+        return tryGetTypeDescription(of: type)!
     }
 
     // Returns the type description for the provided variable which has to be either a type
     // definition or an instance (wasm reference) of the wasm type.
     func getTypeDescription(of variable: Variable) -> WasmTypeDescription {
-        return getTypeDescription(of: type(of: variable))
+        return tryGetTypeDescription(of: variable)!
     }
 
     // Helper function to type a "regular" wasm begin block (block, if, try).
@@ -1305,7 +1313,16 @@ public struct JSTyper: Analyzer {
             }
         case .wasmCallRef(_):
             let functionRef = instr.inputs.last!
-            let typeDesc = getTypeDescription(of: functionRef) as! WasmSignatureTypeDescription
+            guard
+                let typeDesc = tryGetTypeDescription(of: functionRef)
+                    as? WasmSignatureTypeDescription,
+                instr.outputs.count == typeDesc.signature.outputTypes.count
+            else {
+                for output in instr.outputs {
+                    setType(of: output, to: .error)
+                }
+                break
+            }
             let signature = typeDesc.signature
             for (output, outputType) in zip(instr.outputs, signature.outputTypes) {
                 setType(of: output, to: outputType)
@@ -1320,7 +1337,13 @@ public struct JSTyper: Analyzer {
         case .wasmArrayLen(_):
             setType(of: instr.output, to: .wasmi32)
         case .wasmArrayGet(_):
-            let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmArrayTypeDescription
+            guard
+                let typeDesc = tryGetTypeDescription(of: instr.input(0))
+                    as? WasmArrayTypeDescription
+            else {
+                setType(of: instr.output, to: .error)
+                break
+            }
             setType(of: instr.output, to: typeDesc.elementType.unpacked())
         case .wasmArraySet(_):
             break
@@ -1332,7 +1355,14 @@ public struct JSTyper: Analyzer {
                 of: instr.output, typeDef: instr.input(0), nullability: false,
                 isExact: enableCustomDescriptors)
         case .wasmStructGet(let op):
-            let typeDesc = getTypeDescription(of: instr.input(0)) as! WasmStructTypeDescription
+            guard
+                let typeDesc = tryGetTypeDescription(of: instr.input(0))
+                    as? WasmStructTypeDescription,
+                op.fieldIndex < typeDesc.fields.count
+            else {
+                setType(of: instr.output, to: .error)
+                break
+            }
             setType(of: instr.output, to: typeDesc.fields[op.fieldIndex].type.unpacked())
         case .wasmStructSet(_):
             break
@@ -1350,8 +1380,11 @@ public struct JSTyper: Analyzer {
             // The result type is the non-nullable variant of the input type. (If the input type
             // is already non-nullable, the instruction doesn't do anything and the type does
             // not change.)
-            let inputRefType = type(of: instr.input(0)).wasmReferenceType!
-            setType(of: instr.output, to: .wasmRef(inputRefType.kind, nullability: false))
+            if let inputRefType = type(of: instr.input(0)).wasmReferenceType {
+                setType(of: instr.output, to: .wasmRef(inputRefType.kind, nullability: false))
+            } else {
+                setType(of: instr.output, to: .error)
+            }
         case .wasmRefFunc(_):
             if let signatureType = type(of: instr.input(0)).wasmFunctionDef?.signatureType,
                 let refType = signatureType.wasmTypeDefinition?.getReferenceTypeTo(
@@ -1396,13 +1429,13 @@ public struct JSTyper: Analyzer {
                 setType(of: output, to: parameterType)
             }
             let refType = type(of: instr.inputs.last!)
-            guard let wasmRefType = refType.wasmReferenceType
-            else {
-                fatalError("BranchOnNull reference is not a valid wasm reference type.")
+            if let wasmRefType = refType.wasmReferenceType {
+                setType(
+                    of: instr.outputs.last!,
+                    to: .wasmRef(wasmRefType.kind, nullability: false))
+            } else {
+                setType(of: instr.outputs.last!, to: .error)
             }
-            setType(
-                of: instr.outputs.last!,
-                to: .wasmRef(wasmRefType.kind, nullability: false))
 
         case .wasmBranchOnCast(let op):
             let labelType = type(of: instr.input(0))
@@ -1414,9 +1447,12 @@ public struct JSTyper: Analyzer {
                 setType(of: output, to: parameterType)
             }
             let refInputIndex = 1 + op.parameterCount
-            let actualSourceType = type(of: instr.input(refInputIndex)).wasmReferenceType!
-            let sourceTopType = actualSourceType.kind.topType()
-            setType(of: instr.outputs.last!, to: sourceTopType)
+            if let actualSourceType = type(of: instr.input(refInputIndex)).wasmReferenceType {
+                let sourceTopType = actualSourceType.kind.topType()
+                setType(of: instr.outputs.last!, to: sourceTopType)
+            } else {
+                setType(of: instr.outputs.last!, to: .error)
+            }
 
         case .wasmBranchOnCastFail(let op):
             let labelType = type(of: instr.input(0))
@@ -1426,6 +1462,12 @@ public struct JSTyper: Analyzer {
                 instr.outputs.dropLast(), parameterTypes.dropLast())
             {
                 setType(of: output, to: parameterType)
+            }
+
+            let refInputIndex = 1 + op.parameterCount
+            guard type(of: instr.input(refInputIndex)).wasmReferenceType != nil else {
+                setType(of: instr.outputs.last!, to: .error)
+                break
             }
 
             let targetType = op.targetType.wasmReferenceType!
@@ -1451,14 +1493,20 @@ public struct JSTyper: Analyzer {
         case .wasmAnyConvertExtern(_):
             // TODO(pawkra): forward shared bit & update the comment
             // any.convert_extern forwards the nullability bit from the input.
-            let null = type(of: instr.input(0)).wasmReferenceType!.nullability
-            setType(of: instr.output, to: .wasmRef(.WasmAny, shared: false, nullability: null))
+            if let null = type(of: instr.input(0)).wasmReferenceType?.nullability {
+                setType(of: instr.output, to: .wasmRef(.WasmAny, shared: false, nullability: null))
+            } else {
+                setType(of: instr.output, to: .error)
+            }
         case .wasmExternConvertAny(_):
             // TODO(pawkra): forward shared bit & update the comment
             // extern.convert_any forwards the nullability from the input.
-            let null = type(of: instr.input(0)).wasmReferenceType!.nullability
-            setType(
-                of: instr.output, to: .wasmRef(.WasmExtern, shared: false, nullability: null))
+            if let null = type(of: instr.input(0)).wasmReferenceType?.nullability {
+                setType(
+                    of: instr.output, to: .wasmRef(.WasmExtern, shared: false, nullability: null))
+            } else {
+                setType(of: instr.output, to: .error)
+            }
         case .wasmDefineAdHocSignatureType(let op):
             startTypeGroup()
             addSignatureType(

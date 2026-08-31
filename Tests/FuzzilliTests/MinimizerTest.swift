@@ -3315,4 +3315,347 @@ struct MinimizerTests {
             reducer.reduce(with: helper)
         }
     }
+
+    struct WasmCrossModuleGlobalMinimizationTestCase: Sendable, CustomStringConvertible {
+        let name: String
+        let build: @Sendable (ProgramBuilder) -> Void
+        var description: String {
+            return name
+        }
+    }
+
+    private static func buildExportingModule(
+        with b: ProgramBuilder,
+        unusedGlobal: WasmGlobal = .externref,
+        unusedGlobalTypeDef: Variable? = nil,
+        usedGlobal: WasmGlobal = .wasmi32(0),
+        usedGlobalTypeDef: Variable? = nil
+    ) -> Variable {
+        let module1 = b.buildWasmModule { wasmModule in
+            _ = wasmModule.addGlobal(
+                wasmGlobal: unusedGlobal, isMutable: true, typeDef: unusedGlobalTypeDef)
+            let g2 = wasmModule.addGlobal(
+                wasmGlobal: usedGlobal, isMutable: true, typeDef: usedGlobalTypeDef)
+
+            wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                let loaded = function.wasmLoadGlobal(globalVariable: g2)
+                let result =
+                    usedGlobal.toType().isWasmReferenceType
+                    ? function.wasmRefIsNull(loaded) : loaded
+                return [result]
+            }
+        }
+        let exports1 = module1.loadExports()
+        return b.getProperty("wg0", of: exports1)
+    }
+
+    static let wasmCrossModuleGlobalMinimizationTestCases = [
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmCallRef",
+            build: { b in
+                let typeGroup = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineArrayType(
+                            elementType: .wasmi32,
+                            mutability: true,
+                            isFinal: true
+                        ),
+                        b.wasmDefineSignatureType(
+                            signature: [] => [.wasmi32], indexTypes: [], isFinal: true),
+                    ]
+                }
+                let arrayType = typeGroup[0]
+                let sigType = typeGroup[1]
+
+                let wg0 = buildExportingModule(
+                    with: b,
+                    unusedGlobal: .indexRef,
+                    unusedGlobalTypeDef: sigType,
+                    usedGlobal: .indexRef,
+                    usedGlobalTypeDef: arrayType
+                )
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                        let loadedFunc = function.wasmLoadGlobal(globalVariable: wg0)
+                        let callOutputs = b.emit(
+                            WasmCallRef(parameterCount: 0, outputCount: 1),
+                            withInputs: [loadedFunc]
+                        ).outputs
+                        return Array(callOutputs)
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmStructGet",
+            build: { b in
+                let typeGroup = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        ),
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true),
+                                WasmStructTypeDescription.Field(type: .wasmi64, mutability: true),
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        ),
+                    ]
+                }
+                let struct1Field = typeGroup[0]
+                let struct2Fields = typeGroup[1]
+
+                let wg0 = buildExportingModule(
+                    with: b,
+                    unusedGlobal: .indexRef,
+                    unusedGlobalTypeDef: struct2Fields,
+                    usedGlobal: .indexRef,
+                    usedGlobalTypeDef: struct1Field
+                )
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi64]) { function, _, _ in
+                        let loadedStruct = function.wasmLoadGlobal(globalVariable: wg0)
+                        let field = function.wasmStructGet(theStruct: loadedStruct, fieldIndex: 1)
+                        return [field]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmArrayGet",
+            build: { b in
+                let typeGroup = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineArrayType(
+                            elementType: .wasmi32,
+                            mutability: true,
+                            isFinal: true
+                        ),
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        ),
+                    ]
+                }
+                let arrayType = typeGroup[0]
+                let structType = typeGroup[1]
+
+                let wg0 = buildExportingModule(
+                    with: b,
+                    unusedGlobal: .indexRef,
+                    unusedGlobalTypeDef: arrayType,
+                    usedGlobal: .indexRef,
+                    usedGlobalTypeDef: structType
+                )
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [.wasmi32] => [.wasmi32]) {
+                        function, _, params in
+                        let loadedArray = function.wasmLoadGlobal(globalVariable: wg0)
+                        let elem = function.wasmArrayGet(array: loadedArray, index: params[0])
+                        return [elem]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmPrimitiveGlobal",
+            build: { b in
+                let typeGroup = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        )
+                    ]
+                }
+                let structType = typeGroup[0]
+
+                let wg0 = buildExportingModule(
+                    with: b,
+                    unusedGlobal: .indexRef,
+                    unusedGlobalTypeDef: structType,
+                    usedGlobal: .i31ref
+                )
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                        let loadedStruct = function.wasmLoadGlobal(globalVariable: wg0)
+                        let field = function.wasmStructGet(theStruct: loadedStruct, fieldIndex: 0)
+                        return [field]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmRefAsNonNull",
+            build: { b in
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                        let loaded = function.wasmLoadGlobal(globalVariable: wg0)
+                        let nonNull = function.wasmRefAsNonNull(loaded)
+                        let isNull = function.wasmRefIsNull(nonNull)
+                        return [isNull]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmAnyConvertExtern",
+            build: { b in
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                        let loadedExtern = function.wasmLoadGlobal(globalVariable: wg0)
+                        let anyRef = function.wasmAnyConvertExtern(loadedExtern)
+                        let isNull = function.wasmRefIsNull(anyRef)
+                        return [isNull]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmExternConvertAny",
+            build: { b in
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                        let loadedAny = function.wasmLoadGlobal(globalVariable: wg0)
+                        let externRef = function.wasmExternConvertAny(loadedAny)
+                        let isNull = function.wasmRefIsNull(externRef)
+                        return [isNull]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmBranchOnNull",
+            build: { b in
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    wasmModule.addWasmFunction(with: [] => [.wasmi32]) {
+                        function, functionLabel, _ in
+                        let loadedExtern = function.wasmLoadGlobal(globalVariable: wg0)
+                        let nonNullRef = function.wasmBranchOnNull(
+                            loadedExtern, to: functionLabel, args: [function.consti32(0)])[1]
+                        let isNull = function.wasmRefIsNull(nonNullRef)
+                        return [isNull]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmBranchOnCast",
+            build: { b in
+                let structType = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        )
+                    ]
+                }[0]
+
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    let unresolvedType = ILType.wasmRef(.Index(), nullability: true)
+                    wasmModule.addWasmFunction(
+                        with: [] => [.wasmi32, unresolvedType], indexTypes: [structType]
+                    ) { function, functionLabel, _ in
+                        let loadedExtern = function.wasmLoadGlobal(globalVariable: wg0)
+                        let results = function.wasmBranchOnCast(
+                            loadedExtern, targetRefType: unresolvedType, to: functionLabel,
+                            args: [function.consti32(0)], typeDef: structType
+                        )
+
+                        let originalRef = results[1]
+                        let isNull = function.wasmRefIsNull(originalRef)
+                        let s = function.wasmStructNew(
+                            structType: structType, fields: [function.consti32(0)])
+                        return [isNull, s]
+                    }
+                }
+            }
+        ),
+        WasmCrossModuleGlobalMinimizationTestCase(
+            name: "wasmBranchOnCastFail",
+            build: { b in
+                let structType = b.wasmDefineTypeGroup {
+                    [
+                        b.wasmDefineStructType(
+                            fields: [
+                                WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)
+                            ],
+                            indexTypes: [],
+                            isFinal: true
+                        )
+                    ]
+                }[0]
+
+                let wg0 = buildExportingModule(with: b)
+
+                b.buildWasmModule { wasmModule in
+                    let unresolvedType = ILType.wasmRef(.Index(), nullability: true)
+                    wasmModule.addWasmFunction(
+                        with: [] => [.wasmi32, unresolvedType], indexTypes: [structType]
+                    ) { function, functionLabel, _ in
+                        let loadedExtern = function.wasmLoadGlobal(globalVariable: wg0)
+                        let results = function.wasmBranchOnCastFail(
+                            loadedExtern, targetRefType: unresolvedType, to: functionLabel,
+                            args: [function.consti32(0)], typeDef: structType
+                        )
+
+                        let castedRef = results[1]
+                        let isNull = function.wasmRefIsNull(castedRef)
+                        let s = function.wasmStructNew(
+                            structType: structType, fields: [function.consti32(0)])
+                        return [isNull, s]
+                    }
+                }
+            }
+        ),
+    ]
+
+    @Test(arguments: wasmCrossModuleGlobalMinimizationTestCases)
+    func testWasmCrossModuleGlobalMinimization(testCase: WasmCrossModuleGlobalMinimizationTestCase)
+    {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            testCase.build(b)
+            let originalProgram = b.finalize()
+
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+
+            let reducer = GenericInstructionReducer()
+            reducer.reduce(with: helper)
+        }
+    }
 }

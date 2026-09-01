@@ -6033,7 +6033,7 @@ public class ProgramBuilder {
                 structType, structDesc in
                 if let descriptorDesc = structDesc.descriptor {
                     let descriptorType = ILType.wasmIndexRef(
-                        descriptorDesc, nullability: true, isExact: true)
+                        descriptorDesc, nullability: false, isExact: true)
                     let descriptorVar = self.findOrGenerateWasmVar(ofType: descriptorType)
                     return self.wasmStructNewDefaultDesc(
                         structType: structType,
@@ -6448,6 +6448,12 @@ public class ProgramBuilder {
                 withInputs: [structType, descriptor],
                 types: [.wasmTypeDef(), .anyExactIndexRef]
             ).output
+        }
+
+        @discardableResult
+        public func wasmRefGetDesc(theStruct: Variable) -> Variable {
+            return b.emit(WasmRefGetDesc(), withInputs: [theStruct], types: [.wasmStructRef()])
+                .output
         }
 
         @discardableResult
@@ -7352,18 +7358,6 @@ public class ProgramBuilder {
                 return subtype
             } else {
                 let subtype = self.generateSubtypeStruct(superType: superType, isFinal: isFinal)
-                // TODO(bettscheider): Uncomment this once we added custom descriptors instructions.
-                // For now, we don't ever generate custom descriptors structs outside of a few tests.
-                // if probability(0.1) {
-                //     let (descriptorFields, descriptorIndexTypes) =
-                //         self.generateRandomWasmStructFields(upTo: 3)
-                //     _ = self.wasmDefineStructType(
-                //         fields: descriptorFields,
-                //         indexTypes: descriptorIndexTypes,
-                //         isFinal: probability(0.25),
-                //         describes: subtype
-                //     )
-                // }
                 return subtype
             }
 

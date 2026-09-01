@@ -3122,7 +3122,7 @@ class WasmStructTypeDescription: WasmTypeDescription {
         return "\(abbreviated)[\(fields.map {$0.description}.joined(separator: ", "))]"
     }
 
-    override func hasUnresolvedSelfReferences() -> Bool {
+    private func hasUnresolvedSelfReferences(checkCustomDescriptors: Bool) -> Bool {
         for field in fields {
             if case .Index(let target, _) = field.type.wasmReferenceType?.kind {
                 if target.get() == .selfReference {
@@ -3130,6 +3130,22 @@ class WasmStructTypeDescription: WasmTypeDescription {
                 }
             }
         }
+        if checkCustomDescriptors {
+            if let desc = describes as? WasmStructTypeDescription,
+                desc.hasUnresolvedSelfReferences(checkCustomDescriptors: false)
+            {
+                return true
+            }
+            if let desc = descriptor as? WasmStructTypeDescription,
+                desc.hasUnresolvedSelfReferences(checkCustomDescriptors: false)
+            {
+                return true
+            }
+        }
         return false
+    }
+
+    override func hasUnresolvedSelfReferences() -> Bool {
+        return hasUnresolvedSelfReferences(checkCustomDescriptors: true)
     }
 }

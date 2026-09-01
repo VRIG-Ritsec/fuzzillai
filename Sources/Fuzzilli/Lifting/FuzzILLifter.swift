@@ -1680,6 +1680,9 @@ public class FuzzILLifter: Lifter {
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
             w.emit("\(output()) <- WasmStructNewDesc [\(inputs)]")
 
+        case .wasmRefGetDesc(_):
+            w.emit("\(output()) <- WasmRefGetDesc [\(input(0))]")
+
         case .wasmStructNewDefaultDesc(_):
             w.emit("\(output()) <- WasmStructNewDefaultDesc [\(input(0)), \(input(1))]")
 

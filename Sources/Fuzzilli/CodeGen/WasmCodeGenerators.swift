@@ -132,8 +132,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             },
             wasmArrayTypeGenerator(),
             wasmStructTypeGenerator(),
-            // TODO(bettscheider): Also run "wasmCustomDescriptorsStructTypesGenerator" here
             wasmSignatureTypeGenerator(),
+            wasmCustomDescriptorsStructTypesGenerator(),
             GeneratorStub(
                 "WasmTypeGroupEndGenerator",
                 inContext: .single(.wasmTypeGroup),
@@ -141,6 +141,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     .init(.wasmTypeDef(), .IsWasmArray),
                     .init(.wasmTypeDef(), .IsWasmStruct),
                     .init(.wasmTypeDef(), .IsWasmFunction),
+                    .init(.wasmTypeDef(), .IsWasmStruct),
+                    .init(.wasmTypeDef(), .IsWasmStruct),
                 ]
             ) { b in
                 b.wasmEndTypeGroup()
@@ -150,9 +152,8 @@ public let WasmCodeGenerators: [CodeGenerator] = [
     CodeGenerator("WasmArrayTypeGenerator", [wasmArrayTypeGenerator()]),
     CodeGenerator("WasmStructTypeGenerator", [wasmStructTypeGenerator()]),
     CodeGenerator("WasmSignatureTypeGenerator", [wasmSignatureTypeGenerator()]),
-    // TODO(bettscheider): Enable once instructions and subtyping is implemented.
-    // CodeGenerator(
-    //     "WasmCustomDescriptorsStructTypesGenerator", [wasmCustomDescriptorsStructTypesGenerator]),
+    CodeGenerator(
+        "WasmCustomDescriptorsStructTypesGenerator", [wasmCustomDescriptorsStructTypesGenerator()]),
 
     CodeGenerator(
         "WasmSelfReferenceGenerator", inContext: .single(.wasmTypeGroup),
@@ -274,7 +275,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
 
         if let descriptorDesc = typeDesc.descriptor {
             let descriptorType = ILType.wasmIndexRef(
-                descriptorDesc, nullability: true, isExact: true)
+                descriptorDesc, nullability: false, isExact: true)
             let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
 
             function.wasmStructNewDesc(
@@ -302,7 +303,7 @@ public let WasmCodeGenerators: [CodeGenerator] = [
 
         if let descriptorDesc = typeDesc.descriptor {
             let descriptorType = ILType.wasmIndexRef(
-                descriptorDesc, nullability: true, isExact: true)
+                descriptorDesc, nullability: false, isExact: true)
             let descriptorVar = function.findOrGenerateWasmVar(ofType: descriptorType)
 
             function.wasmStructNewDefaultDesc(structType: structType, descriptor: descriptorVar)
@@ -323,11 +324,14 @@ public let WasmCodeGenerators: [CodeGenerator] = [
         guard let structType = desc.get()! as? WasmStructTypeDescription else {
             fatalError("input is not a struct type but \(b.type(of: theStruct))")
         }
-        guard let fieldIndex = (0..<structType.fields.count).randomElement()
-        else { return }
         let function = b.currentWasmModule.currentWasmFunction
-        function.wasmStructGet(
-            theStruct: theStruct, fieldIndex: fieldIndex, isSigned: Bool.random())
+
+        if structType.descriptor != nil && probability(0.5) {
+            function.wasmRefGetDesc(theStruct: theStruct)
+        } else if let fieldIndex = (0..<structType.fields.count).randomElement() {
+            function.wasmStructGet(
+                theStruct: theStruct, fieldIndex: fieldIndex, isSigned: Bool.random())
+        }
     },
 
     CodeGenerator(
@@ -2765,20 +2769,23 @@ private let wasmSignatureTypeGenerator = {
     }
 }
 
-private let wasmCustomDescriptorsStructTypesGenerator = GeneratorStub(
-    "WasmCustomDescriptorsStructTypesGenerator",
-    inContext: .single(.wasmTypeGroup),
-    producesComplex: [
-        .init(.wasmTypeDef(), .IsWasmStruct),
-        .init(.wasmTypeDef(), .IsWasmStruct),
-    ]
-) { b in
-    let (fieldsA, indexTypesA) = b.generateRandomWasmStructFields()
-    let typeA = b.wasmDefineStructType(
-        fields: fieldsA, indexTypes: indexTypesA, isFinal: probability(0.25)
-    )
+private let wasmCustomDescriptorsStructTypesGenerator = {
+    GeneratorStub(
+        "WasmCustomDescriptorsStructTypesGenerator",
+        inContext: .single(.wasmTypeGroup),
+        producesComplex: [
+            .init(.wasmTypeDef(), .IsWasmStruct),
+            .init(.wasmTypeDef(), .IsWasmStruct),
+        ]
+    ) { b in
+        guard b.fuzzer.config.enableCustomDescriptors else { return }
+        let (fieldsA, indexTypesA) = b.generateRandomWasmStructFields()
+        let typeA = b.wasmDefineStructType(
+            fields: fieldsA, indexTypes: indexTypesA, isFinal: probability(0.25)
+        )
 
-    let (fieldsB, indexTypesB) = b.generateRandomWasmStructFields()
-    _ = b.wasmDefineStructType(
-        fields: fieldsB, indexTypes: indexTypesB, isFinal: probability(0.25), describes: typeA)
+        let (fieldsB, indexTypesB) = b.generateRandomWasmStructFields()
+        _ = b.wasmDefineStructType(
+            fields: fieldsB, indexTypes: indexTypesB, isFinal: probability(0.25), describes: typeA)
+    }
 }

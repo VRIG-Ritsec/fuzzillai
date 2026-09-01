@@ -1354,6 +1354,19 @@ public struct JSTyper: Analyzer {
             setReferenceType(
                 of: instr.output, typeDef: instr.input(0), nullability: false,
                 isExact: enableCustomDescriptors)
+        case .wasmRefGetDesc(_):
+            guard
+                let structDesc = tryGetTypeDescription(of: instr.input(0))
+                    as? WasmStructTypeDescription,
+                let descriptor = structDesc.descriptor
+            else {
+                setType(of: instr.output, to: .error)
+                break
+            }
+            let exact = type(of: instr.input(0)).wasmReferenceType!.kind.isExact
+            setType(
+                of: instr.output,
+                to: ILType.wasmIndexRef(descriptor, nullability: false, isExact: exact))
         case .wasmStructGet(let op):
             guard
                 let typeDesc = tryGetTypeDescription(of: instr.input(0))

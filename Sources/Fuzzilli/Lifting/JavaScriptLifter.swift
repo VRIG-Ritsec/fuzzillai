@@ -2136,6 +2136,7 @@ public class JavaScriptLifter: Lifter {
                 .wasmStructNewDefault(_),
                 .wasmStructNewDesc(_),
                 .wasmStructNewDefaultDesc(_),
+                .wasmRefGetDesc(_),
                 .wasmStructGet(_),
                 .wasmStructSet(_),
                 .wasmRefNull(_),

@@ -64,7 +64,7 @@ struct MutatorTests {
 
     @Test func testCodeGenMutatorWasmTypeGroups() {
         let env = JavaScriptEnvironment()
-        let config = Configuration(logLevel: .error)
+        let config = Configuration(logLevel: .error, enableCustomDescriptors: true)
         let fuzzer = makeMockFuzzer(config: config, environment: env)
         fuzzer.sync {
             let b = fuzzer.makeBuilder()

@@ -137,21 +137,32 @@ struct WasmCustomDescriptorsTests {
             }
 
             let module = b.buildWasmModule { wasmModule in
-                let _ = wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
-                    let i32 = function.consti32(42)
+                let _ = wasmModule.addWasmFunction(
+                    with: [] => [.wasmi32, .wasmi32, .wasmi32, .wasmi32]
+                ) { function, _, _ in
+                    let val42 = function.consti32(42)
+                    let val43 = function.consti32(43)
+                    let val44 = function.consti32(44)
 
-                    let descriptorInst = function.wasmStructNewDefault(structType: types[1])
+                    let descriptorInst = function.wasmStructNew(
+                        structType: types[1], fields: [val43])
                     let describedInst = function.wasmStructNewDesc(
-                        structType: types[0], descriptor: descriptorInst, fields: [i32])
+                        structType: types[0], descriptor: descriptorInst, fields: [val42])
+                    let fetchedDesc = function.wasmRefGetDesc(theStruct: describedInst)
+
                     let v0 = function.wasmStructGet(theStruct: describedInst, fieldIndex: 0)
+                    let v1 = function.wasmStructGet(theStruct: fetchedDesc, fieldIndex: 0)
 
                     let subDescInst = function.wasmStructNewDefault(structType: types[2])
+                    function.wasmStructSet(theStruct: subDescInst, fieldIndex: 0, value: val44)
                     let defaultDescribedInst = function.wasmStructNewDefaultDesc(
                         structType: types[3], descriptor: subDescInst)
-                    let v1 = function.wasmStructGet(theStruct: defaultDescribedInst, fieldIndex: 0)
 
-                    let sum = function.wasmi32BinOp(v0, v1, binOpKind: .Add)
-                    return [sum]
+                    let v2 = function.wasmStructGet(theStruct: defaultDescribedInst, fieldIndex: 0)
+                    let fetchedSubDesc = function.wasmRefGetDesc(theStruct: defaultDescribedInst)
+                    let v3 = function.wasmStructGet(theStruct: fetchedSubDesc, fieldIndex: 0)
+
+                    return [v0, v1, v2, v3]
                 }
             }
             let exports = module.loadExports()
@@ -159,7 +170,7 @@ struct WasmCustomDescriptorsTests {
             let outputFunc = b.createNamedVariable(forBuiltin: "output")
             b.callFunction(outputFunc, withArgs: [res])
         }
-        testForOutput(program: jsProg, runner: runner, outputString: "42\n")
+        testForOutput(program: jsProg, runner: runner, outputString: "42,43,0,44\n")
     }
 
     @Test func testExactTypeOutputs() throws {

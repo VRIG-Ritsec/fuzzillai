@@ -2570,6 +2570,15 @@ class WasmStructNewDesc: WasmOperation {
     }
 }
 
+class WasmRefGetDesc: WasmOperation {
+    override var opcode: Opcode { .wasmRefGetDesc(self) }
+
+    init() {
+        // The input is the struct reference.
+        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+    }
+}
+
 class WasmStructGet: WasmOperation {
     override var opcode: Opcode { .wasmStructGet(self) }
     let fieldIndex: Int

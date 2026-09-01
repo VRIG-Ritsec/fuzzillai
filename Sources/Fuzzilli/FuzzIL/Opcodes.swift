@@ -407,4 +407,5 @@ enum Opcode {
     case wasmStringConstant(WasmStringConstant)
     case wasmStructNewDefaultDesc(WasmStructNewDefaultDesc)
     case wasmStructNewDesc(WasmStructNewDesc)
+    case wasmRefGetDesc(WasmRefGetDesc)
 }

@@ -402,6 +402,7 @@ message Instruction {
         WasmStringConstant wasmStringConstant = 376;
         WasmStructNewDefaultDesc wasmStructNewDefaultDesc = 377;
         WasmStructNewDesc wasmStructNewDesc = 378;
+        WasmRefGetDesc wasmRefGetDesc = 379;
     }
 }
 

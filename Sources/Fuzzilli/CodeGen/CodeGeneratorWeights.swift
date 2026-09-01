@@ -409,8 +409,7 @@ public let codeGeneratorWeights = [
     "WasmStructTypeGenerator":                  5,
     "WasmSignatureTypeGenerator":               5,
 
-    // TODO(bettscheider): Enable once instructions and subtyping is implemented.
-    // "WasmCustomDescriptorsStructTypesGenerator":5,
+    "WasmCustomDescriptorsStructTypesGenerator":5,
     "WasmSelfReferenceGenerator":               5,
     "WasmForwardReferenceGenerator":            5,
 

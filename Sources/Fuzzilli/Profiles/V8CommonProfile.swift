@@ -1386,6 +1386,10 @@ public func v8ProcessArgs(randomize: Bool, forSandbox: Bool) -> [String] {
         args.append(probability(0.5) ? "--verify-bytecode-light" : "--verify-bytecode-full")
     }
 
+    if probability(0.1) {
+        args.append("--disable-loop-stack-checks")
+    }
+
     //
     // Sometimes enable additional verification/stressing logic (which may be fairly expensive).
     //

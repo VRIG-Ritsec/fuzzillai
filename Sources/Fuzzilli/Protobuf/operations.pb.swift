@@ -151,6 +151,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
   case rshift // = 11
   case exp // = 12
   case unrshift // = 13
+  case nullCoalesce // = 14
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -173,6 +174,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     case 11: self = .rshift
     case 12: self = .exp
     case 13: self = .unrshift
+    case 14: self = .nullCoalesce
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -193,6 +195,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     case .rshift: return 11
     case .exp: return 12
     case .unrshift: return 13
+    case .nullCoalesce: return 14
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -213,6 +216,7 @@ public enum Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf.Enum, Swift.CaseIter
     .rshift,
     .exp,
     .unrshift,
+    .nullCoalesce,
   ]
 
 }
@@ -513,6 +517,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
   case global // = 1
   case `var` // = 2
   case `let` // = 3
+  case const // = 4
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -525,6 +530,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     case 1: self = .global
     case 2: self = .var
     case 3: self = .let
+    case 4: self = .const
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -535,6 +541,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     case .global: return 1
     case .var: return 2
     case .let: return 3
+    case .const: return 4
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -545,6 +552,7 @@ public enum Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf.Enum, 
     .global,
     .var,
     .let,
+    .const,
   ]
 
 }
@@ -7252,7 +7260,7 @@ extension Fuzzilli_Protobuf_UnaryOperator: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_BinaryOperator: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ADD\0\u{1}SUB\0\u{1}MUL\0\u{1}DIV\0\u{1}MOD\0\u{1}BIT_AND\0\u{1}BIT_OR\0\u{1}LOGICAL_AND\0\u{1}LOGICAL_OR\0\u{1}XOR\0\u{1}LSHIFT\0\u{1}RSHIFT\0\u{1}EXP\0\u{1}UNRSHIFT\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ADD\0\u{1}SUB\0\u{1}MUL\0\u{1}DIV\0\u{1}MOD\0\u{1}BIT_AND\0\u{1}BIT_OR\0\u{1}LOGICAL_AND\0\u{1}LOGICAL_OR\0\u{1}XOR\0\u{1}LSHIFT\0\u{1}RSHIFT\0\u{1}EXP\0\u{1}UNRSHIFT\0\u{1}NULL_COALESCE\0")
 }
 
 extension Fuzzilli_Protobuf_WasmIntegerBinaryOperator: SwiftProtobuf._ProtoNameProviding {
@@ -7276,7 +7284,7 @@ extension Fuzzilli_Protobuf_Comparator: SwiftProtobuf._ProtoNameProviding {
 }
 
 extension Fuzzilli_Protobuf_NamedVariableDeclarationMode: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0NONE\0\u{1}GLOBAL\0\u{1}VAR\0\u{1}LET\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0NONE\0\u{1}GLOBAL\0\u{1}VAR\0\u{1}LET\0\u{1}CONST\0")
 }
 
 extension Fuzzilli_Protobuf_WasmValueType: SwiftProtobuf._ProtoNameProviding {

@@ -537,6 +537,7 @@ enum BinaryOperator {
     RSHIFT = 11;
     EXP = 12;
     UNRSHIFT = 13;
+    NULL_COALESCE = 14;
 }
 
 enum WasmIntegerBinaryOperator {
@@ -624,6 +625,7 @@ enum NamedVariableDeclarationMode {
     GLOBAL = 1;
     VAR = 2;
     LET = 3;
+    CONST = 4;
 }
 
 message CreateNamedVariable {

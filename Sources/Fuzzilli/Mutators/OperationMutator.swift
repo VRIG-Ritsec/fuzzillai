@@ -665,14 +665,16 @@ public class OperationMutator: BaseInstructionMutator {
             }
             newOp = WasmRefTest(refType: newType)
         case .importVariables(let op):
+            // Replace a random import name with another valid import name.
             var names = op.importNames
             let module = instr.inputs[0]
             assert(b.type(of: module).Is(.jsModule()))
             let exports = b.type(of: module).exports.keys
-            assert(!exports.isEmpty)
-            names.append(exports.randomElement()!)
+            if !names.isEmpty && !exports.isEmpty {
+                let ix = Int.random(in: names.indices)
+                names[ix] = exports.randomElement()!
+            }
             newOp = ImportVariables(importNames: names)
-            inouts.append(b.nextVariable())
         case .importNamespace(let op):
             newOp = ImportNamespace(isDeferred: !op.isDeferred)
         case .dynamicImport(let op):

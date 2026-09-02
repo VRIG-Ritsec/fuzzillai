@@ -1303,7 +1303,7 @@ final class UpdateComputedProperty: JsOperation, GuardableOperation {
     init(operator op: BinaryOperator, isGuarded: Bool = false) {
         self.op = op
         self.isGuarded = isGuarded
-        super.init(numInputs: 3, numOutputs: 0)
+        super.init(numInputs: 3, attributes: [.isMutable])
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
@@ -2021,7 +2021,7 @@ final class Update: JsOperation {
 
     init(_ op: BinaryOperator) {
         self.op = op
-        super.init(numInputs: 2)
+        super.init(numInputs: 2, attributes: [.isMutable])
     }
 }
 
@@ -3388,7 +3388,8 @@ final class ImportVariables: JsOperation {
     init(importNames: [String]) {
         self.importNames = importNames
         super.init(
-            numInputs: 1, numOutputs: importNames.count, attributes: [.isNotInputMutable],
+            numInputs: 1, numOutputs: importNames.count,
+            attributes: [.isNotInputMutable, .isMutable],
             requiredContext: .moduleTopLevel)
     }
 }
@@ -3400,7 +3401,7 @@ final class ImportNamespace: JsOperation {
     init(isDeferred: Bool) {
         self.isDeferred = isDeferred
         super.init(
-            numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable],
+            numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable, .isMutable],
             requiredContext: .moduleTopLevel)
     }
 }
@@ -3411,7 +3412,7 @@ final class DynamicImport: JsOperation {
 
     init(isDeferred: Bool) {
         self.isDeferred = isDeferred
-        super.init(numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable])
+        super.init(numInputs: 1, numOutputs: 1, attributes: [.isNotInputMutable, .isMutable])
     }
 }
 

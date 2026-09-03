@@ -87,7 +87,11 @@ public class FuzzILLifter: Lifter {
 
         switch instr.op.opcode {
         case .loadInteger(let op):
-            w.emit("\(output()) <- LoadInteger '\(op.value)'")
+            if let customName = op.customName {
+                w.emit("\(output()) <- LoadInteger '\(op.value)' [\(customName)]")
+            } else {
+                w.emit("\(output()) <- LoadInteger '\(op.value)'")
+            }
 
         case .loadBigInt(let op):
             w.emit("\(output()) <- LoadBigInt '\(op.value)'")
@@ -97,7 +101,7 @@ public class FuzzILLifter: Lifter {
 
         case .loadString(let op):
             if let customName = op.customName {
-                w.emit("\(output()) <- LoadString '\(op.value)' \(customName)")
+                w.emit("\(output()) <- LoadString '\(op.value)' [\(customName)]")
             } else {
                 w.emit("\(output()) <- LoadString '\(op.value)'")
             }
@@ -401,9 +405,10 @@ public class FuzzILLifter: Lifter {
             w.decreaseIndentionLevel()
             w.emit("EndClassDefinition")
 
-        case .createArray:
+        case .createArray(let op):
             let elems = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("\(output()) <- CreateArray [\(elems)]")
+            let group = op.elementGroupName != nil ? " [\(op.elementGroupName!)]" : ""
+            w.emit("\(output()) <- CreateArray\(group) [\(elems)]")
 
         case .createIntArray(let op):
             w.emit("\(instr.output) <- CreateIntArray \(op.values)")
@@ -436,7 +441,8 @@ public class FuzzILLifter: Lifter {
             w.emit("\(opcode) \(input(0)), '\(op.propertyName)', \(input(1))")
 
         case .updateProperty(let op):
-            w.emit("UpdateProperty \(input(0)), '\(op.op.token)', \(input(1))")
+            let opcode = op.isGuarded ? "UpdateProperty (guarded)" : "UpdateProperty"
+            w.emit("\(opcode) \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))")
 
         case .deleteProperty(let op):
             let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
@@ -456,7 +462,8 @@ public class FuzzILLifter: Lifter {
             w.emit("\(opcode) \(input(0)), '\(op.index)', \(input(1))")
 
         case .updateElement(let op):
-            w.emit("UpdateElement \(instr.input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
+            let opcode = op.isGuarded ? "UpdateElement (guarded)" : "UpdateElement"
+            w.emit("\(opcode) \(input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
 
         case .deleteElement(let op):
             let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
@@ -476,7 +483,9 @@ public class FuzzILLifter: Lifter {
             w.emit("\(opcode) \(input(0)), \(input(1)), \(input(2))")
 
         case .updateComputedProperty(let op):
-            w.emit("UpdateComputedProperty \(input(0)), \(input(1)), '\(op.op.token)',\(input(2))")
+            let opcode =
+                op.isGuarded ? "UpdateComputedProperty (guarded)" : "UpdateComputedProperty"
+            w.emit("\(opcode) \(input(0)), \(input(1)), '\(op.op.token)', \(input(2))")
 
         case .deleteComputedProperty(let op):
             let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
@@ -659,19 +668,16 @@ public class FuzzILLifter: Lifter {
                 w.emit("Eval '\(op.code)', [\(args)]")
             }
 
-        case .explore:
+        case .explore(let op):
             let arguments = instr.inputs.suffix(from: 1).map(lift).joined(separator: ", ")
-            w.emit("Explore \(instr.input(0)), [\(arguments)]")
+            w.emit("Explore '\(op.id)', \(op.rngSeed), \(input(0)), [\(arguments)]")
 
-        case .probe:
-            w.emit("Probe \(instr.input(0))")
+        case .probe(let op):
+            w.emit("Probe '\(op.id)', \(input(0))")
 
         case .fixup(let op):
-            if op.hasOutput {
-                w.emit("\(output()) <- Fixup \(op.id)")
-            } else {
-                w.emit("Fixup \(op.id)")
-            }
+            let out = op.hasOutput ? "\(output()) <- " : ""
+            w.emit("\(out)Fixup '\(op.id)', '\(op.action)', '\(op.originalOperation)'")
 
         case .beginWith:
             w.emit("BeginWith \(input(0))")
@@ -682,7 +688,12 @@ public class FuzzILLifter: Lifter {
             w.emit("EndWith")
 
         case .nop:
-            w.emit("Nop")
+            if instr.hasOutputs {
+                let outputs = instr.outputs.map(lift).joined(separator: ", ")
+                w.emit("\(outputs) <- Nop")
+            } else {
+                w.emit("Nop")
+            }
 
         case .beginIf(let op):
             let mode = op.inverted ? "(inverted) " : ""
@@ -737,8 +748,10 @@ public class FuzzILLifter: Lifter {
             w.emit("\(opcode) \(input(0)), '\(op.propertyName)', \(input(1))")
 
         case .updatePrivateProperty(let op):
+            let opcode =
+                op.isGuarded ? "UpdatePrivateProperty (guarded)" : "UpdatePrivateProperty"
             w.emit(
-                "UpdatePrivateProperty \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))"
+                "\(opcode) \(input(0)), '\(op.propertyName)', '\(op.op.token)', \(input(1))"
             )
 
         case .callPrivateMethod(let op):
@@ -980,9 +993,17 @@ public class FuzzILLifter: Lifter {
         case .loadNewTarget:
             w.emit("\(output()) <- LoadNewTarget")
 
-        case .createMap:
+        case .createMap(let op):
             let elems = instr.inputs.map(lift).joined(separator: ", ")
-            w.emit("\(output()) <- CreateMap [\(elems)]")
+            var groupStr = ""
+            if let keyGroup = op.keyGroupName, let valueGroup = op.valueGroupName {
+                groupStr = " [\(keyGroup) => \(valueGroup)]"
+            } else if let keyGroup = op.keyGroupName {
+                groupStr = " [\(keyGroup) => _]"
+            } else if let valueGroup = op.valueGroupName {
+                groupStr = " [_ => \(valueGroup)]"
+            }
+            w.emit("\(output()) <- CreateMap\(groupStr) [\(elems)]")
 
         case .beginWasmModule:
             w.emit("BeginWasmModule")
@@ -1028,8 +1049,8 @@ public class FuzzILLifter: Lifter {
         case .wrapSuspending(_):
             w.emit("\(output()) <- WrapSuspending \(input(0))")
 
-        case .bindMethod(_):
-            w.emit("\(output()) <- BindMethod \(input(0))")
+        case .bindMethod(let op):
+            w.emit("\(output()) <- BindMethod \(input(0)), '\(op.methodName)'")
 
         case .bindFunction(_):
             let inputs = instr.inputs.map(lift).joined(separator: ", ")
@@ -1066,8 +1087,9 @@ public class FuzzILLifter: Lifter {
                 "\(output()) <- WasmDefineTable \(op.elementType)\(isTable64Str), (\(op.limits.min), \(String(describing: op.limits.max))), [\(inputs)]"
             )
 
-        case .wasmDefineElementSegment(_):
-            w.emit("\(output()) <- WasmDefineElementSegment [...]")
+        case .wasmDefineElementSegment:
+            let inputs = instr.inputs.map(lift).joined(separator: ", ")
+            w.emit("\(output()) <- WasmDefineElementSegment [\(inputs)]")
 
         case .wasmDropElementSegment:
             w.emit("WasmDropElementSegment \(input(0))")
@@ -1088,8 +1110,8 @@ public class FuzzILLifter: Lifter {
                 "\(output()) <- WasmDefineMemory [\(mem.limits.min),\(maxPagesStr)],\(isMem64Str)\(sharedStr)"
             )
 
-        case .wasmDefineDataSegment(_):
-            w.emit("\(output()) <- WasmDefineDataSegment [...]")
+        case .wasmDefineDataSegment(let op):
+            w.emit("\(output()) <- WasmDefineDataSegment [\(op.segment.count) bytes]")
 
         case .wasmDefineTag(_):
             w.emit("\(output()) <- WasmDefineTag \(input(0))")
@@ -1603,7 +1625,12 @@ public class FuzzILLifter: Lifter {
             w.emit("Print \(input(0))")
 
         case .wasmNop:
-            w.emit("WasmNop")
+            if instr.hasOutputs {
+                let outputs = instr.outputs.map(lift).joined(separator: ", ")
+                w.emit("\(outputs) <- WasmNop")
+            } else {
+                w.emit("WasmNop")
+            }
 
         case .wasmUnreachable:
             w.emit("WasmUnreachable")
@@ -1705,7 +1732,9 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- WasmStructNewDefaultDesc [\(input(0)), \(input(1))]")
 
         case .wasmStructGet(let op):
-            w.emit("\(output()) <- WasmStructGet [\(input(0))].\(op.fieldIndex)")
+            w.emit(
+                "\(output()) <- WasmStructGet \(op.isSigned ? "signed" : "unsigned") [\(input(0))].\(op.fieldIndex)"
+            )
 
         case .wasmStructSet(let op):
             w.emit("WasmStructSet [\(input(0))].\(op.fieldIndex) = [\(input(1))]")
@@ -1726,8 +1755,9 @@ public class FuzzILLifter: Lifter {
         case .wasmRefEq(_):
             w.emit("\(output()) <- WasmRefEq \(input(0)) \(input(1))")
 
-        case .wasmRefI31(_):
-            w.emit("\(output()) <- WasmRefI31 \(input(0))")
+        case .wasmRefI31(let op):
+            let sharedStr = op.isShared ? " shared" : ""
+            w.emit("\(output()) <- WasmRefI31\(sharedStr) \(input(0))")
 
         case .wasmI31Get(let op):
             w.emit("\(output()) <- WasmI31Get \(op.isSigned ? "signed" : "unsigned") \(input(0))")

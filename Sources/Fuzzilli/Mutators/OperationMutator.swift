@@ -429,32 +429,32 @@ public class OperationMutator: BaseInstructionMutator {
             let otherCases = WasmWideMulOpKind.allCases.filter { $0 != op.mulOpKind }
             newOp = Wasmi64WideMulOp(mulOpKind: chooseUniform(from: otherCases))
 
-        case .wasmTruncatef32Toi32(_):
-            newOp = WasmTruncatef32Toi32(isSigned: probability(0.5))
-        case .wasmTruncatef64Toi32(_):
-            newOp = WasmTruncatef64Toi32(isSigned: probability(0.5))
-        case .wasmExtendi32Toi64(_):
-            newOp = WasmExtendi32Toi64(isSigned: probability(0.5))
-        case .wasmTruncatef32Toi64(_):
-            newOp = WasmTruncatef32Toi64(isSigned: probability(0.5))
-        case .wasmTruncatef64Toi64(_):
-            newOp = WasmTruncatef64Toi64(isSigned: probability(0.5))
-        case .wasmConverti32Tof32(_):
-            newOp = WasmConverti32Tof32(isSigned: probability(0.5))
-        case .wasmConverti64Tof32(_):
-            newOp = WasmConverti64Tof32(isSigned: probability(0.5))
-        case .wasmConverti32Tof64(_):
-            newOp = WasmConverti32Tof64(isSigned: probability(0.5))
-        case .wasmConverti64Tof64(_):
-            newOp = WasmConverti64Tof64(isSigned: probability(0.5))
-        case .wasmTruncateSatf32Toi32(_):
-            newOp = WasmTruncateSatf32Toi32(isSigned: probability(0.5))
-        case .wasmTruncateSatf64Toi32(_):
-            newOp = WasmTruncateSatf64Toi32(isSigned: probability(0.5))
-        case .wasmTruncateSatf32Toi64(_):
-            newOp = WasmTruncateSatf32Toi64(isSigned: probability(0.5))
-        case .wasmTruncateSatf64Toi64(_):
-            newOp = WasmTruncateSatf64Toi64(isSigned: probability(0.5))
+        case .wasmTruncatef32Toi32(let op):
+            newOp = WasmTruncatef32Toi32(isSigned: !op.isSigned)
+        case .wasmTruncatef64Toi32(let op):
+            newOp = WasmTruncatef64Toi32(isSigned: !op.isSigned)
+        case .wasmExtendi32Toi64(let op):
+            newOp = WasmExtendi32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncatef32Toi64(let op):
+            newOp = WasmTruncatef32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncatef64Toi64(let op):
+            newOp = WasmTruncatef64Toi64(isSigned: !op.isSigned)
+        case .wasmConverti32Tof32(let op):
+            newOp = WasmConverti32Tof32(isSigned: !op.isSigned)
+        case .wasmConverti64Tof32(let op):
+            newOp = WasmConverti64Tof32(isSigned: !op.isSigned)
+        case .wasmConverti32Tof64(let op):
+            newOp = WasmConverti32Tof64(isSigned: !op.isSigned)
+        case .wasmConverti64Tof64(let op):
+            newOp = WasmConverti64Tof64(isSigned: !op.isSigned)
+        case .wasmTruncateSatf32Toi32(let op):
+            newOp = WasmTruncateSatf32Toi32(isSigned: !op.isSigned)
+        case .wasmTruncateSatf64Toi32(let op):
+            newOp = WasmTruncateSatf64Toi32(isSigned: !op.isSigned)
+        case .wasmTruncateSatf32Toi64(let op):
+            newOp = WasmTruncateSatf32Toi64(isSigned: !op.isSigned)
+        case .wasmTruncateSatf64Toi64(let op):
+            newOp = WasmTruncateSatf64Toi64(isSigned: !op.isSigned)
 
         case .wasmDefineGlobal(let op):
             // We never change the type of the global, only the value as changing the type will break the following code pretty much instantly.

@@ -616,7 +616,8 @@ final class WasmTruncatef32Toi32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -627,7 +628,8 @@ final class WasmTruncatef64Toi32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -638,7 +640,8 @@ final class WasmExtendi32Toi64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -649,7 +652,8 @@ final class WasmTruncatef32Toi64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -660,7 +664,8 @@ final class WasmTruncatef64Toi64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -671,7 +676,8 @@ final class WasmConverti32Tof32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -682,7 +688,8 @@ final class WasmConverti64Tof32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -701,7 +708,8 @@ final class WasmConverti32Tof64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -712,7 +720,8 @@ final class WasmConverti64Tof64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -803,7 +812,8 @@ final class WasmTruncateSatf32Toi32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -814,7 +824,8 @@ final class WasmTruncateSatf64Toi32: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -825,7 +836,8 @@ final class WasmTruncateSatf32Toi64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -836,7 +848,8 @@ final class WasmTruncateSatf64Toi64: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: .wasmFunction)
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: .wasmFunction)
     }
 }
 
@@ -2522,7 +2535,8 @@ class WasmArrayGet: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 2, numOutputs: 1, requiredContext: [.wasmFunction])
+        super.init(
+            numInputs: 2, numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
     }
 }
 
@@ -2588,7 +2602,8 @@ class WasmStructGet: WasmOperation {
     init(fieldIndex: Int, isSigned: Bool) {
         self.fieldIndex = fieldIndex
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
     }
 }
 
@@ -2662,7 +2677,8 @@ class WasmI31Get: WasmOperation {
 
     init(isSigned: Bool) {
         self.isSigned = isSigned
-        super.init(numInputs: 1, numOutputs: 1, requiredContext: [.wasmFunction])
+        super.init(
+            numInputs: 1, numOutputs: 1, attributes: [.isMutable], requiredContext: [.wasmFunction])
     }
 }
 
@@ -2690,7 +2706,7 @@ class WasmRefTest: WasmOperation {
         self.type = refType
         super.init(
             numInputs: 1 + type.requiredInputCount(), numOutputs: 1,
-            requiredContext: [.wasmFunction])
+            attributes: [.isMutable], requiredContext: [.wasmFunction])
     }
 }
 

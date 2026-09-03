@@ -201,4 +201,81 @@ func testAndCompareSerialization(program: Program) {
             }
         }
     }
+
+    @Test func testOptionalAndGuardedOperationsSerialization() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let o = b.createNamedVariable(forBuiltin: "obj")
+            let f = b.createNamedVariable(forBuiltin: "fn")
+            let prop = b.loadString("k")
+
+            for isGuarded in [false, true] {
+                for isReceiverOptional in [false, true] {
+                    for isCallOptional in [false, true] {
+                        b.callMethod(
+                            "m", on: o, guard: isGuarded, isReceiverOptional: isReceiverOptional,
+                            isCallOptional: isCallOptional)
+                        b.callMethod(
+                            "s", on: o, withArgs: [o], spreading: [true], guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                        b.callComputedMethod(
+                            prop, on: o, guard: isGuarded, isReceiverOptional: isReceiverOptional,
+                            isCallOptional: isCallOptional)
+                        b.callComputedMethod(
+                            prop, on: o, withArgs: [o], spreading: [true], guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                    }
+                }
+            }
+
+            for isGuarded in [false, true] {
+                for isCallOptional in [false, true] {
+                    b.callFunction(f, guard: isGuarded, isCallOptional: isCallOptional)
+                    b.callFunction(
+                        f, withArgs: [o], spreading: [true], guard: isGuarded,
+                        isCallOptional: isCallOptional)
+                }
+            }
+
+            let superCls = b.buildClassDefinition { cls in
+                cls.addInstanceMethod("superM", with: .parameters(n: 0)) { _ in }
+            }
+            let _ = b.buildClassDefinition(withSuperclass: superCls) { cls in
+                cls.addPrivateInstanceProperty("privProp")
+                cls.addPrivateInstanceMethod("privM", with: .parameters(n: 0)) { _ in }
+
+                cls.addInstanceMethod("testMethod", with: .parameters(n: 0)) { args in
+                    let this = args[0]
+                    for isGuarded in [false, true] {
+                        for isCallOptional in [false, true] {
+                            b.callSuperMethod(
+                                "superM", guard: isGuarded, isCallOptional: isCallOptional)
+                        }
+                    }
+
+                    for isGuarded in [false, true] {
+                        for isReceiverOptional in [false, true] {
+                            b.getPrivateProperty(
+                                "privProp", of: this, guard: isGuarded,
+                                isReceiverOptional: isReceiverOptional)
+                            for isCallOptional in [false, true] {
+                                b.callPrivateMethod(
+                                    "privM", on: this, guard: isGuarded,
+                                    isReceiverOptional: isReceiverOptional,
+                                    isCallOptional: isCallOptional)
+                                b.callPrivateMethod(
+                                    "privM", on: this, withArgs: [o], spreading: [true],
+                                    guard: isGuarded, isReceiverOptional: isReceiverOptional,
+                                    isCallOptional: isCallOptional)
+                            }
+                        }
+                    }
+                }
+            }
+
+            let program = b.finalize()
+            testAndCompareSerialization(program: program)
+        }
+    }
 }

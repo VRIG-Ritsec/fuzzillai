@@ -2643,7 +2643,7 @@ public struct Fuzzilli_Protobuf_GetProperty: Sendable {
 
   public var propertyName: String = String()
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2687,7 +2687,7 @@ public struct Fuzzilli_Protobuf_DeleteProperty: Sendable {
 
   public var propertyName: String = String()
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2721,7 +2721,7 @@ public struct Fuzzilli_Protobuf_GetElement: Sendable {
 
   public var index: Int64 = 0
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2765,7 +2765,7 @@ public struct Fuzzilli_Protobuf_DeleteElement: Sendable {
 
   public var index: Int64 = 0
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2797,7 +2797,7 @@ public struct Fuzzilli_Protobuf_GetComputedProperty: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2835,7 +2835,7 @@ public struct Fuzzilli_Protobuf_DeleteComputedProperty: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3222,7 +3222,7 @@ public struct Fuzzilli_Protobuf_CallFunction: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3238,7 +3238,7 @@ public struct Fuzzilli_Protobuf_CallFunctionWithSpread: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3280,7 +3280,9 @@ public struct Fuzzilli_Protobuf_CallMethod: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3298,7 +3300,9 @@ public struct Fuzzilli_Protobuf_CallMethodWithSpread: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3312,7 +3316,9 @@ public struct Fuzzilli_Protobuf_CallComputedMethod: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3328,7 +3334,9 @@ public struct Fuzzilli_Protobuf_CallComputedMethodWithSpread: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3477,13 +3485,16 @@ public struct Fuzzilli_Protobuf_CallSuperConstructor: Sendable {
   public init() {}
 }
 
-/// TODO(rherouart): Make this guardable.
 public struct Fuzzilli_Protobuf_CallSuperMethod: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var methodName: String = String()
+
+  public var isGuarded: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3499,7 +3510,7 @@ public struct Fuzzilli_Protobuf_GetPrivateProperty: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3545,7 +3556,9 @@ public struct Fuzzilli_Protobuf_CallPrivateMethod: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3563,7 +3576,9 @@ public struct Fuzzilli_Protobuf_CallPrivateMethodWithSpread: Sendable {
 
   public var isGuarded: Bool = false
 
-  public var isOptional: Bool = false
+  public var isReceiverOptional: Bool = false
+
+  public var isCallOptional: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -9192,7 +9207,7 @@ extension Fuzzilli_Protobuf_CreateArrayWithSpread: SwiftProtobuf.Message, SwiftP
 
 extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9201,7 +9216,7 @@ extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._M
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -9211,15 +9226,15 @@ extension Fuzzilli_Protobuf_GetProperty: SwiftProtobuf.Message, SwiftProtobuf._M
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_GetProperty, rhs: Fuzzilli_Protobuf_GetProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9302,7 +9317,7 @@ extension Fuzzilli_Protobuf_UpdateProperty: SwiftProtobuf.Message, SwiftProtobuf
 
 extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9311,7 +9326,7 @@ extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -9321,15 +9336,15 @@ extension Fuzzilli_Protobuf_DeleteProperty: SwiftProtobuf.Message, SwiftProtobuf
     if !self.propertyName.isEmpty {
       try visitor.visitSingularStringField(value: self.propertyName, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteProperty, rhs: Fuzzilli_Protobuf_DeleteProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9387,7 +9402,7 @@ extension Fuzzilli_Protobuf_ConfigureProperty: SwiftProtobuf.Message, SwiftProto
 
 extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetElement"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9396,7 +9411,7 @@ extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._Me
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -9406,15 +9421,15 @@ extension Fuzzilli_Protobuf_GetElement: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.index != 0 {
       try visitor.visitSingularInt64Field(value: self.index, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_GetElement, rhs: Fuzzilli_Protobuf_GetElement) -> Bool {
     if lhs.index != rhs.index {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9497,7 +9512,7 @@ extension Fuzzilli_Protobuf_UpdateElement: SwiftProtobuf.Message, SwiftProtobuf.
 
 extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteElement"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}index\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9506,7 +9521,7 @@ extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf.
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.index) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -9516,15 +9531,15 @@ extension Fuzzilli_Protobuf_DeleteElement: SwiftProtobuf.Message, SwiftProtobuf.
     if self.index != 0 {
       try visitor.visitSingularInt64Field(value: self.index, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteElement, rhs: Fuzzilli_Protobuf_DeleteElement) -> Bool {
     if lhs.index != rhs.index {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9582,7 +9597,7 @@ extension Fuzzilli_Protobuf_ConfigureElement: SwiftProtobuf.Message, SwiftProtob
 
 extension Fuzzilli_Protobuf_GetComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetComputedProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9590,21 +9605,21 @@ extension Fuzzilli_Protobuf_GetComputedProperty: SwiftProtobuf.Message, SwiftPro
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 1)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_GetComputedProperty, rhs: Fuzzilli_Protobuf_GetComputedProperty) -> Bool {
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9677,7 +9692,7 @@ extension Fuzzilli_Protobuf_UpdateComputedProperty: SwiftProtobuf.Message, Swift
 
 extension Fuzzilli_Protobuf_DeleteComputedProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeleteComputedProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -9685,21 +9700,21 @@ extension Fuzzilli_Protobuf_DeleteComputedProperty: SwiftProtobuf.Message, Swift
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 1)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_DeleteComputedProperty, rhs: Fuzzilli_Protobuf_DeleteComputedProperty) -> Bool {
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10383,7 +10398,7 @@ extension Fuzzilli_Protobuf_Await: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallFunction"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10392,7 +10407,7 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10402,15 +10417,15 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallFunction, rhs: Fuzzilli_Protobuf_CallFunction) -> Bool {
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10418,7 +10433,7 @@ extension Fuzzilli_Protobuf_CallFunction: SwiftProtobuf.Message, SwiftProtobuf._
 
 extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallFunctionWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10428,7 +10443,7 @@ extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, Swift
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10441,8 +10456,8 @@ extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, Swift
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 3)
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -10450,7 +10465,7 @@ extension Fuzzilli_Protobuf_CallFunctionWithSpread: SwiftProtobuf.Message, Swift
   public static func ==(lhs: Fuzzilli_Protobuf_CallFunctionWithSpread, rhs: Fuzzilli_Protobuf_CallFunctionWithSpread) -> Bool {
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10523,7 +10538,7 @@ extension Fuzzilli_Protobuf_ConstructWithSpread: SwiftProtobuf.Message, SwiftPro
 
 extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10533,7 +10548,8 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10546,8 +10562,11 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 3)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -10555,7 +10574,8 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
   public static func ==(lhs: Fuzzilli_Protobuf_CallMethod, rhs: Fuzzilli_Protobuf_CallMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10563,7 +10583,7 @@ extension Fuzzilli_Protobuf_CallMethod: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallMethodWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10574,7 +10594,8 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 4: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10590,8 +10611,11 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 4)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 4)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 5)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -10600,7 +10624,8 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
     if lhs.methodName != rhs.methodName {return false}
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10608,7 +10633,7 @@ extension Fuzzilli_Protobuf_CallMethodWithSpread: SwiftProtobuf.Message, SwiftPr
 
 extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallComputedMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10617,7 +10642,8 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 2: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10627,15 +10653,19 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 1)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 2)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 2)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallComputedMethod, rhs: Fuzzilli_Protobuf_CallComputedMethod) -> Bool {
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -10643,7 +10673,7 @@ extension Fuzzilli_Protobuf_CallComputedMethod: SwiftProtobuf.Message, SwiftProt
 
 extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallComputedMethodWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -10653,7 +10683,8 @@ extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message,
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -10666,8 +10697,11 @@ extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message,
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 3)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -10675,7 +10709,8 @@ extension Fuzzilli_Protobuf_CallComputedMethodWithSpread: SwiftProtobuf.Message,
   public static func ==(lhs: Fuzzilli_Protobuf_CallComputedMethodWithSpread, rhs: Fuzzilli_Protobuf_CallComputedMethodWithSpread) -> Bool {
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -11020,7 +11055,7 @@ extension Fuzzilli_Protobuf_CallSuperConstructor: SwiftProtobuf.Message, SwiftPr
 
 extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallSuperMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -11029,6 +11064,8 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -11038,11 +11075,19 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
     if !self.methodName.isEmpty {
       try visitor.visitSingularStringField(value: self.methodName, fieldNumber: 1)
     }
+    if self.isGuarded != false {
+      try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Fuzzilli_Protobuf_CallSuperMethod, rhs: Fuzzilli_Protobuf_CallSuperMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
+    if lhs.isGuarded != rhs.isGuarded {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -11050,7 +11095,7 @@ extension Fuzzilli_Protobuf_CallSuperMethod: SwiftProtobuf.Message, SwiftProtobu
 
 extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetPrivateProperty"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}propertyName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -11060,7 +11105,7 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.propertyName) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
       default: break
       }
     }
@@ -11073,8 +11118,8 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 3)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11082,7 +11127,7 @@ extension Fuzzilli_Protobuf_GetPrivateProperty: SwiftProtobuf.Message, SwiftProt
   public static func ==(lhs: Fuzzilli_Protobuf_GetPrivateProperty, rhs: Fuzzilli_Protobuf_GetPrivateProperty) -> Bool {
     if lhs.propertyName != rhs.propertyName {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -11165,7 +11210,7 @@ extension Fuzzilli_Protobuf_UpdatePrivateProperty: SwiftProtobuf.Message, SwiftP
 
 extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallPrivateMethod"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -11175,7 +11220,8 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 3: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -11188,8 +11234,11 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 2)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 3)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 3)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11197,7 +11246,8 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
   public static func ==(lhs: Fuzzilli_Protobuf_CallPrivateMethod, rhs: Fuzzilli_Protobuf_CallPrivateMethod) -> Bool {
     if lhs.methodName != rhs.methodName {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -11205,7 +11255,7 @@ extension Fuzzilli_Protobuf_CallPrivateMethod: SwiftProtobuf.Message, SwiftProto
 
 extension Fuzzilli_Protobuf_CallPrivateMethodWithSpread: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CallPrivateMethodWithSpread"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isOptional\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}methodName\0\u{1}spreads\0\u{1}isGuarded\0\u{1}isReceiverOptional\0\u{1}isCallOptional\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -11216,7 +11266,8 @@ extension Fuzzilli_Protobuf_CallPrivateMethodWithSpread: SwiftProtobuf.Message, 
       case 1: try { try decoder.decodeSingularStringField(value: &self.methodName) }()
       case 2: try { try decoder.decodeRepeatedBoolField(value: &self.spreads) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.isGuarded) }()
-      case 4: try { try decoder.decodeSingularBoolField(value: &self.isOptional) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.isReceiverOptional) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.isCallOptional) }()
       default: break
       }
     }
@@ -11232,8 +11283,11 @@ extension Fuzzilli_Protobuf_CallPrivateMethodWithSpread: SwiftProtobuf.Message, 
     if self.isGuarded != false {
       try visitor.visitSingularBoolField(value: self.isGuarded, fieldNumber: 3)
     }
-    if self.isOptional != false {
-      try visitor.visitSingularBoolField(value: self.isOptional, fieldNumber: 4)
+    if self.isReceiverOptional != false {
+      try visitor.visitSingularBoolField(value: self.isReceiverOptional, fieldNumber: 4)
+    }
+    if self.isCallOptional != false {
+      try visitor.visitSingularBoolField(value: self.isCallOptional, fieldNumber: 5)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -11242,7 +11296,8 @@ extension Fuzzilli_Protobuf_CallPrivateMethodWithSpread: SwiftProtobuf.Message, 
     if lhs.methodName != rhs.methodName {return false}
     if lhs.spreads != rhs.spreads {return false}
     if lhs.isGuarded != rhs.isGuarded {return false}
-    if lhs.isOptional != rhs.isOptional {return false}
+    if lhs.isReceiverOptional != rhs.isReceiverOptional {return false}
+    if lhs.isCallOptional != rhs.isCallOptional {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

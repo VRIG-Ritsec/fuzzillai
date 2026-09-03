@@ -216,8 +216,10 @@ public class FixupMutator: RuntimeAssistedMutator {
                 .updateComputedProperty,
                 .getPrivateProperty,
                 .setPrivateProperty,
+                .updatePrivateProperty,
                 .callPrivateMethod,
-                .callPrivateMethodWithSpread:
+                .callPrivateMethodWithSpread,
+                .callSuperMethod:
                 b.append(instr)
 
             default:

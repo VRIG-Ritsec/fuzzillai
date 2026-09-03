@@ -1943,8 +1943,8 @@ public let CodeGenerators: [CodeGenerator] = [
         b, obj in
         let propertyName =
             b.type(of: obj).randomProperty() ?? b.randomCustomPropertyName()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty(propertyName, of: obj, optional: needGuard)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     // Tries to return a "method" as a function via a property access.
@@ -1958,8 +1958,8 @@ public let CodeGenerators: [CodeGenerator] = [
         let type = b.type(of: obj)
         let propertyName =
             type.randomMethod() ?? type.randomProperty() ?? b.randomCustomPropertyName()
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty(propertyName, of: obj, optional: needGuard)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("PropertyAssignmentGenerator", inputs: .preferred(.object())) { b, obj in
@@ -2004,8 +2004,8 @@ public let CodeGenerators: [CodeGenerator] = [
         b, obj in
         let propertyName =
             b.type(of: obj).randomProperty() ?? b.randomCustomPropertyName()
-        let needOptional = b.type(of: obj).MayBe(.nullish)
-        b.deleteProperty(propertyName, of: obj, optional: needOptional)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2055,8 +2055,8 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator("ElementRetrievalGenerator", inputs: .preferred(.object())) {
         b, obj in
         let index = b.randomIndex()
-        let needOptional = b.type(of: obj).MayBe(.nullish)
-        b.getElement(index, of: obj, optional: needOptional)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getElement(index, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("ElementAssignmentGenerator", inputs: .preferred(.object())) {
@@ -2082,8 +2082,8 @@ public let CodeGenerators: [CodeGenerator] = [
     CodeGenerator("ElementRemovalGenerator", inputs: .preferred(.object())) {
         b, obj in
         let index = b.randomIndex()
-        let needOptional = b.type(of: obj).MayBe(.nullish)
-        b.deleteElement(index, of: obj, optional: needOptional)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteElement(index, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2125,8 +2125,8 @@ public let CodeGenerators: [CodeGenerator] = [
         "ComputedPropertyRetrievalGenerator", inputs: .preferred(.object())
     ) { b, obj in
         let propertyName = b.randomJsVariable()
-        let needOptional = b.type(of: obj).MayBe(.nullish)
-        b.getComputedProperty(propertyName, of: obj, optional: needOptional)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getComputedProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2155,8 +2155,8 @@ public let CodeGenerators: [CodeGenerator] = [
         "ComputedPropertyRemovalGenerator", inputs: .preferred(.object())
     ) { b, obj in
         let propertyName = b.randomJsVariable()
-        let needOptional = b.type(of: obj).MayBe(.nullish)
-        b.deleteComputedProperty(propertyName, of: obj, optional: needOptional)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.deleteComputedProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2283,10 +2283,10 @@ public let CodeGenerators: [CodeGenerator] = [
         }
         // TODO: here and below, if we aren't finding arguments of compatible types, we probably still need a guard.
         let arguments = b.randomArguments(forCallingMethod: methodName, on: obj)
-        let needOptional = b.type(of: obj).MayBe(.nullish)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
         b.callMethod(
             methodName, on: obj, withArgs: arguments, guard: needGuard,
-            optional: needOptional)
+            isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2300,10 +2300,10 @@ public let CodeGenerators: [CodeGenerator] = [
         for (arg, spread) in zip(arguments, spreads) where spread == true {
             needGuard = needGuard || b.type(of: arg).MayNotBe(.iterable())
         }
-        let needOptional = b.type(of: obj).MayBe(.nullish)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
         b.callMethod(
             methodName, on: obj, withArgs: arguments, spreading: spreads,
-            guard: needGuard, optional: needOptional)
+            guard: needGuard, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("ComputedMethodCallGenerator", inputs: .preferred(.object())) { b, obj in
@@ -2318,9 +2318,10 @@ public let CodeGenerators: [CodeGenerator] = [
         }
         let method = b.loadString(methodName)
         let arguments = b.randomArguments(forCallingMethod: methodName, on: obj)
-        let needOptional = b.type(of: obj).MayBe(.nullish)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
         b.callComputedMethod(
-            method, on: obj, withArgs: arguments, guard: needGuard, optional: needOptional)
+            method, on: obj, withArgs: arguments, guard: needGuard,
+            isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -2336,10 +2337,10 @@ public let CodeGenerators: [CodeGenerator] = [
         for (arg, spread) in zip(arguments, spreads) where spread == true {
             needGuard = needGuard || b.type(of: arg).MayNotBe(.iterable())
         }
-        let needOptional = b.type(of: obj).MayBe(.nullish)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
         b.callComputedMethod(
             method, on: obj, withArgs: arguments, spreading: spreads,
-            guard: needGuard, optional: needOptional)
+            guard: needGuard, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("FunctionCallGenerator", inputs: .preferred(.function())) { b, f in
@@ -2389,12 +2390,12 @@ public let CodeGenerators: [CodeGenerator] = [
         let needGuard =
             fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
             || !recMatches
-        let needOptional = fctType.MayBe(.nullish)
+        let isReceiverOptional = fctType.MayBe(.nullish)
         // For simplicity we just hard-code the call function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
         b.callMethod(
             "call", on: f, withArgs: [receiver] + arguments, guard: needGuard,
-            optional: needOptional)
+            isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("UnboundFunctionApplyGenerator", inputs: .preferred(.unboundFunction())) { b, f in
@@ -2405,12 +2406,12 @@ public let CodeGenerators: [CodeGenerator] = [
         let needGuard =
             fctType.MayNotBe(.unboundFunction()) || !argsMatch || fctType.receiver == nil
             || !recMatches
-        let needOptional = fctType.MayBe(.nullish)
+        let isReceiverOptional = fctType.MayBe(.nullish)
         // For simplicity we just hard-code the apply function. If this was a separate IL
         // instruction, the JSTyper could infer the result type.
         b.callMethod(
             "apply", on: f, withArgs: [receiver, b.createArray(with: arguments)],
-            guard: needGuard, optional: needOptional)
+            guard: needGuard, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("UnboundFunctionBindGenerator", inputs: .required(.unboundFunction())) { b, f in
@@ -3146,8 +3147,8 @@ public let CodeGenerators: [CodeGenerator] = [
     ) { b, obj in
         let propertyName = b.createSymbolProperty(
             chooseUniform(from: JavaScriptEnvironment.wellKnownSymbols))
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getComputedProperty(propertyName, of: obj, optional: needGuard)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getComputedProperty(propertyName, of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator(
@@ -3160,8 +3161,8 @@ public let CodeGenerators: [CodeGenerator] = [
     },
 
     CodeGenerator("PrototypeAccessGenerator", inputs: .preferred(.object())) { b, obj in
-        let needGuard = b.type(of: obj).MayBe(.nullish)
-        b.getProperty("__proto__", of: obj, optional: needGuard)
+        let isReceiverOptional = b.type(of: obj).MayBe(.nullish)
+        b.getProperty("__proto__", of: obj, isReceiverOptional: isReceiverOptional)
     },
 
     CodeGenerator("PrototypeOverwriteGenerator", inputs: .preferred(.object(), .object())) {

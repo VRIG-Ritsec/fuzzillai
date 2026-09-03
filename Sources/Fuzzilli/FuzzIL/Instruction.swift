@@ -229,7 +229,7 @@ public struct Instruction {
 
     /// Whether this instruction's operation is a GuardableOperations _and_ the guarding is active.
     /// Guarded operations "swallow" runtime exceptions, for example by wrapping them into a try-catch during lifting.
-    public var isGuarded: Bool {
+    var isGuarded: Bool {
         return (op as? GuardableOperation)?.isGuarded ?? false
     }
 
@@ -808,7 +808,7 @@ extension Instruction: ProtobufConvertible {
             case .getProperty(let op):
                 $0.getProperty = Fuzzilli_Protobuf_GetProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setProperty(let op):
                 $0.setProperty = Fuzzilli_Protobuf_SetProperty.with {
@@ -824,7 +824,7 @@ extension Instruction: ProtobufConvertible {
             case .deleteProperty(let op):
                 $0.deleteProperty = Fuzzilli_Protobuf_DeleteProperty.with {
                     $0.propertyName = op.propertyName
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureProperty(let op):
                 $0.configureProperty = Fuzzilli_Protobuf_ConfigureProperty.with {
@@ -837,7 +837,7 @@ extension Instruction: ProtobufConvertible {
             case .getElement(let op):
                 $0.getElement = Fuzzilli_Protobuf_GetElement.with {
                     $0.index = op.index
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setElement(let op):
                 $0.setElement = Fuzzilli_Protobuf_SetElement.with {
@@ -853,7 +853,7 @@ extension Instruction: ProtobufConvertible {
             case .deleteElement(let op):
                 $0.deleteElement = Fuzzilli_Protobuf_DeleteElement.with {
                     $0.index = op.index
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureElement(let op):
                 $0.configureElement = Fuzzilli_Protobuf_ConfigureElement.with {
@@ -865,7 +865,7 @@ extension Instruction: ProtobufConvertible {
                 }
             case .getComputedProperty(let op):
                 $0.getComputedProperty = Fuzzilli_Protobuf_GetComputedProperty.with {
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setComputedProperty(let op):
                 $0.setComputedProperty = Fuzzilli_Protobuf_SetComputedProperty.with {
@@ -878,7 +878,7 @@ extension Instruction: ProtobufConvertible {
                 }
             case .deleteComputedProperty(let op):
                 $0.deleteComputedProperty = Fuzzilli_Protobuf_DeleteComputedProperty.with {
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .configureComputedProperty(let op):
                 $0.configureComputedProperty = Fuzzilli_Protobuf_ConfigureComputedProperty.with {
@@ -972,13 +972,13 @@ extension Instruction: ProtobufConvertible {
             case .callFunction(let op):
                 $0.callFunction = Fuzzilli_Protobuf_CallFunction.with {
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callFunctionWithSpread(let op):
                 $0.callFunctionWithSpread = Fuzzilli_Protobuf_CallFunctionWithSpread.with {
                     $0.spreads = op.spreads
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .construct(let op):
                 $0.construct = Fuzzilli_Protobuf_Construct.with { $0.isGuarded = op.isGuarded }
@@ -991,25 +991,30 @@ extension Instruction: ProtobufConvertible {
                 $0.callMethod = Fuzzilli_Protobuf_CallMethod.with {
                     $0.methodName = op.methodName
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callMethodWithSpread(let op):
                 $0.callMethodWithSpread = Fuzzilli_Protobuf_CallMethodWithSpread.with {
                     $0.methodName = op.methodName
                     $0.spreads = op.spreads
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callComputedMethod(let op):
                 $0.callComputedMethod = Fuzzilli_Protobuf_CallComputedMethod.with {
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callComputedMethodWithSpread(let op):
                 $0.callComputedMethodWithSpread =
                     Fuzzilli_Protobuf_CallComputedMethodWithSpread.with {
                         $0.spreads = op.spreads
                         $0.isGuarded = op.isGuarded
+                        $0.isReceiverOptional = op.isReceiverOptional
+                        $0.isCallOptional = op.isCallOptional
                     }
             case .unaryOperation(let op):
                 $0.unaryOperation = Fuzzilli_Protobuf_UnaryOperation.with {
@@ -1060,12 +1065,14 @@ extension Instruction: ProtobufConvertible {
             case .callSuperMethod(let op):
                 $0.callSuperMethod = Fuzzilli_Protobuf_CallSuperMethod.with {
                     $0.methodName = op.methodName
+                    $0.isGuarded = op.isGuarded
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .getPrivateProperty(let op):
                 $0.getPrivateProperty = Fuzzilli_Protobuf_GetPrivateProperty.with {
                     $0.propertyName = op.propertyName
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
                 }
             case .setPrivateProperty(let op):
                 $0.setPrivateProperty = Fuzzilli_Protobuf_SetPrivateProperty.with {
@@ -1082,7 +1089,8 @@ extension Instruction: ProtobufConvertible {
                 $0.callPrivateMethod = Fuzzilli_Protobuf_CallPrivateMethod.with {
                     $0.methodName = op.methodName
                     $0.isGuarded = op.isGuarded
-                    $0.isOptional = op.isOptional
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .callPrivateMethodWithSpread(let op):
                 $0.callPrivateMethodWithSpread = Fuzzilli_Protobuf_CallPrivateMethodWithSpread.with
@@ -1090,6 +1098,8 @@ extension Instruction: ProtobufConvertible {
                     $0.methodName = op.methodName
                     $0.spreads = op.spreads
                     $0.isGuarded = op.isGuarded
+                    $0.isReceiverOptional = op.isReceiverOptional
+                    $0.isCallOptional = op.isCallOptional
                 }
             case .getSuperProperty(let op):
                 $0.getSuperProperty = Fuzzilli_Protobuf_GetSuperProperty.with {
@@ -2353,7 +2363,7 @@ extension Instruction: ProtobufConvertible {
             op = CreateTemplateString(parts: p.parts)
         case .getProperty(let p):
             op = GetProperty(
-                propertyName: p.propertyName, isOptional: p.isOptional)
+                propertyName: p.propertyName, isReceiverOptional: p.isReceiverOptional)
         case .setProperty(let p):
             op = SetProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
         case .updateProperty(let p):
@@ -2363,7 +2373,7 @@ extension Instruction: ProtobufConvertible {
                 isGuarded: p.isGuarded)
         case .deleteProperty(let p):
             op = DeleteProperty(
-                propertyName: p.propertyName, isOptional: p.isOptional)
+                propertyName: p.propertyName, isReceiverOptional: p.isReceiverOptional)
         case .configureProperty(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2373,7 +2383,7 @@ extension Instruction: ProtobufConvertible {
                 propertyName: p.propertyName, flags: flags,
                 type: try convertEnum(p.type, PropertyType.allCases))
         case .getElement(let p):
-            op = GetElement(index: p.index, isOptional: p.isOptional)
+            op = GetElement(index: p.index, isReceiverOptional: p.isReceiverOptional)
         case .setElement(let p):
             op = SetElement(index: p.index, isGuarded: p.isGuarded)
         case .updateElement(let p):
@@ -2382,7 +2392,7 @@ extension Instruction: ProtobufConvertible {
                 operator: try convertEnum(p.op, BinaryOperator.allCases),
                 isGuarded: p.isGuarded)
         case .deleteElement(let p):
-            op = DeleteElement(index: p.index, isOptional: p.isOptional)
+            op = DeleteElement(index: p.index, isReceiverOptional: p.isReceiverOptional)
         case .configureElement(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2391,7 +2401,7 @@ extension Instruction: ProtobufConvertible {
             op = ConfigureElement(
                 index: p.index, flags: flags, type: try convertEnum(p.type, PropertyType.allCases))
         case .getComputedProperty(let p):
-            op = GetComputedProperty(isOptional: p.isOptional)
+            op = GetComputedProperty(isReceiverOptional: p.isReceiverOptional)
         case .setComputedProperty(let p):
             op = SetComputedProperty(isGuarded: p.isGuarded)
         case .updateComputedProperty(let p):
@@ -2399,7 +2409,7 @@ extension Instruction: ProtobufConvertible {
                 operator: try convertEnum(p.op, BinaryOperator.allCases),
                 isGuarded: p.isGuarded)
         case .deleteComputedProperty(let p):
-            op = DeleteComputedProperty(isOptional: p.isOptional)
+            op = DeleteComputedProperty(isReceiverOptional: p.isReceiverOptional)
         case .configureComputedProperty(let p):
             var flags = PropertyFlags()
             if p.isWritable { flags.insert(.writable) }
@@ -2474,11 +2484,12 @@ extension Instruction: ProtobufConvertible {
             op = Await()
         case .callFunction(let p):
             op = CallFunction(
-                numArguments: inouts.count - 2, isGuarded: p.isGuarded, isOptional: p.isOptional)
+                numArguments: inouts.count - 2, isGuarded: p.isGuarded,
+                isCallOptional: p.isCallOptional)
         case .callFunctionWithSpread(let p):
             op = CallFunctionWithSpread(
                 numArguments: inouts.count - 2, spreads: p.spreads, isGuarded: p.isGuarded,
-                isOptional: p.isOptional)
+                isCallOptional: p.isCallOptional)
         case .construct(let p):
             op = Construct(numArguments: inouts.count - 2, isGuarded: p.isGuarded)
         case .constructWithSpread(let p):
@@ -2487,18 +2498,20 @@ extension Instruction: ProtobufConvertible {
         case .callMethod(let p):
             op = CallMethod(
                 methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded,
-                isOptional: p.isOptional)
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .callMethodWithSpread(let p):
             op = CallMethodWithSpread(
                 methodName: p.methodName, numArguments: inouts.count - 2, spreads: p.spreads,
-                isGuarded: p.isGuarded, isOptional: p.isOptional)
+                isGuarded: p.isGuarded, isReceiverOptional: p.isReceiverOptional,
+                isCallOptional: p.isCallOptional)
         case .callComputedMethod(let p):
             op = CallComputedMethod(
-                numArguments: inouts.count - 3, isGuarded: p.isGuarded, isOptional: p.isOptional)
+                numArguments: inouts.count - 3, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .callComputedMethodWithSpread(let p):
             op = CallComputedMethodWithSpread(
                 numArguments: inouts.count - 3, spreads: p.spreads, isGuarded: p.isGuarded,
-                isOptional: p.isOptional)
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .unaryOperation(let p):
             op = UnaryOperation(try convertEnum(p.op, UnaryOperator.allCases))
         case .binaryOperation(let p):
@@ -2529,10 +2542,13 @@ extension Instruction: ProtobufConvertible {
         case .callSuperConstructor:
             op = CallSuperConstructor(numArguments: inouts.count)
         case .callSuperMethod(let p):
-            op = CallSuperMethod(methodName: p.methodName, numArguments: inouts.count - 1)
+            op = CallSuperMethod(
+                methodName: p.methodName, numArguments: inouts.count - 1, isGuarded: p.isGuarded,
+                isCallOptional: p.isCallOptional)
         case .getPrivateProperty(let p):
             op = GetPrivateProperty(
-                propertyName: p.propertyName, isGuarded: p.isGuarded, isOptional: p.isOptional)
+                propertyName: p.propertyName, isGuarded: p.isGuarded,
+                isReceiverOptional: p.isReceiverOptional)
         case .setPrivateProperty(let p):
             op = SetPrivateProperty(propertyName: p.propertyName, isGuarded: p.isGuarded)
         case .updatePrivateProperty(let p):
@@ -2543,11 +2559,12 @@ extension Instruction: ProtobufConvertible {
         case .callPrivateMethod(let p):
             op = CallPrivateMethod(
                 methodName: p.methodName, numArguments: inouts.count - 2, isGuarded: p.isGuarded,
-                isOptional: p.isOptional)
+                isReceiverOptional: p.isReceiverOptional, isCallOptional: p.isCallOptional)
         case .callPrivateMethodWithSpread(let p):
             op = CallPrivateMethodWithSpread(
                 methodName: p.methodName, numArguments: inouts.count - 2, spreads: p.spreads,
-                isGuarded: p.isGuarded, isOptional: p.isOptional)
+                isGuarded: p.isGuarded, isReceiverOptional: p.isReceiverOptional,
+                isCallOptional: p.isCallOptional)
         case .getSuperProperty(let p):
             op = GetSuperProperty(propertyName: p.propertyName)
         case .setSuperProperty(let p):

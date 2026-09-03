@@ -52,9 +52,14 @@ class JsOperation: Operation {
 /// because we know that the following code will not make any specific
 /// assumptions about the type of the outputs.
 /// TODO(rherouart): There are many operations still adding both a try-catch and .? (optional chaining)
-protocol OptionalOperation: JsOperation {
-    var isOptional: Bool { get }
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation
+protocol ReceiverOptionalOperation: JsOperation {
+    var isReceiverOptional: Bool { get }
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation
+}
+
+protocol CallOptionalOperation: JsOperation {
+    var isCallOptional: Bool { get }
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation
 }
 
 protocol GuardableOperation: JsOperation {
@@ -1066,20 +1071,20 @@ final class CreateTemplateString: JsOperation {
     }
 }
 
-final class GetProperty: JsOperation, OptionalOperation {
+final class GetProperty: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .getProperty(self) }
 
     let propertyName: String
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(propertyName: String, isOptional: Bool = false) {
+    init(propertyName: String, isReceiverOptional: Bool = false) {
         self.propertyName = propertyName
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return GetProperty(propertyName: propertyName, isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return GetProperty(propertyName: propertyName, isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1120,20 +1125,20 @@ final class UpdateProperty: JsOperation, GuardableOperation {
     }
 }
 
-final class DeleteProperty: JsOperation, OptionalOperation {
+final class DeleteProperty: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .deleteProperty(self) }
 
     let propertyName: String
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(propertyName: String, isOptional: Bool = false) {
+    init(propertyName: String, isReceiverOptional: Bool = false) {
         self.propertyName = propertyName
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return DeleteProperty(propertyName: propertyName, isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return DeleteProperty(propertyName: propertyName, isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1179,20 +1184,20 @@ final class ConfigureProperty: JsOperation {
     }
 }
 
-final class GetElement: JsOperation, OptionalOperation {
+final class GetElement: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .getElement(self) }
 
     let index: Int64
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(index: Int64, isOptional: Bool = false) {
+    init(index: Int64, isReceiverOptional: Bool = false) {
         self.index = index
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return GetElement(index: index, isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return GetElement(index: index, isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1232,20 +1237,20 @@ final class UpdateElement: JsOperation, GuardableOperation {
     }
 }
 
-final class DeleteElement: JsOperation, OptionalOperation {
+final class DeleteElement: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .deleteElement(self) }
 
     let index: Int64
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(index: Int64, isOptional: Bool = false) {
+    init(index: Int64, isReceiverOptional: Bool = false) {
         self.index = index
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 1, numOutputs: 1, attributes: .isMutable)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return DeleteElement(index: index, isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return DeleteElement(index: index, isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1264,18 +1269,18 @@ final class ConfigureElement: JsOperation {
     }
 }
 
-final class GetComputedProperty: JsOperation, OptionalOperation {
+final class GetComputedProperty: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .getComputedProperty(self) }
 
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(isOptional: Bool = false) {
-        self.isOptional = isOptional
+    init(isReceiverOptional: Bool = false) {
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 2, numOutputs: 1)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return GetComputedProperty(isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return GetComputedProperty(isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1311,18 +1316,18 @@ final class UpdateComputedProperty: JsOperation, GuardableOperation {
     }
 }
 
-final class DeleteComputedProperty: JsOperation, OptionalOperation {
+final class DeleteComputedProperty: JsOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .deleteComputedProperty(self) }
 
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
-    init(isOptional: Bool = false) {
-        self.isOptional = isOptional
+    init(isReceiverOptional: Bool = false) {
+        self.isReceiverOptional = isReceiverOptional
         super.init(numInputs: 2, numOutputs: 1)
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
-        return DeleteComputedProperty(isOptional: isOptional)
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
+        return DeleteComputedProperty(isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -1666,41 +1671,41 @@ final class Await: JsOperation {
     }
 }
 
-final class CallFunction: JsOperation, GuardableOperation, OptionalOperation {
+final class CallFunction: JsOperation, GuardableOperation, CallOptionalOperation {
     override var opcode: Opcode { .callFunction(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isCallOptional: Bool
 
     var numArguments: Int {
         return numInputs - 1
     }
 
-    init(numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
+    init(numArguments: Int, isGuarded: Bool, isCallOptional: Bool = false) {
         // The called function is the first input.
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
         return CallFunction(
-            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+            numArguments: numArguments, isGuarded: isGuarded, isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallFunction(
-            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+            numArguments: numArguments, isGuarded: isGuarded, isCallOptional: isCallOptional)
     }
 }
 
-final class CallFunctionWithSpread: JsOperation, GuardableOperation, OptionalOperation {
+final class CallFunctionWithSpread: JsOperation, GuardableOperation, CallOptionalOperation {
     override var opcode: Opcode { .callFunctionWithSpread(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isCallOptional: Bool
 
     let spreads: [Bool]
 
@@ -1708,28 +1713,28 @@ final class CallFunctionWithSpread: JsOperation, GuardableOperation, OptionalOpe
         return numInputs - 1
     }
 
-    init(numArguments: Int, spreads: [Bool], isGuarded: Bool, isOptional: Bool = false) {
+    init(numArguments: Int, spreads: [Bool], isGuarded: Bool, isCallOptional: Bool = false) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The called function is the first input.
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
         return CallFunctionWithSpread(
             numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallFunctionWithSpread(
             numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isCallOptional: isCallOptional)
     }
 }
 
@@ -1783,11 +1788,14 @@ final class ConstructWithSpread: JsOperation, GuardableOperation {
     }
 }
 
-final class CallMethod: JsOperation, GuardableOperation, OptionalOperation {
+final class CallMethod: JsOperation, GuardableOperation, ReceiverOptionalOperation,
+    CallOptionalOperation
+{
     override var opcode: Opcode { .callMethod(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     let methodName: String
 
@@ -1795,34 +1803,47 @@ final class CallMethod: JsOperation, GuardableOperation, OptionalOperation {
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
+    init(
+        methodName: String, numArguments: Int, isGuarded: Bool,
+        isReceiverOptional: Bool = false, isCallOptional: Bool = false
+    ) {
         self.methodName = methodName
         // The reference object is the first input
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isMutable, .isVariadic, .isCall])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallMethod(
             methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallMethod(
             methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 }
 
-final class CallMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
+final class CallMethodWithSpread: JsOperation, GuardableOperation, ReceiverOptionalOperation,
+    CallOptionalOperation
+{
     override var opcode: Opcode { .callMethodWithSpread(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     let methodName: String
     let spreads: [Bool]
@@ -1833,7 +1854,7 @@ final class CallMethodWithSpread: JsOperation, GuardableOperation, OptionalOpera
 
     init(
         methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool,
-        isOptional: Bool = false
+        isReceiverOptional: Bool = false, isCallOptional: Bool = false
     ) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
@@ -1841,60 +1862,88 @@ final class CallMethodWithSpread: JsOperation, GuardableOperation, OptionalOpera
         self.spreads = spreads
         // The reference object is the first input
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isMutable, .isVariadic, .isCall])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded, isOptional: isOptional)
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallMethodWithSpread(
+            methodName: methodName, numArguments: numArguments, spreads: spreads,
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded, isOptional: isOptional)
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
     }
 }
 
-final class CallComputedMethod: JsOperation, GuardableOperation, OptionalOperation {
+final class CallComputedMethod: JsOperation, GuardableOperation, ReceiverOptionalOperation,
+    CallOptionalOperation
+{
     override var opcode: Opcode { .callComputedMethod(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     var numArguments: Int {
         return numInputs - 2
     }
 
-    init(numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
+    init(
+        numArguments: Int, isGuarded: Bool, isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
+    ) {
         // The reference object is the first input and the method name is the second input
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
             attributes: [.isVariadic, .isCall])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallComputedMethod(
-            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+            numArguments: numArguments, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallComputedMethod(
+            numArguments: numArguments, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallComputedMethod(
-            numArguments: numArguments, isGuarded: isGuarded, isOptional: isOptional)
+            numArguments: numArguments, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 }
 
-final class CallComputedMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
+final class CallComputedMethodWithSpread: JsOperation, GuardableOperation,
+    ReceiverOptionalOperation, CallOptionalOperation
+{
     override var opcode: Opcode { .callComputedMethodWithSpread(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     let spreads: [Bool]
 
@@ -1902,28 +1951,38 @@ final class CallComputedMethodWithSpread: JsOperation, GuardableOperation, Optio
         return numInputs - 2
     }
 
-    init(numArguments: Int, spreads: [Bool], isGuarded: Bool, isOptional: Bool = false) {
+    init(
+        numArguments: Int, spreads: [Bool], isGuarded: Bool,
+        isReceiverOptional: Bool = false, isCallOptional: Bool = false
+    ) {
         assert(!spreads.isEmpty)
         assert(spreads.count == numArguments)
         self.spreads = spreads
         // The reference object is the first input and the method name is the second input
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 2, numOutputs: 1, firstVariadicInput: 2,
             attributes: [.isMutable, .isVariadic, .isCall])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallComputedMethodWithSpread(
             numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallComputedMethodWithSpread(
+            numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallComputedMethodWithSpread(
             numArguments: numArguments, spreads: spreads, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 }
 
@@ -2111,50 +2170,71 @@ final class CallSuperConstructor: JsOperation {
     }
 }
 
-final class CallSuperMethod: JsOperation {
+final class CallSuperMethod: JsOperation, GuardableOperation, CallOptionalOperation {
     override var opcode: Opcode { .callSuperMethod(self) }
 
+    let isGuarded: Bool
+    let isCallOptional: Bool
     let methodName: String
 
     var numArguments: Int {
         return numInputs
     }
 
-    init(methodName: String, numArguments: Int) {
+    init(
+        methodName: String, numArguments: Int, isGuarded: Bool = false,
+        isCallOptional: Bool = false
+    ) {
         self.methodName = methodName
+        self.isGuarded = isGuarded
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments, numOutputs: 1, firstVariadicInput: 0,
             attributes: [.isCall, .isMutable, .isVariadic], requiredContext: [.javascript, .method])
     }
+
+    func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
+        return CallSuperMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallSuperMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isCallOptional: isCallOptional)
+    }
 }
 
-final class GetPrivateProperty: JsOperation, GuardableOperation, OptionalOperation {
+final class GetPrivateProperty: JsOperation, GuardableOperation, ReceiverOptionalOperation {
     override var opcode: Opcode { .getPrivateProperty(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
 
     let propertyName: String
 
-    init(propertyName: String, isGuarded: Bool, isOptional: Bool = false) {
+    init(propertyName: String, isGuarded: Bool = false, isReceiverOptional: Bool = false) {
         self.propertyName = propertyName
         // To ensure validity, OperationMutator only uses private properties/methods
         // that are both present on the receiver type and declared in the surrounding class definition.
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
         super.init(
             numInputs: 1, numOutputs: 1, attributes: [.isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return GetPrivateProperty(
-            propertyName: propertyName, isGuarded: isGuarded, isOptional: isOptional)
+            propertyName: propertyName, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return GetPrivateProperty(
-            propertyName: propertyName, isGuarded: isGuarded, isOptional: isOptional)
+            propertyName: propertyName, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional)
     }
 }
 
@@ -2199,11 +2279,14 @@ final class UpdatePrivateProperty: JsOperation, GuardableOperation {
     }
 }
 
-final class CallPrivateMethod: JsOperation, GuardableOperation, OptionalOperation {
+final class CallPrivateMethod: JsOperation, GuardableOperation, ReceiverOptionalOperation,
+    CallOptionalOperation
+{
     override var opcode: Opcode { .callPrivateMethod(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     let methodName: String
 
@@ -2211,35 +2294,48 @@ final class CallPrivateMethod: JsOperation, GuardableOperation, OptionalOperatio
         return numInputs - 1
     }
 
-    init(methodName: String, numArguments: Int, isGuarded: Bool, isOptional: Bool = false) {
+    init(
+        methodName: String, numArguments: Int, isGuarded: Bool,
+        isReceiverOptional: Bool = false, isCallOptional: Bool = false
+    ) {
         self.methodName = methodName
         // The reference object is the first input.
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallPrivateMethod(
             methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallPrivateMethod(
+            methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallPrivateMethod(
             methodName: methodName, numArguments: numArguments, isGuarded: isGuarded,
-            isOptional: isOptional)
+            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
     }
 }
 
-final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation, OptionalOperation {
+final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation, ReceiverOptionalOperation,
+    CallOptionalOperation
+{
     override var opcode: Opcode { .callPrivateMethodWithSpread(self) }
 
     let isGuarded: Bool
-    let isOptional: Bool
+    let isReceiverOptional: Bool
+    let isCallOptional: Bool
 
     let methodName: String
     let spreads: [Bool]
@@ -2250,29 +2346,39 @@ final class CallPrivateMethodWithSpread: JsOperation, GuardableOperation, Option
 
     init(
         methodName: String, numArguments: Int, spreads: [Bool], isGuarded: Bool,
-        isOptional: Bool = false
+        isReceiverOptional: Bool = false, isCallOptional: Bool = false
     ) {
         assert(spreads.count == numArguments)
         self.methodName = methodName
         self.spreads = spreads
         self.isGuarded = isGuarded
-        self.isOptional = isOptional
+        self.isReceiverOptional = isReceiverOptional
+        self.isCallOptional = isCallOptional
         super.init(
             numInputs: numArguments + 1, numOutputs: 1, firstVariadicInput: 1,
             attributes: [.isVariadic, .isCall, .isMutable],
             requiredContext: [.javascript, .classMethod])
     }
 
-    func withOptionalState(_ isOptional: Bool) -> OptionalOperation {
+    func withReceiverOptionalState(_ isReceiverOptional: Bool) -> ReceiverOptionalOperation {
         return CallPrivateMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded, isOptional: isOptional)
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
+    }
+
+    func withCallOptionalState(_ isCallOptional: Bool) -> CallOptionalOperation {
+        return CallPrivateMethodWithSpread(
+            methodName: methodName, numArguments: numArguments, spreads: spreads,
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
     }
 
     func withGuardedState(_ isGuarded: Bool) -> GuardableOperation {
         return CallPrivateMethodWithSpread(
             methodName: methodName, numArguments: numArguments, spreads: spreads,
-            isGuarded: isGuarded, isOptional: isOptional)
+            isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+            isCallOptional: isCallOptional)
     }
 }
 

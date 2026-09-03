@@ -675,16 +675,19 @@ public class Fuzzer {
         }
 
         // Second attempt at fixing the program: enable guards (try-catch) for all guardable operations
-        // and optional chaining for all optional operations.
-        // TODO(rherouart): FixupMutator currently only removes unnecessary guards (isGuarded), not optional chaining (isOptional).
-        // Consider extending FixupMutator or adding a dedicated pass to also minimize unnecessary optional chaining after import.
         for instr in program.code {
             var newOp = instr.op
-            if let op = instr.op as? GuardableOperation, !op.isGuarded {
-                newOp = op.withGuardedState(true)
-            }
-            if let op = newOp as? OptionalOperation, !op.isOptional {
-                newOp = op.withOptionalState(true)
+            if let op = instr.op as? GuardableOperation {
+                if !op.isGuarded {
+                    newOp = op.withGuardedState(true)
+                }
+            } else {
+                if let op = newOp as? ReceiverOptionalOperation, !op.isReceiverOptional {
+                    newOp = op.withReceiverOptionalState(true)
+                }
+                if let op = newOp as? CallOptionalOperation, !op.isCallOptional {
+                    newOp = op.withCallOptionalState(true)
+                }
             }
             b.append(Instruction(newOp, inouts: instr.inouts, flags: instr.flags))
         }

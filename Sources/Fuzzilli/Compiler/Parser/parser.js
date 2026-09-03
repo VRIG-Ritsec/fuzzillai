@@ -573,7 +573,7 @@ function parse(script, proto) {
                 assert(node.property.name != 'Super', "super.super(...) is not allowed");
                 out.name = node.property.name;
             }
-            out.isOptional = node.type === 'OptionalMemberExpression';
+            out.isOptional = Boolean(node.optional);
             return { isSuper: true, fields: out };
         }
         let object = visitExpression(node.object);
@@ -587,7 +587,7 @@ function parse(script, proto) {
             assert(node.property.type === 'Identifier', "Expected node.property.type to be exactly 'Identifier'");
             out.name = node.property.name;
         }
-        out.isOptional = node.type === 'OptionalMemberExpression';
+        out.isOptional = Boolean(node.optional);
         return { isSuper: false, fields: out };
     }
 
@@ -750,13 +750,13 @@ function parse(script, proto) {
             case 'OptionalCallExpression': {
                 if (node.callee.type === 'Super') {
                     let arguments = node.arguments.map(visitExpression);
-                    let isOptional = node.type === 'OptionalCallExpression';
+                    let isOptional = Boolean(node.optional);
                     return makeExpression('CallSuperConstructor', { arguments, isOptional });
                 }
 
                 let callee = visitExpression(node.callee);
                 let arguments = node.arguments.map(visitExpression);
-                let isOptional = node.type === 'OptionalCallExpression';
+                let isOptional = Boolean(node.optional);
                 return makeExpression('CallExpression', { callee, arguments, isOptional });
             }
             case 'NewExpression': {

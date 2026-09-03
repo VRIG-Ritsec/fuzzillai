@@ -173,21 +173,25 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CreateArrayWithSpread(spreads: spreads)
         case .getProperty(let op):
-            newOp = GetProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
+            newOp = GetProperty(
+                propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
         case .setProperty(let op):
             newOp = SetProperty(propertyName: b.randomPropertyName(), isGuarded: op.isGuarded)
-        case .updateProperty(_):
+        case .updateProperty(let op):
             newOp = UpdateProperty(
                 propertyName: b.randomPropertyName(),
-                operator: chooseUniform(from: BinaryOperator.allCases))
+                operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
         case .getPrivateProperty(let op):
             if probability(0.25) || !b.hasVisibleClassDefinition {
-                newOp = GetProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
+                newOp = GetProperty(
+                    propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
             } else {
                 let prop = selectAvailablePrivateProperty(
                     in: b, fallback: op.propertyName)
                 newOp = GetPrivateProperty(
-                    propertyName: prop, isGuarded: op.isGuarded, isOptional: op.isOptional)
+                    propertyName: prop, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional)
             }
         case .setPrivateProperty(let op):
             if probability(0.25) || !b.hasVisibleClassDefinition {
@@ -201,16 +205,19 @@ public class OperationMutator: BaseInstructionMutator {
             if probability(0.25) || !b.hasVisibleClassDefinition {
                 newOp = UpdateProperty(
                     propertyName: b.randomPropertyName(),
-                    operator: chooseUniform(from: BinaryOperator.allCases))
+                    operator: chooseUniform(from: BinaryOperator.allCases),
+                    isGuarded: op.isGuarded)
             } else {
                 let prop = selectAvailablePrivateProperty(
                     in: b, fallback: op.propertyName)
                 newOp = UpdatePrivateProperty(
                     propertyName: prop,
-                    operator: chooseUniform(from: BinaryOperator.allCases))
+                    operator: chooseUniform(from: BinaryOperator.allCases),
+                    isGuarded: op.isGuarded)
             }
         case .deleteProperty(let op):
-            newOp = DeleteProperty(propertyName: b.randomPropertyName(), isOptional: op.isOptional)
+            newOp = DeleteProperty(
+                propertyName: b.randomPropertyName(), isReceiverOptional: op.isReceiverOptional)
         case .configureProperty(let op):
             // Change the flags or the property name, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -221,16 +228,19 @@ public class OperationMutator: BaseInstructionMutator {
                     propertyName: op.propertyName, flags: PropertyFlags.random(), type: op.type)
             }
         case .getElement(let op):
-            newOp = GetElement(index: b.randomIndex(), isOptional: op.isOptional)
-        case .setElement(_):
-            newOp = SetElement(index: b.randomIndex())
-        case .updateElement(_):
+            newOp = GetElement(index: b.randomIndex(), isReceiverOptional: op.isReceiverOptional)
+        case .setElement(let op):
+            newOp = SetElement(index: b.randomIndex(), isGuarded: op.isGuarded)
+        case .updateElement(let op):
             newOp = UpdateElement(
-                index: b.randomIndex(), operator: chooseUniform(from: BinaryOperator.allCases))
-        case .updateComputedProperty(_):
-            newOp = UpdateComputedProperty(operator: chooseUniform(from: BinaryOperator.allCases))
+                index: b.randomIndex(), operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
+        case .updateComputedProperty(let op):
+            newOp = UpdateComputedProperty(
+                operator: chooseUniform(from: BinaryOperator.allCases),
+                isGuarded: op.isGuarded)
         case .deleteElement(let op):
-            newOp = DeleteElement(index: b.randomIndex(), isOptional: op.isOptional)
+            newOp = DeleteElement(index: b.randomIndex(), isReceiverOptional: op.isReceiverOptional)
         case .configureElement(let op):
             // Change the flags or the element index, but don't change the type as that would require changing the inputs as well.
             if probability(0.5) {
@@ -247,7 +257,8 @@ public class OperationMutator: BaseInstructionMutator {
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
             newOp = CallFunctionWithSpread(
-                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .constructWithSpread(let op):
             var spreads = op.spreads
             assert(!spreads.isEmpty)
@@ -259,17 +270,20 @@ public class OperationMutator: BaseInstructionMutator {
             // Selecting a random method has a high chance of causing a runtime exception, so try to select an existing one.
             let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
             newOp = CallMethod(
-                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .callPrivateMethod(let op):
             if probability(0.25) || !b.hasVisibleClassDefinition {
                 let methodName = b.type(of: instr.input(0)).randomMethod() ?? b.randomMethodName()
                 newOp = CallMethod(
-                    methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                    methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
             } else {
                 let method = selectAvailablePrivateMethod(
                     in: b, fallback: op.methodName)
                 newOp = CallPrivateMethod(
-                    methodName: method, numArguments: op.numArguments, isGuarded: op.isGuarded)
+                    methodName: method, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
             }
         case .callMethodWithSpread(let op):
             // Selecting a random method has a high chance of causing a runtime exception, so try to select an existing one.
@@ -280,7 +294,8 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CallMethodWithSpread(
                 methodName: methodName, numArguments: op.numArguments, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         // TODO(rherouart): Unify normal and spread calls (e.g. CallMethod vs CallMethodWithSpread) into a single opcode with an optional/empty spread array.
         // This would allow more mutations, such as easily turning a non-spread call into a spread call.
         // Do the same for callMethod/construct/callFunction
@@ -291,14 +306,16 @@ public class OperationMutator: BaseInstructionMutator {
             spreads[idx] = !spreads[idx]
             newOp = CallPrivateMethodWithSpread(
                 methodName: op.methodName, numArguments: op.numArguments, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callComputedMethodWithSpread(let op):
             var spreads = op.spreads
             assert(!spreads.isEmpty)
             let idx = Int.random(in: 0..<spreads.count)
             spreads[idx] = !spreads[idx]
             newOp = CallComputedMethodWithSpread(
-                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments, spreads: spreads, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .unaryOperation(_):
             newOp = UnaryOperation(chooseUniform(from: UnaryOperator.allCases))
         case .binaryOperation(_):
@@ -314,7 +331,9 @@ public class OperationMutator: BaseInstructionMutator {
                 b.randomIdentifierName(), declarationMode: op.declarationMode)
         case .callSuperMethod(let op):
             let methodName = b.currentSuperType().randomMethod() ?? b.randomMethodName()
-            newOp = CallSuperMethod(methodName: methodName, numArguments: op.numArguments)
+            newOp = CallSuperMethod(
+                methodName: methodName, numArguments: op.numArguments, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .getSuperProperty(_):
             newOp = GetSuperProperty(propertyName: b.randomPropertyName())
         case .setSuperProperty(_):
@@ -964,8 +983,11 @@ public class OperationMutator: BaseInstructionMutator {
         assert(instr.flags == .empty)
 
         var modifiedOp = newOp
-        if let optionalOp = modifiedOp as? OptionalOperation, probability(0.1) {
-            modifiedOp = optionalOp.withOptionalState(!optionalOp.isOptional)
+        if let optionalOp = modifiedOp as? ReceiverOptionalOperation, probability(0.1) {
+            modifiedOp = optionalOp.withReceiverOptionalState(!optionalOp.isReceiverOptional)
+        }
+        if let optionalOp = modifiedOp as? CallOptionalOperation, probability(0.1) {
+            modifiedOp = optionalOp.withCallOptionalState(!optionalOp.isCallOptional)
         }
 
         return Instruction(modifiedOp, inouts: inouts)
@@ -1005,12 +1027,15 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CreateArrayWithSpread(spreads: spreads)
         case .callFunction(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallFunction(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
+            newOp = CallFunction(
+                numArguments: op.numArguments + 1, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .callFunctionWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallFunctionWithSpread(
-                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded,
+                isCallOptional: op.isCallOptional)
         case .construct(let op):
             inputs.append(b.randomJsVariable())
             newOp = Construct(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
@@ -1023,27 +1048,33 @@ public class OperationMutator: BaseInstructionMutator {
             inputs.append(b.randomJsVariable())
             newOp = CallMethod(
                 methodName: op.methodName, numArguments: op.numArguments + 1,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callMethodWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallMethodWithSpread(
                 methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callComputedMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallComputedMethod(numArguments: op.numArguments + 1, isGuarded: op.isGuarded)
+            newOp = CallComputedMethod(
+                numArguments: op.numArguments + 1, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .callComputedMethodWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallComputedMethodWithSpread(
-                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded)
+                numArguments: op.numArguments + 1, spreads: spreads, isGuarded: op.isGuarded,
+                isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
         case .callPrivateMethodWithSpread(let op):
             let spreads = op.spreads + [Bool.random()]
             inputs.append(b.randomJsVariable())
             newOp = CallPrivateMethodWithSpread(
                 methodName: op.methodName, numArguments: op.numArguments + 1, spreads: spreads,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
         case .callSuperConstructor(let op):
             inputs.append(b.randomJsVariable())
             newOp = CallSuperConstructor(numArguments: op.numArguments + 1)
@@ -1051,11 +1082,14 @@ public class OperationMutator: BaseInstructionMutator {
             inputs.append(b.randomJsVariable())
             newOp = CallPrivateMethod(
                 methodName: op.methodName, numArguments: op.numArguments + 1,
-                isGuarded: op.isGuarded)
+                isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                isCallOptional: op.isCallOptional)
 
         case .callSuperMethod(let op):
             inputs.append(b.randomJsVariable())
-            newOp = CallSuperMethod(methodName: op.methodName, numArguments: op.numArguments + 1)
+            newOp = CallSuperMethod(
+                methodName: op.methodName, numArguments: op.numArguments + 1,
+                isGuarded: op.isGuarded, isCallOptional: op.isCallOptional)
         case .bindFunction(_):
             inputs.append(b.randomJsVariable())
             newOp = BindFunction(numInputs: inputs.count)

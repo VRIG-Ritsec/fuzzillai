@@ -83,23 +83,30 @@ struct InstructionSimplifier: Reducer {
             case .createArrayWithSpread(let op):
                 newOp = CreateArray(numInitialValues: op.numInputs)
             case .callFunctionWithSpread(let op):
-                newOp = CallFunction(numArguments: op.numArguments, isGuarded: op.isGuarded)
+                newOp = CallFunction(
+                    numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isCallOptional: op.isCallOptional)
             case .constructWithSpread(let op):
                 newOp = Construct(numArguments: op.numArguments, isGuarded: op.isGuarded)
             case .callMethodWithSpread(let op):
                 newOp = CallMethod(
                     methodName: op.methodName, numArguments: op.numArguments,
-                    isGuarded: op.isGuarded)
+                    isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                    isCallOptional: op.isCallOptional)
             case .callComputedMethodWithSpread(let op):
-                newOp = CallComputedMethod(numArguments: op.numArguments, isGuarded: op.isGuarded)
+                newOp = CallComputedMethod(
+                    numArguments: op.numArguments, isGuarded: op.isGuarded,
+                    isReceiverOptional: op.isReceiverOptional, isCallOptional: op.isCallOptional)
             case .callPrivateMethodWithSpread(let op):
                 newOp = CallPrivateMethod(
                     methodName: op.methodName, numArguments: op.numArguments,
-                    isGuarded: op.isGuarded)
+                    isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                    isCallOptional: op.isCallOptional)
 
             case .construct(let op):
                 // Prefer simple function calls over constructor calls if there's no difference
-                newOp = CallFunction(numArguments: op.numArguments, isGuarded: op.isGuarded)
+                newOp = CallFunction(
+                    numArguments: op.numArguments, isGuarded: op.isGuarded, isCallOptional: false)
 
             default:
                 break
@@ -129,11 +136,20 @@ struct InstructionSimplifier: Reducer {
         // This will attempt to turn optional operations into non-optional ones.
         // In the lifted JavaScript code, this would turn something like `o?.foo` into `o.foo`
         for instr in helper.code {
-            guard let op = instr.op as? OptionalOperation, op.isOptional else { continue }
-            let newOp = op.withOptionalState(false)
-            helper.tryReplacing(
-                instructionAt: instr.index,
-                with: Instruction(newOp, inouts: instr.inouts))
+            if let op = helper.code[instr.index].op as? ReceiverOptionalOperation,
+                op.isReceiverOptional
+            {
+                let newOp = op.withReceiverOptionalState(false)
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(newOp, inouts: instr.inouts))
+            }
+            if let op = helper.code[instr.index].op as? CallOptionalOperation, op.isCallOptional {
+                let newOp = op.withCallOptionalState(false)
+                helper.tryReplacing(
+                    instructionAt: instr.index,
+                    with: Instruction(newOp, inouts: instr.inouts))
+            }
         }
     }
 

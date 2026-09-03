@@ -1067,7 +1067,8 @@ struct LifterTests {
                             methodName: "im", numArguments: 2, spreads: [true, false],
                             isGuarded: false), withInputs: [this, args[1], args[1]])
                     let _ = b.emit(
-                        GetPrivateProperty(propertyName: "ifoo", isGuarded: true, isOptional: true),
+                        GetPrivateProperty(
+                            propertyName: "ifoo", isGuarded: true, isReceiverOptional: true),
                         withInputs: [this])
                     b.updatePrivateProperty("ibar", of: this, with: args[1], using: .Add)
                 }
@@ -2344,9 +2345,9 @@ struct LifterTests {
 
             let o = b.createNamedVariable(forBuiltin: "o")
             // 1. optional only
-            let a = b.getProperty("a", of: o, optional: true)
+            let a = b.getProperty("a", of: o, isReceiverOptional: true)
             // 2. optional
-            let _ = b.getProperty("b", of: a, optional: true)
+            let _ = b.getProperty("b", of: a, isReceiverOptional: true)
             // 3. basic load
             let _ = b.getElement(0, of: o)
 
@@ -2363,20 +2364,26 @@ struct LifterTests {
             b.setComputedProperty(b.loadString("bar"), of: o, to: v, guard: true)
 
             // Calls
-            let _ = b.callMethod("sayHi", on: o, guard: true, optional: true)
+            let _ = b.callMethod("sayHi", on: o, guard: true, isReceiverOptional: true)
             let _ = b.callMethod("sayBye", on: o, guard: true)
-            let _ = b.callMethod("sayNothing", on: o, optional: true)
-            let _ = b.callComputedMethod(b.loadString("compMethod"), on: o, optional: true)
+            let _ = b.callMethod("sayNothing", on: o, isReceiverOptional: true)
+            let _ = b.callMethod("sayBoth", on: o, isReceiverOptional: true, isCallOptional: true)
+            let _ = b.callMethod("sayCallOnly", on: o, isCallOptional: true)
+            let _ = b.callComputedMethod(
+                b.loadString("compMethod"), on: o, isReceiverOptional: true)
+            let _ = b.callComputedMethod(
+                b.loadString("compBoth"), on: o, isReceiverOptional: true, isCallOptional: true)
+            let _ = b.callComputedMethod(b.loadString("compCallOnly"), on: o, isCallOptional: true)
 
             // Double chaining (pure optional, no guards to prevent inlining)
-            let a2 = b.getProperty("a2", of: o, optional: true)
-            let _ = b.getProperty("b2", of: a2, optional: true)
+            let a2 = b.getProperty("a2", of: o, isReceiverOptional: true)
+            let _ = b.getProperty("b2", of: a2, isReceiverOptional: true)
 
             // Exhaustive computed / optional reads and deletes
-            b.getComputedProperty(b.loadString("bar"), of: o, optional: true)
-            b.deleteProperty("unfoo", of: o, optional: true)
-            b.deleteElement(1, of: o, optional: true)
-            b.deleteComputedProperty(b.loadString("unbar"), of: o, optional: true)
+            b.getComputedProperty(b.loadString("bar"), of: o, isReceiverOptional: true)
+            b.deleteProperty("unfoo", of: o, isReceiverOptional: true)
+            b.deleteElement(1, of: o, isReceiverOptional: true)
+            b.deleteComputedProperty(b.loadString("unbar"), of: o, isReceiverOptional: true)
 
             let program = b.finalize()
             let actual = fuzzer.lifter.lift(program)
@@ -2390,10 +2397,14 @@ struct LifterTests {
                 try { o.bar = 42; } catch (e) {}
                 try { o[0] = 42; } catch (e) {}
                 try { o["bar"] = 42; } catch (e) {}
-                try { o?.sayHi?.(); } catch (e) {}
+                try { o?.sayHi(); } catch (e) {}
                 try { o.sayBye(); } catch (e) {}
-                o?.sayNothing?.();
-                o?.["compMethod"]?.();
+                o?.sayNothing();
+                o?.sayBoth?.();
+                o.sayCallOnly?.();
+                o?.["compMethod"]();
+                o?.["compBoth"]?.();
+                o["compCallOnly"]?.();
                 o?.a2?.b2;
                 o?.["bar"];
                 delete o?.unfoo;
@@ -2414,18 +2425,129 @@ struct LifterTests {
             let receiver = b.createNamedVariable(forBuiltin: "receiver")
             let arg = b.loadInt(42)
 
-            b.callMethod("call", on: f, withArgs: [receiver, arg], optional: true)
+            b.callMethod("call", on: f, withArgs: [receiver, arg], isReceiverOptional: true)
             b.callMethod(
-                "apply", on: f, withArgs: [receiver, b.createArray(with: [arg])], optional: true)
+                "apply", on: f, withArgs: [receiver, b.createArray(with: [arg])],
+                isReceiverOptional: true)
 
             let program = b.finalize()
             let actual = fuzzer.lifter.lift(program)
             let expected = """
-                f?.call?.(receiver, 42);
-                f?.apply?.(receiver, [42]);
+                f?.call(receiver, 42);
+                f?.apply(receiver, [42]);
 
                 """
             #expect(actual == expected)
+        }
+    }
+
+    @Test func testAllOptionalAndGuardedCombinationsLifting() {
+        let fuzzer = makeMockFuzzer()
+        fuzzer.sync {
+            for isGuarded in [false, true] {
+                for isReceiverOptional in [false, true] {
+                    for isCallOptional in [false, true] {
+                        let b = fuzzer.makeBuilder()
+                        let o = b.createNamedVariable(forBuiltin: "obj")
+                        let f = b.createNamedVariable(forBuiltin: "fn")
+                        let prop = b.loadString("k")
+
+                        b.callMethod(
+                            "m", on: o, guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                        b.callMethod(
+                            "s", on: o, withArgs: [o], spreading: [true], guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+                        b.callComputedMethod(
+                            prop, on: o, guard: isGuarded,
+                            isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+
+                        if isReceiverOptional {
+                            b.callFunction(f, guard: isGuarded, isCallOptional: isCallOptional)
+                            b.callFunction(
+                                f, withArgs: [o], spreading: [true], guard: isGuarded,
+                                isCallOptional: isCallOptional)
+                        }
+
+                        let superCls = b.buildClassDefinition { cls in
+                            cls.addInstanceMethod("superM", with: .parameters(n: 0)) { _ in }
+                        }
+                        let subCls = b.buildClassDefinition(withSuperclass: superCls) { cls in
+                            cls.addPrivateInstanceProperty("privProp")
+                            cls.addPrivateInstanceMethod("privM", with: .parameters(n: 0)) { _ in }
+
+                            cls.addInstanceMethod("testMethod", with: .parameters(n: 0)) { args in
+                                let this = args[0]
+                                b.callPrivateMethod(
+                                    "privM", on: this, guard: isGuarded,
+                                    isReceiverOptional: isReceiverOptional,
+                                    isCallOptional: isCallOptional)
+                                if isReceiverOptional {
+                                    b.callSuperMethod(
+                                        "superM", guard: isGuarded, isCallOptional: isCallOptional)
+                                }
+                                if isCallOptional {
+                                    b.getPrivateProperty(
+                                        "privProp", of: this, guard: isGuarded,
+                                        isReceiverOptional: isReceiverOptional)
+                                }
+                            }
+                        }
+
+                        let dot = isReceiverOptional ? "?." : "."
+                        let callSuffix = isCallOptional ? "?.()" : "()"
+                        let spreadSuffix = isCallOptional ? "?.(...obj)" : "(...obj)"
+                        let compPrefix = isReceiverOptional ? "obj?.[\"k\"]" : "obj[\"k\"]"
+
+                        func wrapGuard(_ stmt: String) -> String {
+                            isGuarded ? "try { \(stmt); } catch (e) {}" : "\(stmt);"
+                        }
+
+                        var expectedLines = [
+                            wrapGuard("obj\(dot)m\(callSuffix)"),
+                            wrapGuard("obj\(dot)s\(spreadSuffix)"),
+                            wrapGuard("\(compPrefix)\(callSuffix)"),
+                        ]
+
+                        if isReceiverOptional {
+                            expectedLines.append(wrapGuard("fn\(callSuffix)"))
+                            expectedLines.append(wrapGuard("fn\(spreadSuffix)"))
+                        }
+
+                        var classBodyLines = [
+                            wrapGuard("this\(dot)#privM\(callSuffix)")
+                        ]
+                        if isReceiverOptional {
+                            classBodyLines.append(wrapGuard("super.superM\(callSuffix)"))
+                        }
+                        if isCallOptional {
+                            classBodyLines.append(wrapGuard("this\(dot)#privProp"))
+                        }
+
+                        let indentedBody =
+                            classBodyLines.map { "        \($0)" }.joined(separator: "\n")
+                        let superName = "C\(superCls.number)"
+                        let subName = "C\(subCls.number)"
+                        let expected = """
+                            \(expectedLines.joined(separator: "\n"))
+                            class \(superName) {
+                                superM() {
+                                }
+                            }
+                            class \(subName) extends \(superName) {
+                                #privProp;
+                                #privM() {
+                                }
+                                testMethod() {
+                            \(indentedBody)
+                                }
+                            }
+
+                            """
+                        #expect(fuzzer.lifter.lift(b.finalize()) == expected)
+                    }
+                }
+            }
         }
     }
 
@@ -2883,7 +3005,8 @@ struct LifterTests {
             for name in ["???", "0", "01", "1", "0.1", "-1", "$valid_id_42", "42_invalid_id"] {
                 b.setProperty(name, of: obj, to: b.getProperty(name, of: obj))
                 b.updateProperty(
-                    name, of: obj, with: b.getProperty(name, of: obj, optional: true), using: .Add)
+                    name, of: obj, with: b.getProperty(name, of: obj, isReceiverOptional: true),
+                    using: .Add)
                 b.deleteProperty(name, of: obj)
             }
 

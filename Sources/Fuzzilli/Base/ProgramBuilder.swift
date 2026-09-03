@@ -3517,12 +3517,12 @@ public class ProgramBuilder {
     @discardableResult
     public func getProperty(
         _ name: String, of object: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     )
         -> Variable
     {
         return emit(
-            GetProperty(propertyName: name, isOptional: isOptional),
+            GetProperty(propertyName: name, isReceiverOptional: isReceiverOptional),
             withInputs: [object]
         )
         .output
@@ -3546,12 +3546,12 @@ public class ProgramBuilder {
     @discardableResult
     public func deleteProperty(
         _ name: String, of object: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     )
         -> Variable
     {
         return emit(
-            DeleteProperty(propertyName: name, isOptional: isOptional),
+            DeleteProperty(propertyName: name, isReceiverOptional: isReceiverOptional),
             withInputs: [object]
         ).output
     }
@@ -3590,12 +3590,12 @@ public class ProgramBuilder {
     @discardableResult
     public func getElement(
         _ index: Int64, of array: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     )
         -> Variable
     {
         return emit(
-            GetElement(index: index, isOptional: isOptional),
+            GetElement(index: index, isReceiverOptional: isReceiverOptional),
             withInputs: [array]
         ).output
     }
@@ -3618,12 +3618,12 @@ public class ProgramBuilder {
     @discardableResult
     public func deleteElement(
         _ index: Int64, of array: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     )
         -> Variable
     {
         return emit(
-            DeleteElement(index: index, isOptional: isOptional),
+            DeleteElement(index: index, isReceiverOptional: isReceiverOptional),
             withInputs: [array]
         ).output
     }
@@ -3655,10 +3655,10 @@ public class ProgramBuilder {
     @discardableResult
     public func getComputedProperty(
         _ name: Variable, of object: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     ) -> Variable {
         return emit(
-            GetComputedProperty(isOptional: isOptional),
+            GetComputedProperty(isReceiverOptional: isReceiverOptional),
             withInputs: [object, name]
         ).output
     }
@@ -3681,10 +3681,10 @@ public class ProgramBuilder {
     @discardableResult
     public func deleteComputedProperty(
         _ name: Variable, of object: Variable,
-        optional isOptional: Bool = false
+        isReceiverOptional: Bool = false
     ) -> Variable {
         return emit(
-            DeleteComputedProperty(isOptional: isOptional),
+            DeleteComputedProperty(isReceiverOptional: isReceiverOptional),
             withInputs: [object, name]
         ).output
     }
@@ -4006,28 +4006,37 @@ public class ProgramBuilder {
         return emit(Await(), withInputs: [value]).output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the call in a try-catch block during lifting.
+    ///   - isCallOptional: Make the function invocation optional (`f?.()`).
     @discardableResult
     public func callFunction(
         _ function: Variable, withArgs arguments: [Variable] = [], guard isGuarded: Bool = false,
-        optional isOptional: Bool = false
+        isCallOptional: Bool = false
     ) -> Variable {
         return emit(
             CallFunction(
-                numArguments: arguments.count, isGuarded: isGuarded, isOptional: isOptional),
+                numArguments: arguments.count, isGuarded: isGuarded, isCallOptional: isCallOptional),
             withInputs: [function] + arguments
         ).output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the call in a try-catch block during lifting.
+    ///   - isCallOptional: Make the function invocation optional (`f?.()`).
     @discardableResult
     public func callFunction(
         _ function: Variable, withArgs arguments: [Variable], spreading spreads: [Bool],
-        guard isGuarded: Bool = false, optional isOptional: Bool = false
+        guard isGuarded: Bool = false, isCallOptional: Bool = false
     ) -> Variable {
-        guard !spreads.isEmpty else { return callFunction(function, withArgs: arguments) }
+        guard !spreads.isEmpty else {
+            return callFunction(
+                function, withArgs: arguments, guard: isGuarded, isCallOptional: isCallOptional)
+        }
         return emit(
             CallFunctionWithSpread(
                 numArguments: arguments.count, spreads: spreads, isGuarded: isGuarded,
-                isOptional: isOptional),
+                isCallOptional: isCallOptional),
             withInputs: [function] + arguments
         ).output
     }
@@ -4047,7 +4056,9 @@ public class ProgramBuilder {
         _ constructor: Variable, withArgs arguments: [Variable], spreading spreads: [Bool],
         guard isGuarded: Bool = false
     ) -> Variable {
-        guard !spreads.isEmpty else { return construct(constructor, withArgs: arguments) }
+        guard !spreads.isEmpty else {
+            return construct(constructor, withArgs: arguments, guard: isGuarded)
+        }
         return emit(
             ConstructWithSpread(
                 numArguments: arguments.count, spreads: spreads, isGuarded: isGuarded),
@@ -4055,29 +4066,45 @@ public class ProgramBuilder {
         ).output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the method call in a try-catch block during lifting.
+    ///   - isReceiverOptional: Make the receiver member access optional (`obj?.method()`).
+    ///   - isCallOptional: Make the method invocation optional (`obj.method?.()`).
     @discardableResult
     public func callMethod(
         _ name: String, on object: Variable, withArgs arguments: [Variable] = [],
-        guard isGuarded: Bool = false, optional isOptional: Bool = false
+        guard isGuarded: Bool = false, isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
     ) -> Variable {
         return emit(
             CallMethod(
                 methodName: name, numArguments: arguments.count, isGuarded: isGuarded,
-                isOptional: isOptional),
+                isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional),
             withInputs: [object] + arguments
         ).output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the method call in a try-catch block during lifting.
+    ///   - isReceiverOptional: Make the receiver member access optional (`obj?.method(...)`).
+    ///   - isCallOptional: Make the method invocation optional (`obj.method?.(...)`).
     @discardableResult
     public func callMethod(
         _ name: String, on object: Variable, withArgs arguments: [Variable],
-        spreading spreads: [Bool], guard isGuarded: Bool = false, optional isOptional: Bool = false
+        spreading spreads: [Bool], guard isGuarded: Bool = false,
+        isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
     ) -> Variable {
-        guard !spreads.isEmpty else { return callMethod(name, on: object, withArgs: arguments) }
+        guard !spreads.isEmpty else {
+            return callMethod(
+                name, on: object, withArgs: arguments, guard: isGuarded,
+                isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
+        }
         return emit(
             CallMethodWithSpread(
                 methodName: name, numArguments: arguments.count, spreads: spreads,
-                isGuarded: isGuarded, isOptional: isOptional), withInputs: [object] + arguments
+                isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+                isCallOptional: isCallOptional), withInputs: [object] + arguments
         ).output
     }
 
@@ -4092,30 +4119,44 @@ public class ProgramBuilder {
             .output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the method call in a try-catch block during lifting.
+    ///   - isReceiverOptional: Make the receiver computed member access optional (`obj?.[name]()`).
+    ///   - isCallOptional: Make the method invocation optional (`obj[name]?.()`).
     @discardableResult
     public func callComputedMethod(
         _ name: Variable, on object: Variable, withArgs arguments: [Variable] = [],
-        guard isGuarded: Bool = false, optional isOptional: Bool = false
+        guard isGuarded: Bool = false, isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
     ) -> Variable {
         return emit(
             CallComputedMethod(
-                numArguments: arguments.count, isGuarded: isGuarded, isOptional: isOptional),
+                numArguments: arguments.count, isGuarded: isGuarded,
+                isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional),
             withInputs: [object, name] + arguments
         ).output
     }
 
+    /// - Parameters:
+    ///   - isGuarded: Wrap the method call in a try-catch block during lifting.
+    ///   - isReceiverOptional: Make the receiver computed member access optional (`obj?.[name](...)`).
+    ///   - isCallOptional: Make the method invocation optional (`obj[name]?.(...)`).
     @discardableResult
     public func callComputedMethod(
         _ name: Variable, on object: Variable, withArgs arguments: [Variable],
-        spreading spreads: [Bool], guard isGuarded: Bool = false, optional isOptional: Bool = false
+        spreading spreads: [Bool], guard isGuarded: Bool = false,
+        isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
     ) -> Variable {
         guard !spreads.isEmpty else {
-            return callComputedMethod(name, on: object, withArgs: arguments)
+            return callComputedMethod(
+                name, on: object, withArgs: arguments, guard: isGuarded,
+                isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional)
         }
         return emit(
             CallComputedMethodWithSpread(
                 numArguments: arguments.count, spreads: spreads, isGuarded: isGuarded,
-                isOptional: isOptional),
+                isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional),
             withInputs: [object, name] + arguments
         ).output
     }
@@ -4302,16 +4343,28 @@ public class ProgramBuilder {
     }
 
     @discardableResult
-    public func callSuperMethod(_ name: String, withArgs arguments: [Variable] = []) -> Variable {
+    public func callSuperMethod(
+        _ name: String, withArgs arguments: [Variable] = [], guard isGuarded: Bool = false,
+        isCallOptional: Bool = false
+    ) -> Variable {
         return emit(
-            CallSuperMethod(methodName: name, numArguments: arguments.count), withInputs: arguments
+            CallSuperMethod(
+                methodName: name, numArguments: arguments.count, isGuarded: isGuarded,
+                isCallOptional: isCallOptional),
+            withInputs: arguments
         ).output
     }
 
     @discardableResult
-    public func getPrivateProperty(_ name: String, of object: Variable) -> Variable {
-        return emit(GetPrivateProperty(propertyName: name, isGuarded: false), withInputs: [object])
-            .output
+    public func getPrivateProperty(
+        _ name: String, of object: Variable, guard isGuarded: Bool = false,
+        isReceiverOptional: Bool = false
+    ) -> Variable {
+        return emit(
+            GetPrivateProperty(
+                propertyName: name, isGuarded: isGuarded, isReceiverOptional: isReceiverOptional),
+            withInputs: [object]
+        ).output
     }
 
     public func setPrivateProperty(_ name: String, of object: Variable, to value: Variable) {
@@ -4329,10 +4382,24 @@ public class ProgramBuilder {
 
     @discardableResult
     public func callPrivateMethod(
-        _ name: String, on object: Variable, withArgs arguments: [Variable] = []
+        _ name: String, on object: Variable, withArgs arguments: [Variable] = [],
+        spreading spreads: [Bool] = [], guard isGuarded: Bool = false,
+        isReceiverOptional: Bool = false,
+        isCallOptional: Bool = false
     ) -> Variable {
+        guard !spreads.isEmpty else {
+            return emit(
+                CallPrivateMethod(
+                    methodName: name, numArguments: arguments.count, isGuarded: isGuarded,
+                    isReceiverOptional: isReceiverOptional, isCallOptional: isCallOptional),
+                withInputs: [object] + arguments
+            ).output
+        }
         return emit(
-            CallPrivateMethod(methodName: name, numArguments: arguments.count, isGuarded: false),
+            CallPrivateMethodWithSpread(
+                methodName: name, numArguments: arguments.count, spreads: spreads,
+                isGuarded: isGuarded, isReceiverOptional: isReceiverOptional,
+                isCallOptional: isCallOptional),
             withInputs: [object] + arguments
         ).output
     }

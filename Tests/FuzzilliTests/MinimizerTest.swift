@@ -1883,14 +1883,14 @@ struct MinimizerTests {
             // Build input program to be minimized.
             let o = b.createNamedVariable(forBuiltin: "o")
             let f = b.createNamedVariable(forBuiltin: "f")
-            b.getProperty("p1", of: o, optional: true)
-            b.getElement(2, of: o, optional: true)
-            b.getComputedProperty(b.loadString("p3"), of: o, optional: true)
-            b.deleteProperty("p4", of: o, optional: true)
-            b.deleteElement(5, of: o, optional: true)
-            b.deleteComputedProperty(b.loadString("p6"), of: o, optional: true)
-            b.callFunction(f, optional: true)
-            b.callMethod("m", on: o, optional: true)
+            b.getProperty("p1", of: o, isReceiverOptional: true)
+            b.getElement(2, of: o, isReceiverOptional: true)
+            b.getComputedProperty(b.loadString("p3"), of: o, isReceiverOptional: true)
+            b.deleteProperty("p4", of: o, isReceiverOptional: true)
+            b.deleteElement(5, of: o, isReceiverOptional: true)
+            b.deleteComputedProperty(b.loadString("p6"), of: o, isReceiverOptional: true)
+            b.callFunction(f, isCallOptional: true)
+            b.callMethod("m", on: o, isReceiverOptional: true)
 
             // Make sure that none of the operations are removed.
             evaluator.operationsAreImportant([
@@ -1907,10 +1907,12 @@ struct MinimizerTests {
             #expect(originalProgram.size == minimizedProgram.size)
 
             let numOptionalOperationsBefore = originalProgram.code.filter({
-                ($0.op as? OptionalOperation)?.isOptional == true
+                ($0.op as? ReceiverOptionalOperation)?.isReceiverOptional == true
+                    || ($0.op as? CallOptionalOperation)?.isCallOptional == true
             }).count
             let numOptionalOperationsAfter = minimizedProgram.code.filter({
-                ($0.op as? OptionalOperation)?.isOptional == true
+                ($0.op as? ReceiverOptionalOperation)?.isReceiverOptional == true
+                    || ($0.op as? CallOptionalOperation)?.isCallOptional == true
             }).count
             #expect(numOptionalOperationsBefore == 8)
             #expect(numOptionalOperationsAfter == 0)
@@ -3270,6 +3272,48 @@ struct MinimizerTests {
             let actualProgram = Program(with: helper.code)
             #expect(FuzzILLifter().lift(expectedProgram) == FuzzILLifter().lift(actualProgram))
             #expect(expectedProgram == actualProgram)
+        }
+    }
+
+    @Test func testVariadicInputReducerPreservesOptionalityAndGuards() {
+        let evaluator = EvaluatorForMinimizationTests()
+        let fuzzer = makeMockFuzzer(evaluator: evaluator)
+        fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let o = b.createNamedVariable(forBuiltin: "obj")
+            let f = b.createNamedVariable(forBuiltin: "fn")
+            let a1 = b.loadInt(1)
+            let a2 = b.loadInt(2)
+
+            b.callMethod(
+                "m", on: o, withArgs: [a1, a2], guard: true, isReceiverOptional: true,
+                isCallOptional: true)
+            b.callFunction(f, withArgs: [a1, a2], guard: true, isCallOptional: true)
+
+            let originalProgram = b.finalize()
+            evaluator.setOriginalProgram(originalProgram)
+            evaluator.operationsAreImportant([CallMethod.self, CallFunction.self])
+
+            let helper = MinimizationHelper(
+                for: ProgramAspects(outcome: .succeeded), forCode: originalProgram.code, of: fuzzer,
+                runningOnFuzzerQueue: true)
+
+            VariadicInputReducer().reduce(with: helper)
+
+            let reducedProgram = Program(with: helper.code)
+            for instr in reducedProgram.code {
+                if let op = instr.op as? CallMethod {
+                    #expect(op.isGuarded == true)
+                    #expect(op.isReceiverOptional == true)
+                    #expect(op.isCallOptional == true)
+                    #expect(op.numArguments == 0)
+                }
+                if let op = instr.op as? CallFunction {
+                    #expect(op.isGuarded == true)
+                    #expect(op.isCallOptional == true)
+                    #expect(op.numArguments == 0)
+                }
+            }
         }
     }
 

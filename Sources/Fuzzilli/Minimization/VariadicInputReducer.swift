@@ -34,14 +34,18 @@ struct VariadicInputReducer: Reducer {
                 case .createArrayWithSpread(let op):
                     newOp = CreateArrayWithSpread(spreads: op.spreads.dropLast())
                 case .callFunction(let op):
-                    newOp = CallFunction(numArguments: op.numArguments - 1, isGuarded: op.isGuarded)
+                    newOp = CallFunction(
+                        numArguments: op.numArguments - 1, isGuarded: op.isGuarded,
+                        isCallOptional: op.isCallOptional)
                 case .callFunctionWithSpread(let op):
                     if op.numArguments == 1 {
-                        newOp = CallFunction(numArguments: 0, isGuarded: op.isGuarded)
+                        newOp = CallFunction(
+                            numArguments: 0, isGuarded: op.isGuarded,
+                            isCallOptional: op.isCallOptional)
                     } else {
                         newOp = CallFunctionWithSpread(
                             numArguments: op.numArguments - 1, spreads: op.spreads.dropLast(),
-                            isGuarded: op.isGuarded)
+                            isGuarded: op.isGuarded, isCallOptional: op.isCallOptional)
                     }
                 case .construct(let op):
                     newOp = Construct(numArguments: op.numArguments - 1, isGuarded: op.isGuarded)
@@ -56,46 +60,62 @@ struct VariadicInputReducer: Reducer {
                 case .callMethod(let op):
                     newOp = CallMethod(
                         methodName: op.methodName, numArguments: op.numArguments - 1,
-                        isGuarded: op.isGuarded)
+                        isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                        isCallOptional: op.isCallOptional)
                 case .callMethodWithSpread(let op):
                     if op.numArguments == 1 {
                         newOp = CallMethod(
-                            methodName: op.methodName, numArguments: 0, isGuarded: op.isGuarded)
+                            methodName: op.methodName, numArguments: 0, isGuarded: op.isGuarded,
+                            isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     } else {
                         newOp = CallMethodWithSpread(
                             methodName: op.methodName, numArguments: op.numArguments - 1,
-                            spreads: op.spreads.dropLast(), isGuarded: op.isGuarded)
+                            spreads: op.spreads.dropLast(), isGuarded: op.isGuarded,
+                            isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     }
                 case .callComputedMethod(let op):
                     newOp = CallComputedMethod(
-                        numArguments: op.numArguments - 1, isGuarded: op.isGuarded)
+                        numArguments: op.numArguments - 1, isGuarded: op.isGuarded,
+                        isReceiverOptional: op.isReceiverOptional,
+                        isCallOptional: op.isCallOptional)
                 case .callComputedMethodWithSpread(let op):
                     if op.numArguments == 1 {
-                        newOp = CallComputedMethod(numArguments: 0, isGuarded: op.isGuarded)
+                        newOp = CallComputedMethod(
+                            numArguments: 0, isGuarded: op.isGuarded,
+                            isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     } else {
                         newOp = CallComputedMethodWithSpread(
                             numArguments: op.numArguments - 1, spreads: op.spreads.dropLast(),
-                            isGuarded: op.isGuarded)
+                            isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     }
                 case .callSuperConstructor(let op):
                     newOp = CallSuperConstructor(numArguments: op.numArguments - 1)
                 case .callPrivateMethod(let op):
                     newOp = CallPrivateMethod(
                         methodName: op.methodName, numArguments: op.numArguments - 1,
-                        isGuarded: op.isGuarded)
+                        isGuarded: op.isGuarded, isReceiverOptional: op.isReceiverOptional,
+                        isCallOptional: op.isCallOptional)
                 case .callPrivateMethodWithSpread(let op):
                     if op.numArguments == 1 {
                         newOp = CallPrivateMethod(
-                            methodName: op.methodName, numArguments: 0, isGuarded: op.isGuarded)
+                            methodName: op.methodName, numArguments: 0, isGuarded: op.isGuarded,
+                            isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     } else {
                         newOp = CallPrivateMethodWithSpread(
                             methodName: op.methodName, numArguments: op.numArguments - 1,
-                            spreads: op.spreads.dropLast(),
-                            isGuarded: op.isGuarded)
+                            spreads: op.spreads.dropLast(), isGuarded: op.isGuarded,
+                            isReceiverOptional: op.isReceiverOptional,
+                            isCallOptional: op.isCallOptional)
                     }
                 case .callSuperMethod(let op):
                     newOp = CallSuperMethod(
-                        methodName: op.methodName, numArguments: op.numArguments - 1)
+                        methodName: op.methodName, numArguments: op.numArguments - 1,
+                        isGuarded: op.isGuarded, isCallOptional: op.isCallOptional)
                 case .bindFunction(let op):
                     newOp = BindFunction(numInputs: op.numInputs - 1)
                 case .createTemplateString(let op):

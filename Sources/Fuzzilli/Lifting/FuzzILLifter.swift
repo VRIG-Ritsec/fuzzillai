@@ -46,6 +46,16 @@ public class FuzzILLifter: Lifter {
             return " [\(defaults)]"
         }
 
+        func formatFlags(
+            guarded: Bool = false, receiverOptional: Bool = false, callOptional: Bool = false
+        ) -> String {
+            var flags: [String] = []
+            if guarded { flags.append("guarded") }
+            if receiverOptional { flags.append("receiverOptional") }
+            if callOptional { flags.append("callOptional") }
+            return flags.isEmpty ? "" : " (\(flags.joined(separator: ", ")))"
+        }
+
         func liftParametersWithThis(_ parameters: Parameters, as variables: [String]) -> String {
             guard !variables.isEmpty else { return "" }
             let thisVar = variables[0]
@@ -418,8 +428,8 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- CreateTemplateString [\(parts)], [\(values)]")
 
         case .getProperty(let op):
-            let opcode = op.isOptional ? "GetProperty (optional)" : "GetProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .setProperty(let op):
             let opcode = op.isGuarded ? "SetProperty (guarded)" : "SetProperty"
@@ -429,8 +439,8 @@ public class FuzzILLifter: Lifter {
             w.emit("UpdateProperty \(input(0)), '\(op.op.token)', \(input(1))")
 
         case .deleteProperty(let op):
-            let opcode = op.isOptional ? "DeleteProperty (optional)" : "DeleteProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .configureProperty(let op):
             w.emit(
@@ -438,8 +448,8 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getElement(let op):
-            let opcode = op.isOptional ? "GetElement (optional)" : "GetElement"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetElement\(flagsStr) \(input(0)), '\(op.index)'")
 
         case .setElement(let op):
             let opcode = op.isGuarded ? "SetElement (guarded)" : "SetElement"
@@ -449,8 +459,8 @@ public class FuzzILLifter: Lifter {
             w.emit("UpdateElement \(instr.input(0)), '\(op.index)', '\(op.op.token)', \(input(1))")
 
         case .deleteElement(let op):
-            let opcode = op.isOptional ? "DeleteElement (optional)" : "DeleteElement"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.index)'")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteElement\(flagsStr) \(input(0)), '\(op.index)'")
 
         case .configureElement(let op):
             w.emit(
@@ -458,8 +468,8 @@ public class FuzzILLifter: Lifter {
             )
 
         case .getComputedProperty(let op):
-            let opcode = op.isOptional ? "GetComputedProperty (optional)" : "GetComputedProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- GetComputedProperty\(flagsStr) \(input(0)), \(input(1))")
 
         case .setComputedProperty(let op):
             let opcode = op.isGuarded ? "SetComputedProperty (guarded)" : "SetComputedProperty"
@@ -469,9 +479,8 @@ public class FuzzILLifter: Lifter {
             w.emit("UpdateComputedProperty \(input(0)), \(input(1)), '\(op.op.token)',\(input(2))")
 
         case .deleteComputedProperty(let op):
-            let opcode =
-                op.isOptional ? "DeleteComputedProperty (optional)" : "DeleteComputedProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), \(input(1))")
+            let flagsStr = op.isReceiverOptional ? " (isReceiverOptional)" : ""
+            w.emit("\(output()) <- DeleteComputedProperty\(flagsStr) \(input(0)), \(input(1))")
 
         case .configureComputedProperty(let op):
             w.emit(
@@ -546,54 +555,59 @@ public class FuzzILLifter: Lifter {
             w.emit("\(output()) <- Await \(input(0))")
 
         case .callFunction(let op):
-            let opcode = op.isGuarded ? "CallFunction (guarded)" : "CallFunction"
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallFunction\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callFunctionWithSpread(let op):
-            let opcode =
-                op.isGuarded ? "CallFunctionWithSpread (guarded)" : "CallFunctionWithSpread"
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallFunctionWithSpread\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .construct(let op):
-            let opcode = op.isGuarded ? "Construct (guarded)" : "Construct"
+            let flagsStr = formatFlags(guarded: op.isGuarded)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- Construct\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .constructWithSpread(let op):
-            let opcode = op.isGuarded ? "ConstructWithSpread (guarded)" : "ConstructWithSpread"
+            let flagsStr = formatFlags(guarded: op.isGuarded)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- ConstructWithSpread\(flagsStr) \(input(0)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .callMethod(let op):
-            let opcode = op.isGuarded ? "CallMethod (guarded)" : "CallMethod"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallMethod\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callMethodWithSpread(let op):
-            let opcode = op.isGuarded ? "CallMethodWithSpread (guarded)" : "CallMethodWithSpread"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallMethodWithSpread\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .callComputedMethod(let op):
-            let opcode = op.isGuarded ? "CallComputedMethod (guarded)" : "CallComputedMethod"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallComputedMethod\(flagsStr) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callComputedMethodWithSpread(let op):
-            let opcode =
-                op.isGuarded
-                ? "CallComputedMethodWithSpread (guarded)" : "CallComputedMethodWithSpread"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallComputedMethodWithSpread\(flagsStr) \(input(0)), \(input(1)), [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .unaryOperation(let op):
@@ -708,13 +722,15 @@ public class FuzzILLifter: Lifter {
             w.emit("CallSuperConstructor [\(liftCallArguments(instr.variadicInputs))]")
 
         case .callSuperMethod(let op):
+            let flagsStr = formatFlags(guarded: op.isGuarded, callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- CallSuperMethod '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallSuperMethod\(flagsStr) '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .getPrivateProperty(let op):
-            let opcode = op.isGuarded ? "GetPrivateProperty (guarded)" : "GetPrivateProperty"
-            w.emit("\(output()) <- \(opcode) \(input(0)), '\(op.propertyName)'")
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional)
+            w.emit("\(output()) <- GetPrivateProperty\(flagsStr) \(input(0)), '\(op.propertyName)'")
 
         case .setPrivateProperty(let op):
             let opcode = op.isGuarded ? "SetPrivateProperty (guarded)" : "SetPrivateProperty"
@@ -726,17 +742,19 @@ public class FuzzILLifter: Lifter {
             )
 
         case .callPrivateMethod(let op):
-            let opcode = op.isGuarded ? "CallPrivateMethod (guarded)" : "CallPrivateMethod"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
+                "\(output()) <- CallPrivateMethod\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs))]"
             )
 
         case .callPrivateMethodWithSpread(let op):
-            let opcode =
-                op.isGuarded
-                ? "CallPrivateMethodWithSpread (guarded)" : "CallPrivateMethodWithSpread"
+            let flagsStr = formatFlags(
+                guarded: op.isGuarded, receiverOptional: op.isReceiverOptional,
+                callOptional: op.isCallOptional)
             w.emit(
-                "\(output()) <- \(opcode) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
+                "\(output()) <- CallPrivateMethodWithSpread\(flagsStr) \(input(0)), '\(op.methodName)', [\(liftCallArguments(instr.variadicInputs, spreading: op.spreads))]"
             )
 
         case .getSuperProperty(let op):

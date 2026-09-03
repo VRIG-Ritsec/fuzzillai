@@ -187,10 +187,32 @@ public class FixupMutator: RuntimeAssistedMutator {
                         .argument(index: 0), .string(value: op.propertyName), .argument(index: 1),
                     ], with: b)
 
+            case .updateProperty(let op):
+                maybeFixup(
+                    instr, performing: .UpdateProperty, guarded: op.isGuarded,
+                    withInputs: [
+                        .argument(index: 0), .string(value: op.propertyName), .argument(index: 1),
+                        .string(value: op.op.rawValue),
+                    ], with: b)
+
             case .getElement(let op):
                 maybeFixup(
                     instr, performing: .GetProperty, guarded: false,
                     withInputs: [.argument(index: 0), .int(value: op.index)], with: b)
+
+            case .setElement(let op):
+                maybeFixup(
+                    instr, performing: .SetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .int(value: op.index), .argument(index: 1)],
+                    with: b)
+
+            case .updateElement(let op):
+                maybeFixup(
+                    instr, performing: .UpdateProperty, guarded: op.isGuarded,
+                    withInputs: [
+                        .argument(index: 0), .int(value: op.index), .argument(index: 1),
+                        .string(value: op.op.rawValue),
+                    ], with: b)
 
             case .deleteElement(let op):
                 maybeFixup(
@@ -202,19 +224,29 @@ public class FixupMutator: RuntimeAssistedMutator {
                     instr, performing: .GetProperty, guarded: false,
                     withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
+            case .setComputedProperty(let op):
+                maybeFixup(
+                    instr, performing: .SetProperty, guarded: op.isGuarded,
+                    withInputs: [.argument(index: 0), .argument(index: 1), .argument(index: 2)],
+                    with: b)
+
+            case .updateComputedProperty(let op):
+                maybeFixup(
+                    instr, performing: .UpdateProperty, guarded: op.isGuarded,
+                    withInputs: [
+                        .argument(index: 0), .argument(index: 1), .argument(index: 2),
+                        .string(value: op.op.rawValue),
+                    ], with: b)
+
             case .deleteComputedProperty:
                 maybeFixup(
                     instr, performing: .DeleteProperty, guarded: false,
                     withInputs: [.argument(index: 0), .argument(index: 1)], with: b)
 
             // Private properties/methods cannot be dynamically accessed via JS Actions outside class scope.
-            // TODO(rherouart): FixupMutator should be improved to support these guardable operations, as well as handling for OptionalOperations.
-            case .setElement,
-                .setComputedProperty,
-                .updateProperty,
-                .updateElement,
-                .updateComputedProperty,
-                .getPrivateProperty,
+            // CallSuperMethod also cannot be directly translated into a standalone JS Action.
+            // TODO(rherouart): FixupMutator should be improved to support OptionalOperations.
+            case .getPrivateProperty,
                 .setPrivateProperty,
                 .updatePrivateProperty,
                 .callPrivateMethod,

@@ -285,6 +285,7 @@ public class RuntimeAssistedMutator: Mutator {
         case ConstructMethod = "CONSTRUCT_METHOD"
         case GetProperty = "GET_PROPERTY"
         case SetProperty = "SET_PROPERTY"
+        case UpdateProperty = "UPDATE_PROPERTY"
         case DeleteProperty = "DELETE_PROPERTY"
         case Add = "ADD"
         case Sub = "SUB"
@@ -473,6 +474,24 @@ extension RuntimeAssistedMutator.Action {
             default:
                 let property = try translateInput(1)
                 b.setComputedProperty(property, of: o, to: v, guard: isGuarded)
+            }
+        case .UpdateProperty:
+            let o = try translateInput(0)
+            let v = try translateInput(2)
+            guard case .string(let opString) = try getInput(3),
+                let op = BinaryOperator(rawValue: opString)
+            else {
+                throw RuntimeAssistedMutator.ActionError.actionTranslationError(
+                    "Invalid or missing binary operator for UpdateProperty")
+            }
+            switch try getInput(1) {
+            case .string(let propertyName):
+                b.updateProperty(propertyName, of: o, with: v, using: op, guard: isGuarded)
+            case .int(let index):
+                b.updateElement(index, of: o, with: v, using: op, guard: isGuarded)
+            default:
+                let property = try translateInput(1)
+                b.updateComputedProperty(property, of: o, with: v, using: op, guard: isGuarded)
             }
         case .DeleteProperty:
             let o = try translateInput(0)

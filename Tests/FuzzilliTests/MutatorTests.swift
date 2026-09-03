@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import Foundation
 import Testing
 
 @testable import Fuzzilli
@@ -1160,6 +1161,64 @@ struct MutatorTests {
                 }
             }
             #expect(mutated)
+        }
+    }
+
+    @Test func testFixupMutatorPropertyAndElementOperations() throws {
+        let fuzzer = makeMockFuzzer()
+        try fuzzer.sync {
+            let b = fuzzer.makeBuilder()
+            let o = b.createObject(with: [:])
+            let v = b.loadInt(42)
+            let k = b.loadString("prop")
+
+            b.setProperty("p1", of: o, to: v, guard: true)
+            b.updateProperty("p2", of: o, with: v, using: .Add, guard: true)
+            b.setElement(0, of: o, to: v, guard: true)
+            b.updateElement(1, of: o, with: v, using: .Mul, guard: true)
+            b.setComputedProperty(k, of: o, to: v, guard: true)
+            b.updateComputedProperty(k, of: o, with: v, using: .Sub, guard: true)
+
+            let program = b.finalize()
+
+            let mutator = FixupMutator()
+            let instrumented = mutator.instrument(program, for: fuzzer)
+            #expect(instrumented != nil)
+
+            let fixupOps = instrumented!.code.filter({ $0.op is Fixup })
+            #expect(fixupOps.count == 6)
+
+            // Simulate JS output where all 6 actions succeed and drop guards
+            var output = ""
+            for instr in fixupOps {
+                let op = instr.op as! Fixup
+                var action = try! JSONDecoder().decode(
+                    RuntimeAssistedMutator.Action.self, from: op.action.data(using: .utf8)!)
+                action = RuntimeAssistedMutator.Action(
+                    id: action.id, operation: action.operation, inputs: action.inputs,
+                    isGuarded: false)
+                let encoded = try! JSONEncoder().encode(action)
+                output += "FIXUP_ACTION: \(String(data: encoded, encoding: .utf8)!)\n"
+            }
+
+            let (result, outcome) = mutator.process(
+                output, ofInstrumentedProgram: instrumented!, using: fuzzer.makeBuilder())
+            #expect(outcome == .success)
+
+            let finalProgram = try #require(result)
+            let actual = fuzzer.lifter.lift(finalProgram)
+            let expected = """
+                const v0 = {};
+                v0.p1 = 42;
+                v0.p2 += 42;
+                v0[0] = 42;
+                v0[1] *= 42;
+                v0["prop"] = 42;
+                v0["prop"] -= 42;
+
+                """
+            #expect(actual == expected)
+            // TODO: Add UpdateComputedSuperProperty once supported in FuzzIL.
         }
     }
 }

@@ -2433,6 +2433,8 @@ final class UpdateSuperProperty: JsOperation {
     }
 }
 
+// TODO: Add UpdateComputedSuperProperty (e.g. super[key] += val) to complete the computed super property operations.
+
 final class BeginIf: JsOperation {
     override var opcode: Opcode { .beginIf(self) }
 

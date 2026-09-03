@@ -2721,6 +2721,19 @@ final class WasmRefCast: WasmOperation {
     }
 }
 
+class WasmRefCastDescEq: WasmOperation {
+    override var opcode: Opcode { .wasmRefCastDescEq(self) }
+    let type: ILType
+    init(refType: ILType) {
+        self.type = refType
+        // The inputs are the source struct reference and the descriptor reference.
+        // The target struct type is implicitly determined by the descriptor's describes type.
+        super.init(
+            numInputs: 2, numOutputs: 1,
+            requiredContext: [.wasmFunction])
+    }
+}
+
 /// An atomic load from Wasm memory.
 /// The accessed address is base + offset.
 final class WasmAtomicLoad: WasmOperation {

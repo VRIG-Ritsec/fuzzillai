@@ -2775,6 +2775,16 @@ public class WasmLifter {
             let opCode: UInt8 = refType.nullability ? 0x17 : 0x16
             let typeData = try encodeReferenceType(refType, instr: wasmInstruction, typeInput: 1)
             return Data([Prefix.GC.rawValue, opCode]) + typeData
+        case .wasmRefCastDescEq(let op):
+            let refType = op.type.wasmReferenceType!
+            let opCode: UInt8 = refType.nullability ? 0x24 : 0x23
+            let descriptorDesc =
+                typer.getTypeDescription(of: wasmInstruction.input(1)) as! WasmStructTypeDescription
+            let targetDesc = descriptorDesc.describes!
+            let encodedTypeIndex = try encodeWasmGCType(targetDesc)
+            let isExact = refType.kind.isExact
+            let typeData = isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
+            return Data([Prefix.GC.rawValue, opCode]) + typeData
         case .wasmDefineAdHocSignatureType(_):
             // Nothing to do here, types are defined inside the typegroups, not inside a wasm
             // function.

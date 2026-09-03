@@ -973,6 +973,7 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmStructNew(_),
             .wasmRefEq(_),
             .wasmRefCast(_),
+            .wasmRefCastDescEq(_),
             .rawWasmModule(_):
             let mutability = instr.isOperationMutable ? "mutable" : "immutable"
             fatalError("Unexpected operation \(instr.op.opcode), marked as \(mutability)")

@@ -1425,6 +1425,20 @@ public struct JSTyper: Analyzer {
             } else {
                 setType(of: instr.output, to: op.type)
             }
+        case .wasmRefCastDescEq(let op):
+            if let wasmRefType = op.type.wasmReferenceType,
+                let descriptorDesc = tryGetTypeDescription(of: instr.input(1))
+                    as? WasmStructTypeDescription,
+                let targetDesc = descriptorDesc.describes
+            {
+                let nullable = wasmRefType.nullability
+                let isExact = wasmRefType.kind.isExact
+                setType(
+                    of: instr.output,
+                    to: ILType.wasmIndexRef(targetDesc, nullability: nullable, isExact: isExact))
+            } else {
+                setType(of: instr.output, to: .error)
+            }
         case .wasmBranchIf(_):
             let labelType = type(of: instr.input(0))
             let parameterTypes = labelType.wasmLabelType!.parameters

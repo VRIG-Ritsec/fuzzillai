@@ -510,9 +510,28 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             default:
                 fatalError("The type \(abstractType) shouldn't have a definition")
             }
-        let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
-        let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: Bool.random())
-        function.wasmRefCast(variable, refType: refType, typeDef: typeDef)
+
+        let structDesc =
+            b.type(of: typeDef).wasmTypeDefinition?.description as? WasmStructTypeDescription
+        let descriptorDesc =
+            structDesc?.descriptor ?? (structDesc?.describes != nil ? structDesc : nil)
+        if let descriptorDesc, probability(0.5) {
+            assert(b.fuzzer.config.enableCustomDescriptors)
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: probability(0.1), isExact: false)
+            // According to the subtyping rules, `descriptor` can be exact or in-exact.
+            let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
+            let descriptorIsExact = b.type(of: descriptor).wasmReferenceType!.kind.isExact
+            let targetIsExact = descriptorIsExact && probability(0.5)
+            let targetRefType = ILType.wasmRef(
+                .Index(isExact: targetIsExact), nullability: probability(0.5))
+            function.wasmRefCastDescEq(
+                variable, descriptorRef: descriptor, targetRefType: targetRefType)
+        } else {
+            let isExact = b.fuzzer.config.enableCustomDescriptors && probability(0.5)
+            let refType = ILType.wasmRef(.Index(isExact: isExact), nullability: probability(0.5))
+            function.wasmRefCast(variable, refType: refType, typeDef: typeDef)
+        }
     },
 
     CodeGenerator(

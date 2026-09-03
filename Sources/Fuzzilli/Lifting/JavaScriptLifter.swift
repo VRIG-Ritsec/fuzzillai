@@ -2148,7 +2148,8 @@ public class JavaScriptLifter: Lifter {
                 .wasmAnyConvertExtern(_),
                 .wasmExternConvertAny(_),
                 .wasmRefTest(_),
-                .wasmRefCast(_):
+                .wasmRefCast(_),
+                .wasmRefCastDescEq(_):
                 fatalError("unreachable")
             }
 

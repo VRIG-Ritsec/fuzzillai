@@ -231,10 +231,7 @@ struct WasmCustomDescriptorsTests {
 
     @Test func testGlobalIndexExactTyped() throws {
         let runner = JavaScriptExecutor(withArguments: ["--wasm-custom-descriptors"])!
-        let liveTestConfig = Configuration(
-            logLevel: .error, enableInspection: true, enableCustomDescriptors: true)
-
-        let fuzzer = makeMockFuzzer(config: liveTestConfig, environment: JavaScriptEnvironment())
+        let fuzzer = makeMockFuzzer(config: config, environment: JavaScriptEnvironment())
         let jsProg = fuzzer.sync {
             let b = fuzzer.makeBuilder()
 
@@ -274,5 +271,137 @@ struct WasmCustomDescriptorsTests {
         }
 
         testForOutput(program: jsProg, runner: runner, outputString: "42\n")
+    }
+
+    @Test func testRefCastDescEq() throws {
+        let runner = JavaScriptExecutor(withArguments: ["--wasm-custom-descriptors"])!
+        let jsProg = buildAndLiftProgram(config: config) { b in
+            let types = b.wasmDefineTypeGroup {
+                let superType = b.wasmDefineStructType(fields: [])
+                let superTypeDescriptor = b.wasmDefineStructType(
+                    fields: [],
+                    describes: superType
+                )
+                let described = b.wasmDefineStructType(
+                    fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                    superTypeDef: superType
+                )
+                let descriptor = b.wasmDefineStructType(
+                    fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                    superTypeDef: superTypeDescriptor,
+                    describes: described
+                )
+                return [described, descriptor, superType, superTypeDescriptor]
+            }
+
+            let module = b.buildWasmModule { wasmModule in
+                let _ = wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let i32 = function.consti32(42)
+
+                    let descriptorInst = function.wasmStructNew(structType: types[1], fields: [i32])
+                    let describedInst = function.wasmStructNewDesc(
+                        structType: types[0], descriptor: descriptorInst, fields: [i32])
+                    #expect(b.type(of: descriptorInst).wasmReferenceType?.kind.isExact == true)
+                    #expect(b.type(of: describedInst).wasmReferenceType?.kind.isExact == true)
+
+                    let castDescribed = function.wasmRefCastDescEq(
+                        describedInst, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(isExact: false), nullability: true))
+                    #expect(b.type(of: castDescribed).wasmReferenceType?.kind.isExact == false)
+                    let v0 = function.wasmStructGet(theStruct: castDescribed, fieldIndex: 0)
+
+                    let castDescribedNonNull = function.wasmRefCastDescEq(
+                        describedInst, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(isExact: true), nullability: false))
+                    #expect(
+                        b.type(of: castDescribedNonNull).wasmReferenceType?.kind.isExact == true)
+                    let v1 = function.wasmStructGet(
+                        theStruct: castDescribedNonNull, fieldIndex: 0)
+
+                    let abstractRef = function.wasmRefCast(
+                        describedInst, refType: ILType.wasmRef(.WasmStruct, nullability: false))
+                    let castFromAbstract = function.wasmRefCastDescEq(
+                        abstractRef, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(isExact: false), nullability: false))
+                    #expect(b.type(of: castFromAbstract).wasmReferenceType?.kind.isExact == false)
+                    let v2 = function.wasmStructGet(theStruct: castFromAbstract, fieldIndex: 0)
+
+                    let superTypeRef = function.wasmRefCast(
+                        describedInst, refType: ILType.wasmRef(.Index(), nullability: false),
+                        typeDef: types[2])
+                    let castFromSupertype = function.wasmRefCastDescEq(
+                        superTypeRef, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(isExact: false), nullability: false))
+                    #expect(b.type(of: castFromSupertype).wasmReferenceType?.kind.isExact == false)
+                    let v3 = function.wasmStructGet(theStruct: castFromSupertype, fieldIndex: 0)
+
+                    let nullRef = function.wasmRefNull(typeDef: types[0])
+                    let castNull = function.wasmRefCastDescEq(
+                        nullRef, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(isExact: true), nullability: true))
+                    #expect(b.type(of: castNull).wasmReferenceType?.kind.isExact == true)
+                    let isNull = function.wasmRefIsNull(castNull)
+
+                    let inexactDesc = function.wasmRefCast(
+                        descriptorInst,
+                        refType: ILType.wasmRef(.Index(isExact: false), nullability: false),
+                        typeDef: types[1]
+                    )
+                    #expect(b.type(of: inexactDesc).wasmReferenceType?.kind.isExact == false)
+                    let castWithInexactDesc = function.wasmRefCastDescEq(
+                        describedInst, descriptorRef: inexactDesc,
+                        targetRefType: ILType.wasmRef(.Index(isExact: false), nullability: false)
+                    )
+                    #expect(
+                        b.type(of: castWithInexactDesc).wasmReferenceType?.kind.isExact == false)
+
+                    let sum1 = function.wasmi32BinOp(v0, v1, binOpKind: .Add)
+                    let sum2 = function.wasmi32BinOp(sum1, v2, binOpKind: .Add)
+                    let sum3 = function.wasmi32BinOp(sum2, v3, binOpKind: .Add)
+                    let sum = function.wasmi32BinOp(sum3, isNull, binOpKind: .Add)
+                    return [sum]
+                }
+            }
+            let exports = module.loadExports()
+            let res = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [res])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "169\n")
+    }
+
+    @Test func testRefCastDescEqNullTraps() throws {
+        let runner = JavaScriptExecutor(withArguments: ["--wasm-custom-descriptors"])!
+        let jsProg = buildAndLiftProgram(config: config) { b in
+            let types = b.wasmDefineTypeGroup {
+                let described = b.wasmDefineStructType(fields: [])
+                let descriptor = b.wasmDefineStructType(
+                    fields: [],
+                    describes: described
+                )
+                return [described, descriptor]
+            }
+
+            let module = b.buildWasmModule { wasmModule in
+                wasmModule.addWasmFunction(with: [] => []) { function, _, _ in
+                    let descriptorInst = function.wasmStructNew(structType: types[1], fields: [])
+                    let nullRef = function.wasmRefNull(typeDef: types[0])
+                    _ = function.wasmRefCastDescEq(
+                        nullRef, descriptorRef: descriptorInst,
+                        targetRefType: ILType.wasmRef(.Index(), nullability: false))
+                    return []
+                }
+            }
+            let exports = module.loadExports()
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+
+            b.buildTryCatchFinally {
+                let _ = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+                b.callFunction(outputFunc, withArgs: [b.loadString("Not reached")])
+            } catchBody: { e in
+                b.callFunction(outputFunc, withArgs: [b.loadString("trapped")])
+            }
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "trapped\n")
     }
 }

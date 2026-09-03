@@ -403,6 +403,7 @@ message Instruction {
         WasmStructNewDefaultDesc wasmStructNewDefaultDesc = 377;
         WasmStructNewDesc wasmStructNewDesc = 378;
         WasmRefGetDesc wasmRefGetDesc = 379;
+        WasmRefCastDescEq wasmRefCastDescEq = 380;
     }
 }
 

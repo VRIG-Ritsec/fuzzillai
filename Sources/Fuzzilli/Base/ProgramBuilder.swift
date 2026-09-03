@@ -2399,6 +2399,9 @@ public class ProgramBuilder {
         let newOp = WasmEndTypeGroup(typesCount: instr.inputs.count + newVisibleVariables.count)
         // We need to keep and adopt the inputs that are still there.
         let newInputs = adopt(instr.inputs) + newVisibleVariables
+
+        assertWasmCustomDescriptorsSubtypingRules(for: Array(newInputs))
+
         // Adopt the old outputs and allocate new output variables for the new outputs
         let newOutputs =
             adopt(instr.outputs)
@@ -6616,6 +6619,18 @@ public class ProgramBuilder {
             return b.emit(WasmRefCast(refType: refType), withInputs: inputs, types: types).output
         }
 
+        @discardableResult
+        public func wasmRefCastDescEq(
+            _ sourceStructRef: Variable, descriptorRef: Variable, targetRefType: ILType
+        ) -> Variable {
+            let inputs = [sourceStructRef, descriptorRef]
+            let types: [ILType] = [.wasmAnyRef(), .anyIndexRef]
+            return b.emit(
+                WasmRefCastDescEq(refType: targetRefType), withInputs: inputs, types: types
+            )
+            .output
+        }
+
     }
 
     public class WasmModule {
@@ -7072,10 +7087,46 @@ public class ProgramBuilder {
         return module
     }
 
+    private func assertWasmCustomDescriptorsSubtypingRules(for types: [Variable]) {
+        #if DEBUG
+            // Assert that descriptor+describes come in pairs
+            for type in types {
+                if let desc = self.type(of: type).wasmTypeDefinition?.description
+                    as? WasmStructTypeDescription
+                {
+                    if let descriptor = desc.descriptor {
+                        assert(descriptor.typeGroupIndex == desc.typeGroupIndex)
+                        assert((descriptor as? WasmStructTypeDescription)?.describes === desc)
+                    }
+                    if let describes = desc.describes {
+                        assert(describes.typeGroupIndex == desc.typeGroupIndex)
+                        assert((describes as? WasmStructTypeDescription)?.descriptor === desc)
+                    }
+
+                    // Descriptors of descriptors are not allowed by the spec.
+                    assert(desc.descriptor == nil || desc.describes == nil)
+
+                    if let superTypeDesc = desc.concreteHeapSupertype as? WasmStructTypeDescription
+                    {
+                        assert((desc.descriptor == nil) == (superTypeDesc.descriptor == nil))
+                        if let descriptor = desc.descriptor,
+                            let superDescriptor = superTypeDesc.descriptor
+                        {
+                            assert(descriptor.concreteHeapSupertype == superDescriptor)
+                        }
+                    }
+                }
+            }
+        #endif
+    }
+
     @discardableResult
     public func wasmDefineTypeGroup(typeGenerator: () -> [Variable]) -> [Variable] {
         emit(WasmBeginTypeGroup())
         let types = typeGenerator()
+
+        assertWasmCustomDescriptorsSubtypingRules(for: types)
+
         return Array(emit(WasmEndTypeGroup(typesCount: types.count), withInputs: types).outputs)
     }
 
@@ -7094,30 +7145,7 @@ public class ProgramBuilder {
             return t.Is(.wasmTypeDef()) && t.wasmTypeDefinition?.description != .selfReference
         }
 
-        #if DEBUG
-            // Assert that descriptor+describes come in pairs
-            for type in types {
-                if let desc = self.type(of: type).wasmTypeDefinition?.description
-                    as? WasmStructTypeDescription
-                {
-                    if let descriptor = desc.descriptor {
-                        assert(descriptor.typeGroupIndex == desc.typeGroupIndex)
-                        assert((descriptor as? WasmStructTypeDescription)?.describes === desc)
-                    }
-                    if let describes = desc.describes {
-                        assert(describes.typeGroupIndex == desc.typeGroupIndex)
-                        assert((describes as? WasmStructTypeDescription)?.descriptor === desc)
-                    }
-
-                    if let superTypeDesc = desc.concreteHeapSupertype as? WasmStructTypeDescription,
-                        let superDescriptor = superTypeDesc.descriptor
-                    {
-                        assert(desc.descriptor != nil)
-                        assert(superDescriptor.subsumes(desc.descriptor!))
-                    }
-                }
-            }
-        #endif  // DEBUG
+        assertWasmCustomDescriptorsSubtypingRules(for: types)
 
         return Array(emit(WasmEndTypeGroup(typesCount: types.count), withInputs: types).outputs)
     }
@@ -7600,7 +7628,7 @@ public class ProgramBuilder {
                 if let superDescribes = superStructType.describes {
                     assert(describes != nil)
                     let describesDesc = self.type(of: describes!).wasmTypeDefinition?.description
-                    assert(superDescribes.subsumes(describesDesc!))
+                    assert(describesDesc!.concreteHeapSupertype == superDescribes)
                 } else {
                     assert(describes == nil)
                 }

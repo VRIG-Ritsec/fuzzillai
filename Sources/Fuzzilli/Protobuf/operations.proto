@@ -1645,6 +1645,10 @@ message WasmRefCast {
     WasmILType type = 1;
 }
 
+message WasmRefCastDescEq {
+    WasmILType type = 1;
+}
+
 message WasmBranchOnNull {
 }
 

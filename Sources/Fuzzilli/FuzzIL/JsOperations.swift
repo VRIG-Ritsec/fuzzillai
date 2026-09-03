@@ -2962,7 +2962,7 @@ final class BeginWasmModule: JsOperation {
 }
 
 // The output of this instruction will be the compiled wasm module, i.e. the `instance` field will have the methods.
-class EndWasmModule: JsOperation {
+final class EndWasmModule: JsOperation {
     override var opcode: Opcode { .endWasmModule(self) }
 
     var hasStartFunction: Bool {
@@ -2976,7 +2976,7 @@ class EndWasmModule: JsOperation {
     }
 }
 
-class WrapPromising: JsOperation {
+final class WrapPromising: JsOperation {
     override var opcode: Opcode { .wrapPromising(self) }
 
     init() {
@@ -2984,7 +2984,7 @@ class WrapPromising: JsOperation {
     }
 }
 
-class WrapSuspending: JsOperation {
+final class WrapSuspending: JsOperation {
     override var opcode: Opcode { .wrapSuspending(self) }
 
     init() {
@@ -2995,7 +2995,7 @@ class WrapSuspending: JsOperation {
 // This is used to bind methods for use as utility functions.
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/bind#transforming_methods_to_utility_functions
 // This allows us to call these things from Wasm and V8 has optimizations to help with well-known imports.
-class BindMethod: JsOperation {
+final class BindMethod: JsOperation {
     override var opcode: Opcode { .bindMethod(self) }
 
     let methodName: String
@@ -3007,7 +3007,7 @@ class BindMethod: JsOperation {
     }
 }
 
-class BindFunction: JsOperation {
+final class BindFunction: JsOperation {
     override var opcode: Opcode { .bindFunction(self) }
 
     init(numInputs: Int) {
@@ -3018,7 +3018,7 @@ class BindFunction: JsOperation {
 }
 
 // This instruction is used to create strongly typed WasmGlobals in the JS world that can be imported by a WasmModule.
-class CreateWasmGlobal: JsOperation {
+final class CreateWasmGlobal: JsOperation {
     override var opcode: Opcode { .createWasmGlobal(self) }
 
     let value: WasmGlobal
@@ -3032,7 +3032,7 @@ class CreateWasmGlobal: JsOperation {
 }
 
 // This instruction is used to create strongly typed WasmMemories in the JS world that can be imported by a WasmModule.
-class CreateWasmMemory: JsOperation {
+final class CreateWasmMemory: JsOperation {
     override var opcode: Opcode { .createWasmMemory(self) }
 
     let memType: WasmMemoryType
@@ -3044,7 +3044,7 @@ class CreateWasmMemory: JsOperation {
 }
 
 // This instruction is used to create strongly typed WasmTables in the JS world that can be imported by a WasmModule.
-class CreateWasmTable: JsOperation {
+final class CreateWasmTable: JsOperation {
     override var opcode: Opcode { .createWasmTable(self) }
 
     // We need to store the element type here such that the lifter can easily list the correct type 'externref' or 'anyfunc' when constructing.
@@ -3058,7 +3058,7 @@ class CreateWasmTable: JsOperation {
     }
 }
 
-class CreateWasmJSTag: JsOperation {
+final class CreateWasmJSTag: JsOperation {
     override var opcode: Opcode { .createWasmJSTag(self) }
 
     init() {
@@ -3066,7 +3066,7 @@ class CreateWasmJSTag: JsOperation {
     }
 }
 
-class CreateWasmTag: JsOperation {
+final class CreateWasmTag: JsOperation {
     override var opcode: Opcode { .createWasmTag(self) }
     public let parameterTypes: [ILType]
 
@@ -3078,7 +3078,7 @@ class CreateWasmTag: JsOperation {
 
 class WasmTypeOperation: Operation {}
 
-class WasmBeginTypeGroup: WasmTypeOperation {
+final class WasmBeginTypeGroup: WasmTypeOperation {
     override var opcode: Opcode { .wasmBeginTypeGroup(self) }
     init() {
         super.init(
@@ -3087,7 +3087,7 @@ class WasmBeginTypeGroup: WasmTypeOperation {
     }
 }
 
-class WasmEndTypeGroup: WasmTypeOperation {
+final class WasmEndTypeGroup: WasmTypeOperation {
     override var opcode: Opcode { .wasmEndTypeGroup(self) }
     var typesCount: Int {
         return numInputs
@@ -3101,7 +3101,7 @@ class WasmEndTypeGroup: WasmTypeOperation {
     }
 }
 
-class WasmDefineArrayType: WasmTypeOperation {
+final class WasmDefineArrayType: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineArrayType(self) }
     let elementType: ILType
     let mutability: Bool
@@ -3120,7 +3120,7 @@ class WasmDefineArrayType: WasmTypeOperation {
     }
 }
 
-class WasmDefineStructType: WasmTypeOperation {
+final class WasmDefineStructType: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineStructType(self) }
 
     typealias Field = WasmStructTypeDescription.Field
@@ -3149,7 +3149,7 @@ class WasmDefineStructType: WasmTypeOperation {
     }
 }
 
-class WasmDefineSignatureType: WasmTypeOperation {
+final class WasmDefineSignatureType: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineSignatureType(self) }
     let signature: WasmSignature
     let hasSuperType: Bool
@@ -3171,7 +3171,7 @@ class WasmDefineSignatureType: WasmTypeOperation {
     }
 }
 
-class WasmDefineForwardOrSelfReference: WasmTypeOperation {
+final class WasmDefineForwardOrSelfReference: WasmTypeOperation {
     override var opcode: Opcode { .wasmDefineForwardOrSelfReference(self) }
 
     init() {
@@ -3179,7 +3179,7 @@ class WasmDefineForwardOrSelfReference: WasmTypeOperation {
     }
 }
 
-class WasmResolveForwardReference: WasmTypeOperation {
+final class WasmResolveForwardReference: WasmTypeOperation {
     override var opcode: Opcode { .wasmResolveForwardReference(self) }
 
     init() {

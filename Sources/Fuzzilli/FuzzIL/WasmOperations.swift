@@ -1010,7 +1010,7 @@ final class WasmDefineElementSegment: WasmOperation {
     }
 }
 
-class WasmDropElementSegment: WasmOperation {
+final class WasmDropElementSegment: WasmOperation {
     override var opcode: Opcode { .wasmDropElementSegment(self) }
 
     init() {
@@ -1019,7 +1019,7 @@ class WasmDropElementSegment: WasmOperation {
     }
 }
 
-class WasmTableInit: WasmOperation {
+final class WasmTableInit: WasmOperation {
     override var opcode: Opcode { .wasmTableInit(self) }
 
     init() {
@@ -1028,7 +1028,7 @@ class WasmTableInit: WasmOperation {
     }
 }
 
-class WasmTableCopy: WasmOperation {
+final class WasmTableCopy: WasmOperation {
     override var opcode: Opcode { .wasmTableCopy(self) }
 
     init() {
@@ -1402,7 +1402,7 @@ final class WasmMemoryGrow: WasmOperation {
     }
 }
 
-class WasmMemoryFill: WasmOperation {
+final class WasmMemoryFill: WasmOperation {
     override var opcode: Opcode { .wasmMemoryFill(self) }
 
     init() {
@@ -1411,7 +1411,7 @@ class WasmMemoryFill: WasmOperation {
     }
 }
 
-class WasmMemoryCopy: WasmOperation {
+final class WasmMemoryCopy: WasmOperation {
     override var opcode: Opcode { .wasmMemoryCopy(self) }
 
     init() {
@@ -1420,7 +1420,7 @@ class WasmMemoryCopy: WasmOperation {
     }
 }
 
-class WasmMemoryInit: WasmOperation {
+final class WasmMemoryInit: WasmOperation {
     override var opcode: Opcode { .wasmMemoryInit(self) }
 
     init() {
@@ -2499,7 +2499,7 @@ final class WasmSimdLoad: WasmOperation {
     }
 }
 
-class WasmArrayNewFixed: WasmOperation {
+final class WasmArrayNewFixed: WasmOperation {
     override var opcode: Opcode { .wasmArrayNewFixed(self) }
 
     let size: Int
@@ -2512,7 +2512,7 @@ class WasmArrayNewFixed: WasmOperation {
     }
 }
 
-class WasmArrayNewDefault: WasmOperation {
+final class WasmArrayNewDefault: WasmOperation {
     override var opcode: Opcode { .wasmArrayNewDefault(self) }
 
     init() {
@@ -2520,7 +2520,7 @@ class WasmArrayNewDefault: WasmOperation {
     }
 }
 
-class WasmArrayLen: WasmOperation {
+final class WasmArrayLen: WasmOperation {
     override var opcode: Opcode { .wasmArrayLen(self) }
 
     init() {
@@ -2528,7 +2528,7 @@ class WasmArrayLen: WasmOperation {
     }
 }
 
-class WasmArrayGet: WasmOperation {
+final class WasmArrayGet: WasmOperation {
     override var opcode: Opcode { .wasmArrayGet(self) }
     // For packed types this flag indicates whether to use signed or zero extension.
     let isSigned: Bool
@@ -2540,7 +2540,7 @@ class WasmArrayGet: WasmOperation {
     }
 }
 
-class WasmArraySet: WasmOperation {
+final class WasmArraySet: WasmOperation {
     override var opcode: Opcode { .wasmArraySet(self) }
 
     init() {
@@ -2548,7 +2548,7 @@ class WasmArraySet: WasmOperation {
     }
 }
 
-class WasmStructNew: WasmOperation {
+final class WasmStructNew: WasmOperation {
     override var opcode: Opcode { .wasmStructNew(self) }
 
     init(fieldCount: Int) {
@@ -2557,7 +2557,7 @@ class WasmStructNew: WasmOperation {
     }
 }
 
-class WasmStructNewDefault: WasmOperation {
+final class WasmStructNewDefault: WasmOperation {
     override var opcode: Opcode { .wasmStructNewDefault(self) }
 
     init() {
@@ -2566,7 +2566,7 @@ class WasmStructNewDefault: WasmOperation {
     }
 }
 
-class WasmStructNewDefaultDesc: WasmOperation {
+final class WasmStructNewDefaultDesc: WasmOperation {
     override var opcode: Opcode { .wasmStructNewDefaultDesc(self) }
 
     init() {
@@ -2575,7 +2575,7 @@ class WasmStructNewDefaultDesc: WasmOperation {
     }
 }
 
-class WasmStructNewDesc: WasmOperation {
+final class WasmStructNewDesc: WasmOperation {
     override var opcode: Opcode { .wasmStructNewDesc(self) }
 
     init(fieldCount: Int) {
@@ -2584,7 +2584,7 @@ class WasmStructNewDesc: WasmOperation {
     }
 }
 
-class WasmRefGetDesc: WasmOperation {
+final class WasmRefGetDesc: WasmOperation {
     override var opcode: Opcode { .wasmRefGetDesc(self) }
 
     init() {
@@ -2593,7 +2593,7 @@ class WasmRefGetDesc: WasmOperation {
     }
 }
 
-class WasmStructGet: WasmOperation {
+final class WasmStructGet: WasmOperation {
     override var opcode: Opcode { .wasmStructGet(self) }
     let fieldIndex: Int
     // For packed types this flag indicates whether to use signed or zero extension.
@@ -2607,7 +2607,7 @@ class WasmStructGet: WasmOperation {
     }
 }
 
-class WasmStructSet: WasmOperation {
+final class WasmStructSet: WasmOperation {
     override var opcode: Opcode { .wasmStructSet(self) }
     let fieldIndex: Int
 
@@ -2617,7 +2617,7 @@ class WasmStructSet: WasmOperation {
     }
 }
 
-class WasmRefNull: WasmOperation {
+final class WasmRefNull: WasmOperation {
     override var opcode: Opcode { .wasmRefNull(self) }
 
     let type: ILType?  // Only present if this operation has no input.
@@ -2629,7 +2629,7 @@ class WasmRefNull: WasmOperation {
     }
 }
 
-class WasmRefIsNull: WasmOperation {
+final class WasmRefIsNull: WasmOperation {
     override var opcode: Opcode { .wasmRefIsNull(self) }
 
     init() {
@@ -2637,7 +2637,7 @@ class WasmRefIsNull: WasmOperation {
     }
 }
 
-class WasmRefAsNonNull: WasmOperation {
+final class WasmRefAsNonNull: WasmOperation {
     override var opcode: Opcode { .wasmRefAsNonNull(self) }
 
     init() {
@@ -2645,7 +2645,7 @@ class WasmRefAsNonNull: WasmOperation {
     }
 }
 
-class WasmRefFunc: WasmOperation {
+final class WasmRefFunc: WasmOperation {
     override var opcode: Opcode { .wasmRefFunc(self) }
 
     init() {
@@ -2653,7 +2653,7 @@ class WasmRefFunc: WasmOperation {
     }
 }
 
-class WasmRefEq: WasmOperation {
+final class WasmRefEq: WasmOperation {
     override var opcode: Opcode { .wasmRefEq(self) }
 
     init() {
@@ -2661,7 +2661,7 @@ class WasmRefEq: WasmOperation {
     }
 }
 
-class WasmRefI31: WasmOperation {
+final class WasmRefI31: WasmOperation {
     override var opcode: Opcode { .wasmRefI31(self) }
     let isShared: Bool
 
@@ -2671,7 +2671,7 @@ class WasmRefI31: WasmOperation {
     }
 }
 
-class WasmI31Get: WasmOperation {
+final class WasmI31Get: WasmOperation {
     override var opcode: Opcode { .wasmI31Get(self) }
     let isSigned: Bool
 
@@ -2682,7 +2682,7 @@ class WasmI31Get: WasmOperation {
     }
 }
 
-class WasmAnyConvertExtern: WasmOperation {
+final class WasmAnyConvertExtern: WasmOperation {
     override var opcode: Opcode { .wasmAnyConvertExtern(self) }
 
     init() {
@@ -2690,7 +2690,7 @@ class WasmAnyConvertExtern: WasmOperation {
     }
 }
 
-class WasmExternConvertAny: WasmOperation {
+final class WasmExternConvertAny: WasmOperation {
     override var opcode: Opcode { .wasmExternConvertAny(self) }
 
     init() {
@@ -2698,7 +2698,7 @@ class WasmExternConvertAny: WasmOperation {
     }
 }
 
-class WasmRefTest: WasmOperation {
+final class WasmRefTest: WasmOperation {
     override var opcode: Opcode { .wasmRefTest(self) }
     let type: ILType
 
@@ -2710,7 +2710,7 @@ class WasmRefTest: WasmOperation {
     }
 }
 
-class WasmRefCast: WasmOperation {
+final class WasmRefCast: WasmOperation {
     override var opcode: Opcode { .wasmRefCast(self) }
     let type: ILType
     init(refType: ILType) {

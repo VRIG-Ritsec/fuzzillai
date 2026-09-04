@@ -1018,7 +1018,7 @@ public class OperationMutator: BaseInstructionMutator {
             newOp = CreateArray(
                 numInitialValues: op.numInitialValues + 1, elementGroupName: op.elementGroupName)
             let elementType = op.elementGroupName.map {
-                b.fuzzer.environment.type(ofGroup: $0)
+                b.fuzzer.environment.type(ofGroupOrEnum: $0)
             }
             inputs.append(
                 elementType.map { b.randomVariable(forUseAs: $0) } ?? b.randomJsVariable())
@@ -1115,8 +1115,8 @@ public class OperationMutator: BaseInstructionMutator {
                 valueGroupName: op.valueGroupName)
             var elementType = ILType.jsArray
             if let keyGroup = op.keyGroupName, let valueGroup = op.valueGroupName {
-                let keyType = b.fuzzer.environment.type(ofGroup: keyGroup)
-                let valueType = b.fuzzer.environment.type(ofGroup: valueGroup)
+                let keyType = b.fuzzer.environment.type(ofGroupOrEnum: keyGroup)
+                let valueType = b.fuzzer.environment.type(ofGroupOrEnum: valueGroup)
                 elementType = ILType.createJsArrayType(ofElementType: keyType | valueType)
             }
             inputs.append(b.randomVariable(forUseAs: elementType))

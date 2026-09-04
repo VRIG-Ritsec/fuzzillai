@@ -2464,7 +2464,7 @@ public struct JSTyper: Analyzer {
                 opParameters: op.parameters)
         case .createArray(let op):
             if let elementGroupName = op.elementGroupName {
-                let elementType = self.environment.type(ofGroup: elementGroupName)
+                let elementType = self.environment.type(ofGroupOrEnum: elementGroupName)
                 set(instr.output, .createJsArrayType(ofElementType: elementType))
             } else {
                 let iterableElementType =
@@ -2973,8 +2973,8 @@ public struct JSTyper: Analyzer {
 
         case .createMap(let op):
             if let keyGroupName = op.keyGroupName, let valueGroupName = op.valueGroupName {
-                let keyType = self.environment.type(ofGroup: keyGroupName)
-                let valueType = self.environment.type(ofGroup: valueGroupName)
+                let keyType = self.environment.type(ofGroupOrEnum: keyGroupName)
+                let valueType = self.environment.type(ofGroupOrEnum: valueGroupName)
                 set(instr.output, .createJsMapType(ofKeyType: keyType, ofValueType: valueType))
             } else {
                 set(instr.output, .jsMap)

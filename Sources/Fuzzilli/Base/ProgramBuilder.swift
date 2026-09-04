@@ -7408,7 +7408,7 @@ public class ProgramBuilder {
                     self.type(of: $0).wasmTypeDefinition?.description == describesDesc
                 }!
                 let describedSubtype = self.generateSubtypeStruct(
-                    superType: describesVar, isFinal: probability(0.25))
+                    superType: describesVar, isFinal: isFinal)
                 let subtype = self.generateSubtypeStruct(
                     superType: superType, isFinal: isFinal, describes: describedSubtype)
                 return subtype
@@ -7419,7 +7419,7 @@ public class ProgramBuilder {
                 }!
                 _ = self.generateSubtypeStruct(
                     superType: descriptorVar,
-                    isFinal: probability(0.25),
+                    isFinal: isFinal,
                     describes: subtype
                 )
                 return subtype

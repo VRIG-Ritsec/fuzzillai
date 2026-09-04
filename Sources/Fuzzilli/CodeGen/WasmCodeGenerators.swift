@@ -2779,13 +2779,14 @@ private let wasmCustomDescriptorsStructTypesGenerator = {
         ]
     ) { b in
         guard b.fuzzer.config.enableCustomDescriptors else { return }
+        let finality = probability(0.25)
         let (fieldsA, indexTypesA) = b.generateRandomWasmStructFields()
         let typeA = b.wasmDefineStructType(
-            fields: fieldsA, indexTypes: indexTypesA, isFinal: probability(0.25)
+            fields: fieldsA, indexTypes: indexTypesA, isFinal: finality
         )
 
         let (fieldsB, indexTypesB) = b.generateRandomWasmStructFields()
         _ = b.wasmDefineStructType(
-            fields: fieldsB, indexTypes: indexTypesB, isFinal: probability(0.25), describes: typeA)
+            fields: fieldsB, indexTypes: indexTypesB, isFinal: finality, describes: typeA)
     }
 }

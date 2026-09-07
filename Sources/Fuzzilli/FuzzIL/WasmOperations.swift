@@ -2721,7 +2721,7 @@ final class WasmRefCast: WasmOperation {
     }
 }
 
-class WasmRefCastDescEq: WasmOperation {
+final class WasmRefCastDescEq: WasmOperation {
     override var opcode: Opcode { .wasmRefCastDescEq(self) }
     let type: ILType
     init(refType: ILType) {

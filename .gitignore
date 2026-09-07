@@ -19,3 +19,7 @@ package-lock.json
 /.gemini
 /GEMINI.md
 /AGENTS.md
+
+# Python
+__pycache__/
+*.py[cod]

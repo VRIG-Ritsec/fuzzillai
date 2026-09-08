@@ -85,7 +85,7 @@ let v8HoleFuzzingProfile = Profile(
 
     additionalBuiltins: [
         "gc": .function([.opt(gcOptions.instanceType)] => (.undefined | .jsPromise())),
-        "d8": .object(),
+        "d8": .jsD8,
         "Worker": .constructor(
             [.jsAnything, .object()] => .object(withMethods: ["postMessage", "getMessage"])),
     ],

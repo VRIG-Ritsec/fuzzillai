@@ -409,4 +409,5 @@ enum Opcode {
     case wasmStructNewDesc(WasmStructNewDesc)
     case wasmRefGetDesc(WasmRefGetDesc)
     case wasmRefCastDescEq(WasmRefCastDescEq)
+    case wasmBranchOnCastDescEq(WasmBranchOnCastDescEq)
 }

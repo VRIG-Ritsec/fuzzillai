@@ -404,6 +404,7 @@ message Instruction {
         WasmStructNewDesc wasmStructNewDesc = 378;
         WasmRefGetDesc wasmRefGetDesc = 379;
         WasmRefCastDescEq wasmRefCastDescEq = 380;
+        WasmBranchOnCastDescEq wasmBranchOnCastDescEq = 381;
     }
 }
 

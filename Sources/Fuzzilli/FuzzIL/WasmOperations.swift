@@ -1829,6 +1829,23 @@ final class WasmBranchOnCastFail: WasmOperation {
     var parameterCount: Int { numInputs - 2 - targetType.requiredInputCount() }
 }
 
+final class WasmBranchOnCastDescEq: WasmOperation {
+    override var opcode: Opcode { .wasmBranchOnCastDescEq(self) }
+    let targetType: ILType
+
+    init(parameterCount: Int, targetRefType: ILType) {
+        self.targetType = targetRefType
+        // Inputs: label, args, structRef, descriptorRef
+        // Outputs: args, original ref
+        super.init(
+            numInputs: 1 + parameterCount + 2,
+            numOutputs: parameterCount + 1,
+            requiredContext: [.wasmFunction])
+    }
+
+    var parameterCount: Int { numInputs - 3 }
+}
+
 final class WasmBranchOnNonNull: WasmOperation {
     override var opcode: Opcode { .wasmBranchOnNonNull(self) }
 

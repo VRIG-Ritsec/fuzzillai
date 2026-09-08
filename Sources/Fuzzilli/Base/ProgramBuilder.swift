@@ -5726,6 +5726,7 @@ public class ProgramBuilder {
             _ reference: Variable, to label: Variable, args: [Variable] = []
         ) -> [Variable] {
             let labelType = b.type(of: label)
+            checkArgumentsMatchLabelType(label: labelType, args: args)
             let instr = b.emit(
                 WasmBranchOnNull(parameterCount: labelType.wasmLabelType!.parameters.count),
                 withInputs: [label] + args + [reference],
@@ -5734,22 +5735,42 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        private func checkBranchWithRefTarget(to label: Variable, args: [Variable]) -> [ILType] {
+            let labelType = b.type(of: label)
+            let labelParams = labelType.wasmLabelType!.parameters
+            assert(!labelParams.isEmpty, "Branch target label must accept at least the reference")
+            assert(
+                labelParams.last!.Is(.wasmGenericRef), "Last label parameter must be a reference")
+            assert(
+                args.count == labelParams.count - 1, "Argument count mismatch for label parameters")
+            let errorMsg =
+                "label type \(labelType) doesn't match argument types \(args.map({b.type(of: $0)}))"
+            assert(zip(labelParams, args).allSatisfy { b.type(of: $0.1).Is($0.0) }, errorMsg)
+            return labelParams
+        }
+
+        @discardableResult
         public func wasmBranchOnNonNull(
             _ reference: Variable, to label: Variable, args: [Variable] = []
         ) -> [Variable] {
-            let labelType = b.type(of: label)
-            let labelParams = labelType.wasmLabelType!.parameters
-            assert(!labelParams.isEmpty)
-            let nonNullRefType = labelParams.last!
-            assert(nonNullRefType.Is(.wasmGenericRef))
-            let wasmRefType = nonNullRefType.wasmReferenceType!
+            let labelParams = checkBranchWithRefTarget(to: label, args: args)
+            let wasmRefType = labelParams.last!.wasmReferenceType!
             let nullableRefType = ILType.wasmRef(wasmRefType.kind, nullability: true)
 
             let instr = b.emit(
-                WasmBranchOnNonNull(parameterCount: labelParams.count - 1),
+                WasmBranchOnNonNull(parameterCount: args.count),
                 withInputs: [label] + args + [reference],
                 types: [.anyWasmLabel] + labelParams.dropLast() + [nullableRefType])
             return Array(instr.outputs)
+        }
+
+        private func buildBranchOnCastInputsAndTypes(
+            _ reference: Variable, to label: Variable, args: [Variable]
+        ) -> (inputs: [Variable], types: [ILType]) {
+            let labelParams = checkBranchWithRefTarget(to: label, args: args)
+            let inputs = [label] + args + [reference]
+            let types: [ILType] = [.anyWasmLabel] + labelParams.dropLast() + [.wasmGenericRef]
+            return (inputs, types)
         }
 
         @discardableResult
@@ -5757,10 +5778,7 @@ public class ProgramBuilder {
             _ reference: Variable, targetRefType: ILType, to label: Variable, args: [Variable] = [],
             typeDef: Variable? = nil
         ) -> [Variable] {
-            let labelType = b.type(of: label)
-            let labelParams = labelType.wasmLabelType!.parameters
-            var inputs = [label] + args + [reference]
-            var types = [.anyWasmLabel] + labelParams.dropLast() + [.wasmGenericRef]
+            var (inputs, types) = buildBranchOnCastInputsAndTypes(reference, to: label, args: args)
             if let typeDef {
                 inputs.append(typeDef)
                 types.append(.wasmTypeDef())
@@ -5768,7 +5786,24 @@ public class ProgramBuilder {
 
             let instr = b.emit(
                 WasmBranchOnCast(
-                    parameterCount: labelParams.count - 1, targetRefType: targetRefType),
+                    parameterCount: args.count, targetRefType: targetRefType),
+                withInputs: inputs,
+                types: types)
+            return Array(instr.outputs)
+        }
+
+        @discardableResult
+        public func wasmBranchOnCastDescEq(
+            _ reference: Variable, descriptorRef: Variable, targetRefType: ILType,
+            to label: Variable, args: [Variable] = []
+        ) -> [Variable] {
+            var (inputs, types) = buildBranchOnCastInputsAndTypes(reference, to: label, args: args)
+            inputs.append(descriptorRef)
+            types.append(.anyIndexRef)
+
+            let instr = b.emit(
+                WasmBranchOnCastDescEq(
+                    parameterCount: args.count, targetRefType: targetRefType),
                 withInputs: inputs,
                 types: types)
             return Array(instr.outputs)
@@ -5779,10 +5814,7 @@ public class ProgramBuilder {
             _ reference: Variable, targetRefType: ILType, to label: Variable, args: [Variable] = [],
             typeDef: Variable? = nil
         ) -> [Variable] {
-            let labelType = b.type(of: label)
-            let labelParams = labelType.wasmLabelType!.parameters
-            var inputs = [label] + args + [reference]
-            var types = [.anyWasmLabel] + labelParams.dropLast() + [.wasmGenericRef]
+            var (inputs, types) = buildBranchOnCastInputsAndTypes(reference, to: label, args: args)
             if let typeDef {
                 inputs.append(typeDef)
                 types.append(.wasmTypeDef())
@@ -5790,7 +5822,7 @@ public class ProgramBuilder {
 
             let instr = b.emit(
                 WasmBranchOnCastFail(
-                    parameterCount: labelParams.count - 1, targetRefType: targetRefType),
+                    parameterCount: args.count, targetRefType: targetRefType),
                 withInputs: inputs,
                 types: types)
             return Array(instr.outputs)

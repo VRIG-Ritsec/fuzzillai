@@ -1819,7 +1819,7 @@ final class WasmBranchOnCastFail: WasmOperation {
     init(parameterCount: Int, targetRefType: ILType) {
         self.targetType = targetRefType
         // Inputs: label, args, ref, type definition
-        // Outputs: args, original ref
+        // Outputs: args, targetRef
         super.init(
             numInputs: 1 + parameterCount + 1 + targetType.requiredInputCount(),
             numOutputs: parameterCount + 1,
@@ -1837,6 +1837,23 @@ final class WasmBranchOnCastDescEq: WasmOperation {
         self.targetType = targetRefType
         // Inputs: label, args, structRef, descriptorRef
         // Outputs: args, original ref
+        super.init(
+            numInputs: 1 + parameterCount + 2,
+            numOutputs: parameterCount + 1,
+            requiredContext: [.wasmFunction])
+    }
+
+    var parameterCount: Int { numInputs - 3 }
+}
+
+final class WasmBranchOnCastDescEqFail: WasmOperation {
+    override var opcode: Opcode { .wasmBranchOnCastDescEqFail(self) }
+    let targetType: ILType
+
+    init(parameterCount: Int, targetRefType: ILType) {
+        self.targetType = targetRefType
+        // Inputs: label, args, structRef, descriptorRef
+        // Outputs: args, targetRef
         super.init(
             numInputs: 1 + parameterCount + 2,
             numOutputs: parameterCount + 1,

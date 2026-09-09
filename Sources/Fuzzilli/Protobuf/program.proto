@@ -405,6 +405,7 @@ message Instruction {
         WasmRefGetDesc wasmRefGetDesc = 379;
         WasmRefCastDescEq wasmRefCastDescEq = 380;
         WasmBranchOnCastDescEq wasmBranchOnCastDescEq = 381;
+        WasmBranchOnCastDescEqFail wasmBranchOnCastDescEqFail = 382;
     }
 }
 

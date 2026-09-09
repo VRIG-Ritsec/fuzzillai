@@ -1660,6 +1660,10 @@ message WasmBranchOnCastDescEq {
     WasmILType type = 1;
 }
 
+message WasmBranchOnCastDescEqFail {
+    WasmILType type = 1;
+}
+
 message WasmBranchOnCastFail {
     WasmILType type = 1;
 }

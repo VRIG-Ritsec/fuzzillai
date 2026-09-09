@@ -928,6 +928,7 @@ public class OperationMutator: BaseInstructionMutator {
             .wasmBranchOnNonNull(_),
             .wasmBranchOnCast(_),
             .wasmBranchOnCastDescEq(_),
+            .wasmBranchOnCastDescEqFail(_),
             .wasmBranchOnCastFail(_),
             .wasmBranchTable(_),
             .wasmBeginElse(_),

@@ -559,4 +559,123 @@ struct WasmCustomDescriptorsTests {
         }
         testForOutput(program: jsProg, runner: runner, outputString: "168\n")
     }
+    @Test func testBranchOnCastDescEqFail() throws {
+        let runner = JavaScriptExecutor(withArguments: ["--wasm-custom-descriptors"])!
+        let jsProg = buildAndLiftProgram(config: config) { b in
+            let types = b.wasmDefineTypeGroup {
+                let described = b.wasmDefineStructType(
+                    fields: [WasmStructTypeDescription.Field(type: .wasmi32, mutability: true)],
+                )
+                let descriptor = b.wasmDefineStructType(
+                    fields: [WasmStructTypeDescription.Field(type: .wasmf32, mutability: true)],
+                    describes: described
+                )
+                return [described, descriptor]
+            }
+
+            let module = b.buildWasmModule { wasmModule in
+                let _ = wasmModule.addWasmFunction(with: [] => [.wasmi32]) { function, _, _ in
+                    let i32 = function.consti32(42)
+                    let f32 = function.constf32(13.37)
+
+                    let descriptorInst = function.wasmStructNew(structType: types[1], fields: [f32])
+                    let describedInst = function.wasmStructNewDesc(
+                        structType: types[0], descriptor: descriptorInst, fields: [i32])
+
+                    let abstractRef = function.wasmRefCast(
+                        describedInst, refType: ILType.wasmRef(.WasmStruct, nullability: false))
+
+                    // 1. Exact descriptor with exact target (cast succeeds -> fallthrough)
+                    let resultExact = function.wasmBuildBlockWithResults(
+                        with: [] => [.wasmi32, ILType.wasmRef(.WasmAny, nullability: false)],
+                        args: []
+                    ) { blockLabel, _ in
+                        let i32_100 = function.consti32(100)
+                        let casted = function.wasmBranchOnCastDescEqFail(
+                            abstractRef, descriptorRef: descriptorInst,
+                            targetRefType: ILType.wasmRef(
+                                .Index(isExact: true), nullability: false),
+                            to: blockLabel, args: [i32_100])
+
+                        #expect(b.type(of: casted[1]).wasmReferenceType?.kind.isExact == true)
+                        let v = function.wasmStructGet(theStruct: casted[1], fieldIndex: 0)
+                        return [v, abstractRef]
+                    }
+                    let v0 = resultExact[0]
+
+                    // 2. Exact descriptor with inexact target (cast succeeds -> fallthrough)
+                    let resultInexactWithExactDesc = function.wasmBuildBlockWithResults(
+                        with: [] => [.wasmi32, ILType.wasmRef(.WasmAny, nullability: false)],
+                        args: []
+                    ) { blockLabel, _ in
+                        let i32_100 = function.consti32(100)
+                        let casted = function.wasmBranchOnCastDescEqFail(
+                            abstractRef, descriptorRef: descriptorInst,
+                            targetRefType: ILType.wasmRef(
+                                .Index(isExact: false), nullability: false),
+                            to: blockLabel, args: [i32_100])
+
+                        #expect(b.type(of: casted[1]).wasmReferenceType?.kind.isExact == false)
+                        let v = function.wasmStructGet(theStruct: casted[1], fieldIndex: 0)
+                        return [v, abstractRef]
+                    }
+                    let v1 = resultInexactWithExactDesc[0]
+
+                    // 3. Inexact descriptor with inexact target (cast succeeds -> fallthrough)
+                    let inexactDesc = function.wasmRefCast(
+                        descriptorInst,
+                        refType: ILType.wasmRef(.Index(isExact: false), nullability: false),
+                        typeDef: types[1]
+                    )
+                    #expect(b.type(of: inexactDesc).wasmReferenceType?.kind.isExact == false)
+
+                    let resultInexactWithInexactDesc = function.wasmBuildBlockWithResults(
+                        with: [] => [.wasmi32, ILType.wasmRef(.WasmAny, nullability: false)],
+                        args: []
+                    ) { blockLabel, _ in
+                        let i32_100 = function.consti32(100)
+                        let casted = function.wasmBranchOnCastDescEqFail(
+                            abstractRef, descriptorRef: inexactDesc,
+                            targetRefType: ILType.wasmRef(
+                                .Index(isExact: false), nullability: false),
+                            to: blockLabel, args: [i32_100])
+
+                        #expect(b.type(of: casted[1]).wasmReferenceType?.kind.isExact == false)
+                        let v = function.wasmStructGet(theStruct: casted[1], fieldIndex: 0)
+                        return [v, abstractRef]
+                    }
+                    let v2 = resultInexactWithInexactDesc[0]
+
+                    // 4. Cast fails -> branch taken to blockLabel
+                    let otherDescInst = function.wasmStructNew(structType: types[1], fields: [f32])
+
+                    let resultBranchTaken = function.wasmBuildBlockWithResults(
+                        with: [] => [.wasmi32, ILType.wasmRef(.WasmAny, nullability: false)],
+                        args: []
+                    ) { blockLabel, _ in
+                        let i32_100 = function.consti32(100)
+                        let casted = function.wasmBranchOnCastDescEqFail(
+                            abstractRef, descriptorRef: otherDescInst,
+                            targetRefType: ILType.wasmRef(
+                                .Index(isExact: true), nullability: false),
+                            to: blockLabel, args: [i32_100])
+
+                        let fallback = function.consti32(999)
+                        return [fallback, casted[1]]
+                    }
+                    let v3 = resultBranchTaken[0]
+
+                    let sum1 = function.wasmi32BinOp(v0, v1, binOpKind: .Add)
+                    let sum2 = function.wasmi32BinOp(sum1, v2, binOpKind: .Add)
+                    let sum = function.wasmi32BinOp(sum2, v3, binOpKind: .Add)
+                    return [sum]
+                }
+            }
+            let exports = module.loadExports()
+            let res = b.callMethod(module.getExportedMethod(at: 0), on: exports)
+            let outputFunc = b.createNamedVariable(forBuiltin: "output")
+            b.callFunction(outputFunc, withArgs: [res])
+        }
+        testForOutput(program: jsProg, runner: runner, outputString: "226\n")
+    }
 }

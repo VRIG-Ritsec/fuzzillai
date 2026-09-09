@@ -5810,6 +5810,23 @@ public class ProgramBuilder {
         }
 
         @discardableResult
+        public func wasmBranchOnCastDescEqFail(
+            _ reference: Variable, descriptorRef: Variable, targetRefType: ILType,
+            to label: Variable, args: [Variable] = []
+        ) -> [Variable] {
+            var (inputs, types) = buildBranchOnCastInputsAndTypes(reference, to: label, args: args)
+            inputs.append(descriptorRef)
+            types.append(.anyIndexRef)
+
+            let instr = b.emit(
+                WasmBranchOnCastDescEqFail(
+                    parameterCount: args.count, targetRefType: targetRefType),
+                withInputs: inputs,
+                types: types)
+            return Array(instr.outputs)
+        }
+
+        @discardableResult
         public func wasmBranchOnCastFail(
             _ reference: Variable, targetRefType: ILType, to label: Variable, args: [Variable] = [],
             typeDef: Variable? = nil

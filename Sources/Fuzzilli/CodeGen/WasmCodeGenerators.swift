@@ -18,6 +18,70 @@
 // These Generators all relate to Wasm and either use the WebAssembly object or
 // insert one or more instructions into a wasm module.
 //
+private func generateBranchOnCast(
+    b: ProgramBuilder,
+    sourceVar: Variable,
+    targetRefType: ILType,
+    typeDef: Variable?,
+    to label: Variable,
+    args: [Variable],
+    branchOnCastFail: Bool
+) {
+    let function = b.currentWasmModule.currentWasmFunction
+
+    if let typeDef {
+        let structDesc =
+            b.type(of: typeDef).wasmTypeDefinition?.description
+            as? WasmStructTypeDescription
+        let descriptorDesc = structDesc?.descriptor
+        if let descriptorDesc, probability(0.5) {
+            let targetIsExact = targetRefType.wasmReferenceType!.kind.isExact
+            let descriptorType = ILType.wasmIndexRef(
+                descriptorDesc, nullability: probability(0.1), isExact: targetIsExact)
+            let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
+            let descriptorIsExact = b.type(of: descriptor).wasmReferenceType!.kind.isExact
+            // If the target type is exact (the label type for branchOnCast or the fallthrough
+            // type for branchOnCastFail), the descriptor needs to be exact as well.
+            assert(!targetIsExact || descriptorIsExact)
+            let castTypeIsExact = targetIsExact || (descriptorIsExact && probability(0.5))
+            let castType = ILType.wasmRef(
+                .Index(isExact: castTypeIsExact),
+                nullability: targetRefType.wasmReferenceType!.nullability)
+
+            if branchOnCastFail {
+                function.wasmBranchOnCastDescEqFail(
+                    sourceVar, descriptorRef: descriptor, targetRefType: castType,
+                    to: label, args: args)
+            } else {
+                function.wasmBranchOnCastDescEq(
+                    sourceVar, descriptorRef: descriptor, targetRefType: castType,
+                    to: label, args: args)
+            }
+            return
+        }
+    }
+
+    let unlinkedTargetRefType: ILType
+    if typeDef != nil && !targetRefType.wasmReferenceType!.isAbstract() {
+        let isExact = targetRefType.wasmReferenceType!.kind.isExact
+        unlinkedTargetRefType = ILType.wasmRef(
+            .Index(isExact: isExact),
+            nullability: targetRefType.wasmReferenceType!.nullability)
+    } else {
+        unlinkedTargetRefType = targetRefType
+    }
+
+    if branchOnCastFail {
+        function.wasmBranchOnCastFail(
+            sourceVar, targetRefType: unlinkedTargetRefType, to: label, args: args, typeDef: typeDef
+        )
+    } else {
+        function.wasmBranchOnCast(
+            sourceVar, targetRefType: unlinkedTargetRefType, to: label, args: args, typeDef: typeDef
+        )
+    }
+}
+
 public let WasmCodeGenerators: [CodeGenerator] = [
 
     /// Wasm related generators in JavaScript
@@ -2199,7 +2263,6 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             }
         }
     },
-
     CodeGenerator(
         "WasmBranchOnCastGenerator", inContext: .single(.wasmFunction)
     ) { b in
@@ -2217,40 +2280,13 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let sourceType = lastParamType.wasmReferenceType!.kind.topType()
             let v = function.findOrGenerateWasmVar(ofType: sourceType)
             let args = labelType.parameters.dropLast().map(function.findOrGenerateWasmVar)
-            let isIndexType = !lastParamType.wasmReferenceType!.isAbstract()
-            if isIndexType {
-                let typeDef = b.getWasmTypeDef(for: lastParamType)
-                let structDesc =
-                    b.type(of: typeDef).wasmTypeDefinition?.description
-                    as? WasmStructTypeDescription
-                let descriptorDesc = structDesc?.descriptor
-                if let descriptorDesc, probability(0.5) {
-                    let labelIsExact = lastParamType.wasmReferenceType!.kind.isExact
-                    let descriptorType = ILType.wasmIndexRef(
-                        descriptorDesc, nullability: probability(0.1), isExact: labelIsExact)
-                    let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
-                    let descriptorIsExact = b.type(of: descriptor).wasmReferenceType!.kind.isExact
-                    // If the label expects an exact input, the descriptor needs to be exact as well.
-                    assert(!labelIsExact || descriptorIsExact)
-                    let targetIsExact = labelIsExact || (descriptorIsExact && probability(0.5))
-                    let targetRefType = ILType.wasmRef(
-                        .Index(isExact: targetIsExact),
-                        nullability: lastParamType.wasmReferenceType!.nullability)
-                    function.wasmBranchOnCastDescEq(
-                        v, descriptorRef: descriptor, targetRefType: targetRefType, to: label,
-                        args: args)
-                } else {
-                    let isExact = lastParamType.wasmReferenceType!.kind.isExact
-                    let unlinkedLastParamType = ILType.wasmRef(
-                        .Index(isExact: isExact),
-                        nullability: lastParamType.wasmReferenceType!.nullability)
-                    function.wasmBranchOnCast(
-                        v, targetRefType: unlinkedLastParamType, to: label, args: args,
-                        typeDef: typeDef)
-                }
-            } else {
-                function.wasmBranchOnCast(v, targetRefType: lastParamType, to: label, args: args)
-            }
+            let typeDef =
+                !lastParamType.wasmReferenceType!.isAbstract()
+                ? b.getWasmTypeDef(for: lastParamType) : nil
+
+            generateBranchOnCast(
+                b: b, sourceVar: v, targetRefType: lastParamType, typeDef: typeDef,
+                to: label, args: args, branchOnCastFail: false)
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
             let (targetRefType, typeDef) = b.randomWasmReferenceType(
@@ -2264,35 +2300,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                 blockLabel, _ in
                 let sourceVar = function.findOrGenerateWasmVar(ofType: topType)
                 let args = allOutputTypes.map(function.findOrGenerateWasmVar)
-
-                if let typeDef {
-                    let structDesc =
-                        b.type(of: typeDef).wasmTypeDefinition?.description
-                        as? WasmStructTypeDescription
-                    let descriptorDesc = structDesc?.descriptor
-                    if let descriptorDesc, probability(0.5) {
-                        let labelIsExact = targetRefType.wasmReferenceType!.kind.isExact
-                        let descriptorType = ILType.wasmIndexRef(
-                            descriptorDesc, nullability: probability(0.1), isExact: labelIsExact)
-                        let descriptor = function.findOrGenerateWasmVar(ofType: descriptorType)
-                        let descriptorIsExact =
-                            b.type(of: descriptor).wasmReferenceType!.kind.isExact
-                        let targetIsExact = labelIsExact || (descriptorIsExact && probability(0.5))
-                        let branchTargetRefType = ILType.wasmRef(
-                            .Index(isExact: targetIsExact),
-                            nullability: targetRefType.wasmReferenceType!.nullability)
-                        function.wasmBranchOnCastDescEq(
-                            sourceVar, descriptorRef: descriptor,
-                            targetRefType: branchTargetRefType, to: blockLabel,
-                            args: args.dropLast())
-                        return args
-                    }
-                }
-
-                function.wasmBranchOnCast(
-                    sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
-                    typeDef: typeDef)
-
+                generateBranchOnCast(
+                    b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                    to: blockLabel, args: args.dropLast(), branchOnCastFail: false)
                 return args
             }
         }
@@ -2317,10 +2327,11 @@ public let WasmCodeGenerators: [CodeGenerator] = [
             let sourceVar = function.findOrGenerateWasmVar(ofType: lastParamType)
             let (targetRefType, typeDef) = b.randomWasmReferenceType(
                 withAbstractSuperType: lastParamType)
-
             let args = labelType.parameters.dropLast().map(function.findOrGenerateWasmVar)
-            function.wasmBranchOnCastFail(
-                sourceVar, targetRefType: targetRefType, to: label, args: args, typeDef: typeDef)
+
+            generateBranchOnCast(
+                b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                to: label, args: args, branchOnCastFail: true)
         } else {
             let topType = ILType.wasmRefHierarchyTopTypes.randomElement()!
             let outputTypes = b.randomWasmBlockOutputTypes(upTo: 2) + [topType]
@@ -2332,10 +2343,9 @@ public let WasmCodeGenerators: [CodeGenerator] = [
                     withAbstractSuperType: topType)
                 let args = outputTypes.map(function.findOrGenerateWasmVar)
 
-                function.wasmBranchOnCastFail(
-                    sourceVar, targetRefType: targetRefType, to: blockLabel, args: args.dropLast(),
-                    typeDef: typeDef)
-
+                generateBranchOnCast(
+                    b: b, sourceVar: sourceVar, targetRefType: targetRefType, typeDef: typeDef,
+                    to: blockLabel, args: args.dropLast(), branchOnCastFail: true)
                 return args
             }
         }

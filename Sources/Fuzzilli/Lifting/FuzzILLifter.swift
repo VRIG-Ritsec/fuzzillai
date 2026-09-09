@@ -1578,6 +1578,17 @@ public class FuzzILLifter: Lifter {
                 "\(outputs) <- WasmBranchOnCastDescEq \(op.targetType) structRef:\(structRef) descRef:\(descriptorRef) to \(label) [\(args)]"
             )
 
+        case .wasmBranchOnCastDescEqFail(let op):
+            let descriptorRef = instr.inputs.last!
+            let structRef = instr.inputs.dropLast().last!
+            let label = instr.inputs.first!
+            let args = instr.inputs.dropFirst().dropLast(2).map(lift).joined(separator: ", ")
+
+            let outputs = instr.outputs.map(lift).joined(separator: ", ")
+            w.emit(
+                "\(outputs) <- WasmBranchOnCastDescEqFail \(op.targetType) structRef:\(structRef) descRef:\(descriptorRef) to \(label) [\(args)]"
+            )
+
         case .wasmBranchOnCastFail(let op):
             let typeDefCount = op.targetType.requiredInputCount()  // 0 or 1
             let ref = instr.inputs.dropLast(typeDefCount).last!

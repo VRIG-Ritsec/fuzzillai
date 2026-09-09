@@ -2460,6 +2460,30 @@ public class WasmLifter {
             let targetData = isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
             return Data([Prefix.GC.rawValue, 0x25, flags]) + Leb128.unsignedEncode(branchDepth)
                 + sourceData + targetData
+        case .wasmBranchOnCastDescEqFail(let op):
+            let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
+            let structRefInputIndex = 1 + op.parameterCount
+            let descriptorRefInputIndex = structRefInputIndex + 1
+
+            let actualSourceType = typer.type(
+                of: wasmInstruction.input(structRefInputIndex)
+            ).wasmReferenceType!
+            let targetRefType = op.targetType.wasmReferenceType!
+
+            var flags: UInt8 = 0
+            if actualSourceType.nullability || targetRefType.nullability { flags |= 0x01 }
+            if targetRefType.nullability { flags |= 0x02 }
+
+            let sourceData = try encodeHeapType(actualSourceType.kind.topType())
+            let descriptorDesc =
+                typer.getTypeDescription(of: wasmInstruction.input(descriptorRefInputIndex))
+                as! WasmStructTypeDescription
+            let targetDesc = descriptorDesc.describes!
+            let encodedTypeIndex = try encodeWasmGCType(targetDesc)
+            let isExact = targetRefType.kind.isExact
+            let targetData = isExact ? Data([0x62]) + encodedTypeIndex : encodedTypeIndex
+            return Data([Prefix.GC.rawValue, 0x26, flags]) + Leb128.unsignedEncode(branchDepth)
+                + sourceData + targetData
         case .wasmBranchOnCastFail(let op):
             let branchDepth = try branchDepthFor(label: wasmInstruction.input(0))
             let refInputIndex = 1 + op.parameterCount

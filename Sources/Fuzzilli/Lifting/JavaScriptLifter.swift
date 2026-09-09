@@ -2096,6 +2096,7 @@ public class JavaScriptLifter: Lifter {
                 .wasmBranchOnNonNull(_),
                 .wasmBranchOnCast(_),
                 .wasmBranchOnCastDescEq(_),
+                .wasmBranchOnCastDescEqFail(_),
                 .wasmBranchOnCastFail(_),
                 .wasmBranchTable(_),
                 .wasmBeginIf(_),

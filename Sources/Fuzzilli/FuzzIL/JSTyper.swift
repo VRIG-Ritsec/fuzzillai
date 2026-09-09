@@ -1504,6 +1504,36 @@ public struct JSTyper: Analyzer {
             } else {
                 setType(of: instr.outputs.last!, to: .error)
             }
+        case .wasmBranchOnCastDescEqFail(let op):
+            let labelType = type(of: instr.input(0))
+            let parameterTypes = labelType.wasmLabelType!.parameters
+            assert(instr.outputs.count == parameterTypes.count)
+            for (output, parameterType) in zip(
+                instr.outputs.dropLast(), parameterTypes.dropLast())
+            {
+                setType(of: output, to: parameterType)
+            }
+
+            let structRef = instr.input(1 + op.parameterCount)
+            let descriptorRef = instr.input(1 + op.parameterCount + 1)
+            let actualSourceType = type(of: structRef).wasmReferenceType
+            let descriptorDesc =
+                tryGetTypeDescription(of: descriptorRef) as? WasmStructTypeDescription
+
+            if let actualSourceType,
+                actualSourceType.isAbstract() || tryGetTypeDescription(of: structRef) != nil,
+                let descriptorDesc,
+                let targetDesc = descriptorDesc.describes,
+                let targetRefType = op.targetType.wasmReferenceType
+            {
+                let nullable = targetRefType.nullability
+                let isExact = targetRefType.kind.isExact
+                setType(
+                    of: instr.outputs.last!,
+                    to: ILType.wasmIndexRef(targetDesc, nullability: nullable, isExact: isExact))
+            } else {
+                setType(of: instr.outputs.last!, to: .error)
+            }
         case .wasmBranchOnCastFail(let op):
             let labelType = type(of: instr.input(0))
             let parameterTypes = labelType.wasmLabelType!.parameters
